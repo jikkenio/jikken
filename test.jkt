@@ -1,0 +1,10 @@
+# this is an example test
+M GET https://www.google.com/search
+
+P q test
+
+H accept text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+
+RS 200
+RH [key] [value]
+RB [value]
