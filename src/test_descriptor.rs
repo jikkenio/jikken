@@ -1,5 +1,7 @@
 use std::fs::File;
 use std::io::{self, BufRead};
+use hyper::Uri;
+use super::config::Config;
 
 #[derive(Debug)]
 pub enum HttpVerb {
@@ -12,38 +14,75 @@ pub enum HttpVerb {
 
 pub struct TestDescriptor {
     pub verb: Option<HttpVerb>,
-    pub url: Option<String>,
+    pub url: Option<Uri>,
+    pub verb_secondary: Option<HttpVerb>,
+    pub url_secondary: Option<Uri>,
     pub params: Vec<(String, String)>,
     pub headers: Vec<(String, String)>,
     pub status_code: Option<u16>,
     pub file: String,
+    pub is_comparison: bool,
 }
 
 impl TestDescriptor {
     pub fn new(file: String) -> TestDescriptor {
-        TestDescriptor { verb: None, url: None, params: Vec::new(), headers: Vec::new(), status_code: None, file: file }
+        TestDescriptor { verb: None, url: None, verb_secondary: None, url_secondary: None, params: Vec::new(), headers: Vec::new(), status_code: None, file: file, is_comparison: false }
     }
 
-    pub fn load(&mut self) {
+    pub fn load<'a>(&mut self, config: Option<Config>) {
         let file = File::open(&self.file);
-
         match file {
             Err(e) => println!("error loading file: {}", e),
             Ok(f) => {
                 let lines = io::BufReader::new(f).lines();
                 for line in lines {
                     if let Ok(row) = line {
-                        let r = row.trim_start();
+                        let mut r: String = row.trim_start().into();
+
+                        match config {
+                            Some(ref c) => {
+                                if let Some(globals) = c.globals.as_ref() {
+                                    for (key, value) in globals {
+                                        let key_pattern = format!("#{}#", key);
+                                        r = r.replace(&key_pattern, &value);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+
                         match r.chars().next() {
                             Some('M') => {
-                                let result = TestDescriptor::parse_url(r);
-                                match result {
-                                    Some((verb, url)) => println!("found http verb and url ({:?}, {})", verb, url),
-                                    None => println!("unable to parse http verb and url")  
+                                match r.chars().skip(1).next() {
+                                    Some('C') => {
+                                        let result = TestDescriptor::parse_url(&r, 4);
+                                        match result {
+                                            Some((verb, url)) => {
+                                                self.url_secondary = Some(url.parse::<Uri>().unwrap());
+                                                self.verb_secondary = Some(verb);
+                                                self.is_comparison = true;
+                                                println!("found secondary http verb and url ({:?}, {})", self.verb_secondary, url)
+                                            },
+                                            None => println!("unable to parse secondary http verb and url")  
+                                        }
+                                    },
+                                    Some(' ') => {
+                                        let result = TestDescriptor::parse_url(&r, 3);
+                                        match result {
+                                            Some((verb, url)) => {
+                                                self.url = Some(url.parse::<Uri>().unwrap());
+                                                self.verb = Some(verb);
+                                                println!("found http verb and url ({:?}, {})", self.verb, url)
+                                            },
+                                            None => println!("unable to parse http verb and url")  
+                                        }
+                                    },
+                                    Some(_) => {},
+                                    None => {}
                                 }
                             },
                             Some('P') => {
-                                let result = TestDescriptor::parse_key_value(r);
+                                let result = TestDescriptor::parse_key_value(&r);
                                 match result {
                                     Some((key, value)) => {
                                         self.params.push((key.to_owned(), value.to_owned()));
@@ -53,7 +92,7 @@ impl TestDescriptor {
                                 }
                             },
                             Some('H') => {
-                                let result = TestDescriptor::parse_key_value(r);
+                                let result = TestDescriptor::parse_key_value(&r);
                                 match result {
                                     Some((key, value)) => {
                                         self.params.push((key.to_owned(), value.to_owned()));
@@ -66,7 +105,7 @@ impl TestDescriptor {
                             Some('R') => {
                                 match r.chars().skip(1).next() {
                                     Some('S') => {
-                                        let result = TestDescriptor::parse_status_code(r);
+                                        let result = TestDescriptor::parse_status_code(&r);
                                         match result {
                                             Some(r) => {
                                                 self.status_code = Some(r);
@@ -88,7 +127,7 @@ impl TestDescriptor {
         }
     }
 
-    fn parse_url(line: &str) -> Option<(HttpVerb, &str)> {
+    fn parse_url(line: &str, offset: usize) -> Option<(HttpVerb, &str)> {
         let verb = line.split(' ').skip(1).next();
         let http_verb = match verb {
             Some("GET") => HttpVerb::GET,
@@ -101,7 +140,7 @@ impl TestDescriptor {
 
         let length = match verb {
             // this is a hardcoded offset for the prefix. this should be rewritten
-            Some(x) => x.len() + 3, 
+            Some(x) => x.len() + offset, 
             None => 0
         };
 

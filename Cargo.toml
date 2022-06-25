@@ -7,5 +7,9 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.18", features = ["derive"] }
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "0.14.19", features = ["full"] }
+hyper-tls = { version = "0.5.0" }
 tokio = { version = "1", features = ["full"] }
+walkdir = { version = "2" }
+toml = { version = "0.5.9" }
+serde = { version = "1.0", features = ["derive"] }
