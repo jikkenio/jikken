@@ -15,8 +15,8 @@ impl TestRunner {
         TestRunner {run: 0, passed: 0, failed: 0}
     }
 
-    pub async fn run(&self, td: TestDescriptor) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        println!("running test...");
+    pub async fn run(&self, td: TestDescriptor, count: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        println!("running test: {}", td.name.clone().unwrap_or(format!("{}", count)));
         
         if td.is_comparison {
             let result = TestRunner::validate_td_comparison_mode(td).await?;
