@@ -13,3 +13,4 @@ tokio = { version = "1", features = ["full"] }
 walkdir = { version = "2" }
 toml = { version = "0.5.9" }
 serde = { version = "1.0", features = ["derive"] }
+indicatif = {version = "*", features = ["rayon"]}

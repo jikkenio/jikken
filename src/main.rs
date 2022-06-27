@@ -6,6 +6,7 @@ mod config;
 use walkdir::{DirEntry, WalkDir};
 use std::error::Error;
 use std::path::Path;
+use indicatif::ProgressIterator;
 
 // use clap::Parser;
 
@@ -48,7 +49,6 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
     Ok(config)
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut config: Option<config::Config> = None;
@@ -69,10 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let files = get_files();
 
-    for file in files {
-        let mut td = test_descriptor::TestDescriptor::new(file);
+    for (i, file) in files.iter().enumerate().progress() {
+        let mut td = test_descriptor::TestDescriptor::new(file.to_string());
         td.load(config.clone());    
-        runner.run(td).await?;    
+        runner.run(td, i).await?;
     }
 
     Ok(())

@@ -13,6 +13,7 @@ pub enum HttpVerb {
 }
 
 pub struct TestDescriptor {
+    pub name: Option<String>,
     pub verb: Option<HttpVerb>,
     pub url: Option<Uri>,
     pub verb_secondary: Option<HttpVerb>,
@@ -26,7 +27,7 @@ pub struct TestDescriptor {
 
 impl TestDescriptor {
     pub fn new(file: String) -> TestDescriptor {
-        TestDescriptor { verb: None, url: None, verb_secondary: None, url_secondary: None, params: Vec::new(), headers: Vec::new(), status_code: None, file: file, is_comparison: false }
+        TestDescriptor { name: None, verb: None, url: None, verb_secondary: None, url_secondary: None, params: Vec::new(), headers: Vec::new(), status_code: None, file: file, is_comparison: false }
     }
 
     pub fn load<'a>(&mut self, config: Option<Config>) {
@@ -52,6 +53,9 @@ impl TestDescriptor {
                         }
 
                         match r.chars().next() {
+                            Some('N') => {
+                                self.name = Some(r[2..].into());
+                            },
                             Some('M') => {
                                 match r.chars().skip(1).next() {
                                     Some('C') => {
