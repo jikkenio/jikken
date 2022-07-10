@@ -24,6 +24,11 @@ impl RequestDescriptor {
     pub fn new() -> RequestDescriptor {
         RequestDescriptor { verb: None, url: None, params: Vec::new(), headers: Vec::new(), body: None }
     }
+
+    pub fn get_url(&self) -> String {
+        let joined: Vec<_> = self.params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+        format!("{}?{}", self.url.as_ref().unwrap(), joined.join("&"))
+    }
 }
 
 pub struct ResponseDescriptor {
