@@ -1,8 +1,6 @@
 #![allow(dead_code)]
-use super::test_descriptor::TestDescriptor;
-use hyper::body;
-use hyper::Body;
-use hyper::Client;
+use super::test_descriptor::{TestDescriptor, HttpVerb};
+use hyper::{Body, body, Client, Request, Method};
 use hyper_tls::HttpsConnector;
 use std::io::{self, Write};
 use serde_json::Value;
@@ -45,7 +43,25 @@ impl TestRunner {
         
         let uri = td.request.url.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
-        let resp = client.get(uri).await?;
+
+        let mut req_builder = Request::builder()
+            .uri(uri);
+
+        match td.request.verb {
+            Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
+            Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
+            Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
+            Some(_) => req_builder = req_builder.method(Method::GET),
+            None => req_builder = req_builder.method(Method::GET)
+        }
+        
+        for (k, v) in td.request.headers {
+            req_builder = req_builder.header(k, v);
+        }
+
+        let req = req_builder.body(Body::empty()).unwrap();
+        let resp = client.request(req).await?;
+    
         
         let mut pass = true;
 
