@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use super::test_descriptor::{TestDescriptor, HttpVerb};
+use super::test_descriptor::{TestDescriptor, RequestDescriptor, HttpVerb};
 use hyper::{Body, body, Client, Request, Method};
 use hyper_tls::HttpsConnector;
 use std::io::{self, Write};
@@ -115,10 +115,45 @@ impl TestRunner {
 
     async fn validate_td_comparison_mode(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let uri = td.request.url.unwrap();
-        let uri_compare = td.request_comparison.unwrap().url.unwrap();
+        let uri_compare = td.request_comparison.as_ref().unwrap().url.as_ref().unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
-        let resp = client.get(uri).await?;
-        let resp_compare = client.get(uri_compare).await?;
+
+        let mut req_builder = Request::builder()
+            .uri(uri);
+
+        match td.request.verb {
+            Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
+            Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
+            Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
+            Some(_) => req_builder = req_builder.method(Method::GET),
+            None => req_builder = req_builder.method(Method::GET)
+        }
+    
+        for (k, v) in td.request.headers {
+            req_builder = req_builder.header(k, v);
+        }
+
+        let req = req_builder.body(Body::empty()).unwrap();
+
+        let mut req_comparison_builder = Request::builder()
+            .uri(uri_compare);
+
+        match td.request_comparison.as_ref().unwrap().verb {
+            Some(HttpVerb::POST) => req_comparison_builder = req_comparison_builder.method(Method::POST),
+            Some(HttpVerb::PATCH) => req_comparison_builder = req_comparison_builder.method(Method::PATCH),
+            Some(HttpVerb::PUT) => req_comparison_builder = req_comparison_builder.method(Method::PUT),
+            Some(_) => req_comparison_builder = req_comparison_builder.method(Method::GET),
+            None => req_comparison_builder = req_comparison_builder.method(Method::GET)
+        }
+    
+        for (k, v) in td.request_comparison.unwrap().headers {
+            req_comparison_builder = req_comparison_builder.header(k, v);
+        }
+
+        let req_comparison = req_comparison_builder.body(Body::empty()).unwrap();
+
+        let resp = client.request(req).await?;
+        let resp_compare = client.request(req_comparison).await?;
 
         let mut pass = true;
         let status_test = TestRunner::validate_status_codes(resp.status(), resp_compare.status());
@@ -166,4 +201,25 @@ impl TestRunner {
 
         return false;
     }
+
+    // fn request_from_td(rd: RequestDescriptor) -> Request {
+    //     let mut req_builder = Request::builder()
+    //         .uri(rd.url.unwrap());
+
+    //     match rd.verb {
+    //         Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
+    //         Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
+    //         Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
+    //         Some(_) => req_builder = req_builder.method(Method::GET),
+    //         None => req_builder = req_builder.method(Method::GET)
+    //     }
+    
+    //     for (k, v) in rd.headers {
+    //         req_builder = req_builder.header(k, v);
+    //     }
+
+    //     let req = req_builder.body(Body::empty()).unwrap();
+
+    //     return req;
+    // }
 }
