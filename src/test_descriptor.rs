@@ -12,22 +12,44 @@ pub enum HttpVerb {
     UNDEFINED
 }
 
-pub struct TestDescriptor {
-    pub name: Option<String>,
+pub struct RequestDescriptor {
     pub verb: Option<HttpVerb>,
     pub url: Option<Uri>,
-    pub verb_secondary: Option<HttpVerb>,
-    pub url_secondary: Option<Uri>,
     pub params: Vec<(String, String)>,
     pub headers: Vec<(String, String)>,
+    pub body: Option<Vec<u8>>,
+}
+
+impl RequestDescriptor {
+    pub fn new() -> RequestDescriptor {
+        RequestDescriptor { verb: None, url: None, params: Vec::new(), headers: Vec::new(), body: None }
+    }
+}
+
+pub struct ResponseDescriptor {
     pub status_code: Option<u16>,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<Vec<u8>>,
+}
+
+impl ResponseDescriptor {
+    pub fn new() -> ResponseDescriptor {
+        ResponseDescriptor { status_code: None, headers: Vec::new(), body: None }
+    }
+}
+
+pub struct TestDescriptor {
+    pub name: Option<String>,
+    pub request: RequestDescriptor,
+    pub request_comparison: Option<RequestDescriptor>,
+    pub response: Option<ResponseDescriptor>,
     pub file: String,
     pub is_comparison: bool,
 }
 
 impl TestDescriptor {
     pub fn new(file: String) -> TestDescriptor {
-        TestDescriptor { name: None, verb: None, url: None, verb_secondary: None, url_secondary: None, params: Vec::new(), headers: Vec::new(), status_code: None, file: file, is_comparison: false }
+        TestDescriptor { name: None, request: RequestDescriptor::new(), request_comparison: None, response: None, file: file, is_comparison: false }
     }
 
     pub fn load<'a>(&mut self, config: Option<Config>) {
@@ -36,9 +58,10 @@ impl TestDescriptor {
             Err(e) => println!("error loading file: {}", e),
             Ok(f) => {
                 let lines = io::BufReader::new(f).lines();
+                let mut multiline_body = false;
                 for line in lines {
                     if let Ok(row) = line {
-                        let mut r: String = row.trim_start().into();
+                        let mut r: String = if !multiline_body { row.trim_start().into() } else { row.into() };
 
                         match config {
                             Some(ref c) => {
@@ -54,18 +77,33 @@ impl TestDescriptor {
 
                         match r.chars().next() {
                             Some('N') => {
+                                multiline_body = false;
                                 self.name = Some(r[2..].into());
                             },
                             Some('M') => {
+                                multiline_body = false;
                                 match r.chars().skip(1).next() {
                                     Some('C') => {
+                                        if self.request_comparison.is_none() {
+                                            self.request_comparison = Some(RequestDescriptor::new());
+                                        }
+
+                                        let request = self.request_comparison.as_mut().unwrap();
+
                                         let result = TestDescriptor::parse_url(&r, 4);
                                         match result {
                                             Some((verb, url)) => {
-                                                self.url_secondary = Some(url.parse::<Uri>().unwrap());
-                                                self.verb_secondary = Some(verb);
+                                                let maybe_url = url.parse::<Uri>();
+                                                match maybe_url {
+                                                    Ok(u) => request.url = Some(u),
+                                                    Err(_) => {
+                                                        println!("Error: Invalid url in test definition ({} -> {}).", self.file, &r);
+                                                        std::process::exit(exitcode::DATAERR);
+                                                    }
+                                                }
+                                                request.verb = Some(verb);
                                                 self.is_comparison = true;
-                                                println!("found secondary http verb and url ({:?}, {})", self.verb_secondary, url)
+                                                // println!("found secondary http verb and url ({:?}, {})", self.verb_secondary, url)
                                             },
                                             None => println!("unable to parse secondary http verb and url")  
                                         }
@@ -74,9 +112,17 @@ impl TestDescriptor {
                                         let result = TestDescriptor::parse_url(&r, 3);
                                         match result {
                                             Some((verb, url)) => {
-                                                self.url = Some(url.parse::<Uri>().unwrap());
-                                                self.verb = Some(verb);
-                                                println!("found http verb and url ({:?}, {})", self.verb, url)
+                                                let maybe_url = url.parse::<Uri>();
+                                                match maybe_url {
+                                                    Ok(u) => self.request.url = Some(u),
+                                                    Err(_) => {
+                                                        println!("Error: Invalid url in test definition ({} -> {}).", self.file, &r);
+                                                        std::process::exit(exitcode::DATAERR);
+                                                    }
+                                                }
+                                                
+                                                self.request.verb = Some(verb);
+                                                // println!("found http verb and url ({:?}, {})", self.verb, url)
                                             },
                                             None => println!("unable to parse http verb and url")  
                                         }
@@ -86,43 +132,62 @@ impl TestDescriptor {
                                 }
                             },
                             Some('P') => {
+                                multiline_body = false;
                                 let result = TestDescriptor::parse_key_value(&r);
                                 match result {
                                     Some((key, value)) => {
-                                        self.params.push((key.to_owned(), value.to_owned()));
-                                        println!("found url parameter ({} -> {})", key, value)
+                                        self.request.params.push((key.to_owned(), value.to_owned()));
+                                        // println!("found url parameter ({} -> {})", key, value)
                                     },
                                     None => println!("unable to parse url parameter")
                                 }
                             },
                             Some('H') => {
+                                multiline_body = false;
                                 let result = TestDescriptor::parse_key_value(&r);
                                 match result {
                                     Some((key, value)) => {
-                                        self.params.push((key.to_owned(), value.to_owned()));
-                                        println!("found http header ({} -> {})", key, value)
+                                        self.request.params.push((key.to_owned(), value.to_owned()));
+                                        // println!("found http header ({} -> {})", key, value)
                                     },
                                     None => println!("unable to parse http header")
                                 }
                             },
-                            Some('#') => (), // println!("found comment"),
+                            Some('#') => multiline_body = false, // println!("found comment"),
                             Some('R') => {
+                                if self.response.is_none() {
+                                    self.response = Some(ResponseDescriptor::new());
+                                }
+
+                                multiline_body = false;
+                                let response = self.response.as_mut().unwrap();
+
                                 match r.chars().skip(1).next() {
                                     Some('S') => {
                                         let result = TestDescriptor::parse_status_code(&r);
                                         match result {
                                             Some(r) => {
-                                                self.status_code = Some(r);
-                                                println!("found response status code ({})", r)
+                                                response.status_code = Some(r);
+                                                // println!("found response status code ({})", r)
                                             },
                                             None => println!("unable to parse response status code")
                                         }
                                     },
-                                    Some(_) => (), // println!("unknown response type"),
+                                    Some('B') => {
+                                        multiline_body = true;
+                                        response.body = Some(Vec::new());
+                                        response.body.as_mut().unwrap().extend_from_slice(r[3..].as_bytes());
+                                    }
+                                    Some(_) =>(), // println!("unknown response type"),
                                     None => () // println!("skip empty line")
                                 }
                             },
-                            Some(_) => (), // println!("unknown line type"),
+                            Some(_) => {
+                                if multiline_body {
+                                    let response = self.response.as_mut().unwrap();
+                                    response.body.as_mut().unwrap().extend_from_slice(r.as_bytes());
+                                }
+                            }, // println!("unknown line type"),
                             None => () // println!("skip empty line")
                         }
                     }

@@ -13,4 +13,6 @@ tokio = { version = "1", features = ["full"] }
 walkdir = { version = "2" }
 toml = { version = "0.5.9" }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 indicatif = {version = "*", features = ["rayon"]}
+exitcode = {version = "1.1.2"}

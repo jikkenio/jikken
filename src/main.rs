@@ -6,7 +6,7 @@ mod config;
 use walkdir::{DirEntry, WalkDir};
 use std::error::Error;
 use std::path::Path;
-use indicatif::ProgressIterator;
+// use indicatif::ProgressBar;
 
 // use clap::Parser;
 
@@ -63,17 +63,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             },
             Err(e) => {
                 println!("invalid configuration file: {}", e);
+                std::process::exit(exitcode::CONFIG);
             }
         }
     }
 
     let files = get_files();
 
-    for (i, file) in files.iter().enumerate().progress() {
+    // let bar = ProgressBar::new(files.len() as u64);
+
+    println!("Jikken found {} tests.", files.len());
+
+    for (i, file) in files.iter().enumerate() {
         let mut td = test_descriptor::TestDescriptor::new(file.to_string());
         td.load(config.clone());    
-        runner.run(td, i).await?;
+        let passed = runner.run(td, i + 1).await?;
+        // bar.inc(1);
+        
+        if !passed {
+            std::process::exit(1);
+        }
     }
+
+    // bar.finish();
 
     Ok(())
 }

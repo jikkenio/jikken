@@ -1,8 +1,12 @@
 #![allow(dead_code)]
 use super::test_descriptor::TestDescriptor;
 use hyper::body;
+use hyper::Body;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
+use std::io::{self, Write};
+use serde_json::Value;
+use serde::de;
 
 pub struct TestRunner {
     run: u16,
@@ -15,36 +19,72 @@ impl TestRunner {
         TestRunner {run: 0, passed: 0, failed: 0}
     }
 
-    pub async fn run(&self, td: TestDescriptor, count: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        println!("running test: {}", td.name.clone().unwrap_or(format!("{}", count)));
-        
-        if td.is_comparison {
-            let result = TestRunner::validate_td_comparison_mode(td).await?;
-            let label = if result { "PASSED" } else { "FAILED "};
-            println!("The test {}!", label);
+    pub async fn run(&self, td: TestDescriptor, count: usize) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        print!("Running `{}`...", td.name.clone().unwrap_or(format!("Test {}", count)));
+        io::stdout().flush().unwrap();
+
+        let result: bool = if td.is_comparison {
+            TestRunner::validate_td_comparison_mode(td).await?
         } else {
-            let result = TestRunner::validate_td(td).await?;
-            let label = if result { "PASSED" } else { "FAILED "};
-            println!("The test {}!", label);
+            TestRunner::validate_td(td).await?
+        };
+
+        if result {
+            println!("\x1b[32mPASSED!\x1b[0m");
+        } else {
+            println!("\x1b[31mFAILED!\x1b[0m");
         }
 
-        Ok(())
+        return Ok(result);
     }
 
     async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let uri = td.url.unwrap();
+        if td.request.url.is_none() {
+            return Ok(false);
+        }
+        
+        let uri = td.request.url.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
         let resp = client.get(uri).await?;
         
         let mut pass = true;
 
-        let status_test = match td.status_code {
-            Some(code) => TestRunner::validate_status_code(resp.status(), code),
-            None => true // none defined, skip this step
-        };
+        match td.response {
+            Some(r) => {
+                let (parts, body) = resp.into_parts();
 
-        pass &= status_test;
-          
+                match r.body {
+                    Some(b) => {
+                        let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
+                        let bytes = body::to_bytes(body).await?;
+                        match serde_json::from_slice(bytes.as_ref()) {
+                            Ok(l) => {
+                                let rv: Value = l;
+                                // println!("Response: {}", rv.to_string());
+                                let body_test = TestRunner::validate_body(rv, v);
+                                pass &= body_test;
+                            },
+                            Err(e) => {
+                                // println!("Error: {}", e);
+                                // TODO: add body comparison messaging
+                                pass = false;
+                            }
+                        }
+                        // println!("Body: {}", v.to_string());
+                    },
+                    None => (),
+                }
+
+                let status_test = match r.status_code {
+                    Some(code) => TestRunner::validate_status_code(parts.status, code),
+                    None => true // none defined, skip this step
+                };
+                pass &= status_test;
+            },
+            None => (),
+        }
+
+        
         // for (name, value) in resp.headers() {
         //     println!("Header: {} -> {}", name, value.to_str().unwrap());
         // }
@@ -58,8 +98,8 @@ impl TestRunner {
     }
 
     async fn validate_td_comparison_mode(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let uri = td.url.unwrap();
-        let uri_compare = td.url_secondary.unwrap();
+        let uri = td.request.url.unwrap();
+        let uri_compare = td.request_comparison.unwrap().url.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
         let resp = client.get(uri).await?;
         let resp_compare = client.get(uri_compare).await?;
@@ -92,7 +132,7 @@ impl TestRunner {
         if label == "FAIL" {
             println!("Expected: {}, Actual: {}", expected.as_u16(), actual.as_u16());
         }
-        println!("validating status code: {}", label);
+        // println!("validating status code: {}", label);
         return result;
     }
 
@@ -102,7 +142,12 @@ impl TestRunner {
         if label == "FAIL" {
             println!("Expected: {}, Actual: {}", expected, actual.as_u16());
         }
-        println!("validating status code: {}", label);
+        // println!("validating status code: {}", label);
         return result;
+    }
+
+    fn validate_body(actual: Value, expected: Value) -> bool {
+
+        return false;
     }
 }
