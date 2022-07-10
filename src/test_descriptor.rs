@@ -144,13 +144,29 @@ impl TestDescriptor {
                             },
                             Some('H') => {
                                 multiline_body = false;
-                                let result = TestDescriptor::parse_key_value(&r);
-                                match result {
-                                    Some((key, value)) => {
-                                        self.request.params.push((key.to_owned(), value.to_owned()));
-                                        // println!("found http header ({} -> {})", key, value)
+                                match r.chars().skip(1).next() {
+                                    Some('C') => {
+                                        let result = TestDescriptor::parse_key_value(&r);
+                                        match result {
+                                            Some((key, value)) => {
+                                                self.request.params.push((key.to_owned(), value.to_owned()));
+                                                // println!("found http header ({} -> {})", key, value)
+                                            },
+                                            None => println!("unable to parse http header")
+                                        }
                                     },
-                                    None => println!("unable to parse http header")
+                                    Some(' ') => {
+                                        let result = TestDescriptor::parse_key_value(&r);
+                                        match result {
+                                            Some((key, value)) => {
+                                                self.request_comparison.as_mut().unwrap().headers.push((key.to_owned(), value.to_owned()));
+                                                // println!("found http header ({} -> {})", key, value)
+                                            },
+                                            None => println!("unable to parse http header")
+                                        }
+                                    },
+                                    Some(_) => {},
+                                    None => {}
                                 }
                             },
                             Some('#') => multiline_body = false, // println!("found comment"),
