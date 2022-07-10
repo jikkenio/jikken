@@ -171,7 +171,7 @@ impl TestDescriptor {
                                         let result = TestDescriptor::parse_key_value(&r);
                                         match result {
                                             Some((key, value)) => {
-                                                self.request.params.push((key.to_owned(), value.to_owned()));
+                                                self.request.headers.push((key.to_owned(), value.to_owned()));
                                                 // println!("found http header ({} -> {})", key, value)
                                             },
                                             None => println!("unable to parse http header")
