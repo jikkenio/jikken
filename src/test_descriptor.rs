@@ -138,14 +138,31 @@ impl TestDescriptor {
                             },
                             Some('P') => {
                                 multiline_body = false;
-                                let result = TestDescriptor::parse_key_value(&r);
-                                match result {
-                                    Some((key, value)) => {
-                                        self.request.params.push((key.to_owned(), value.to_owned()));
-                                        // println!("found url parameter ({} -> {})", key, value)
+                                match r.chars().skip(1).next() {
+                                    Some('C') => {
+                                        let result = TestDescriptor::parse_key_value(&r);
+                                        match result {
+                                            Some((key, value)) => {
+                                                self.request_comparison.as_mut().unwrap().params.push((key.to_owned(), value.to_owned()));
+                                                // println!("found url parameter ({} -> {})", key, value)
+                                            },
+                                            None => println!("unable to parse url parameter")
+                                        }
                                     },
-                                    None => println!("unable to parse url parameter")
+                                    Some(' ') => {
+                                        let result = TestDescriptor::parse_key_value(&r);
+                                        match result {
+                                            Some((key, value)) => {
+                                                self.request.params.push((key.to_owned(), value.to_owned()));
+                                                // println!("found url parameter ({} -> {})", key, value)
+                                            },
+                                            None => println!("unable to parse url parameter")
+                                        }
+                                    },
+                                    Some(_) => {},
+                                    None => {}
                                 }
+                                
                             },
                             Some('H') => {
                                 multiline_body = false;
