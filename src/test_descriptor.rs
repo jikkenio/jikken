@@ -140,7 +140,7 @@ impl TestDescriptor {
                                 multiline_body = false;
                                 match r.chars().skip(1).next() {
                                     Some('C') => {
-                                        let result = TestDescriptor::parse_key_value(&r);
+                                        let result = TestDescriptor::parse_key_value(&r, 4);
                                         match result {
                                             Some((key, value)) => {
                                                 self.request_comparison.as_mut().unwrap().params.push((key.to_owned(), value.to_owned()));
@@ -150,7 +150,7 @@ impl TestDescriptor {
                                         }
                                     },
                                     Some(' ') => {
-                                        let result = TestDescriptor::parse_key_value(&r);
+                                        let result = TestDescriptor::parse_key_value(&r, 3);
                                         match result {
                                             Some((key, value)) => {
                                                 self.request.params.push((key.to_owned(), value.to_owned()));
@@ -168,7 +168,7 @@ impl TestDescriptor {
                                 multiline_body = false;
                                 match r.chars().skip(1).next() {
                                     Some('C') => {
-                                        let result = TestDescriptor::parse_key_value(&r);
+                                        let result = TestDescriptor::parse_key_value(&r, 4);
                                         match result {
                                             Some((key, value)) => {
                                                 self.request.headers.push((key.to_owned(), value.to_owned()));
@@ -178,7 +178,7 @@ impl TestDescriptor {
                                         }
                                     },
                                     Some(' ') => {
-                                        let result = TestDescriptor::parse_key_value(&r);
+                                        let result = TestDescriptor::parse_key_value(&r, 3);
                                         match result {
                                             Some((key, value)) => {
                                                 self.request_comparison.as_mut().unwrap().headers.push((key.to_owned(), value.to_owned()));
@@ -254,12 +254,12 @@ impl TestDescriptor {
         Some((http_verb, &line[length..]))
     }
 
-    fn parse_key_value(line: &str) -> Option<(&str, &str)> {
+    fn parse_key_value(line: &str, offset: usize) -> Option<(&str, &str)> {
         let key = line.split(' ').skip(1).next();
 
         let length = match key {
             // this is a hardcoded offset for the prefix. this should be rewritten
-            Some(k) => k.len() + 3,
+            Some(k) => k.len() + offset,
             None => return None
         };
 
