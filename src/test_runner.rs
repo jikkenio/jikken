@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use super::test_descriptor::{TestDescriptor, RequestDescriptor, HttpVerb};
+use super::test_descriptor::{TestDescriptor, HttpVerb};
 use hyper::{Body, body, Client, Request, Method};
 use hyper_tls::HttpsConnector;
 use std::io::{self, Write};
 use serde_json::Value;
-use serde::de;
+// use serde::de;
 
 pub struct TestRunner {
     run: u16,
@@ -80,7 +80,7 @@ impl TestRunner {
                                 let body_test = TestRunner::validate_body(rv, v);
                                 pass &= body_test;
                             },
-                            Err(e) => {
+                            Err(_) => {
                                 // println!("Error: {}", e);
                                 // TODO: add body comparison messaging
                                 pass = false;
@@ -115,7 +115,7 @@ impl TestRunner {
 
     async fn validate_td_comparison_mode(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let uri = td.request.get_url();
-        let uri_compare = td.request_comparison.as_ref().unwrap().get_url();
+        let uri_compare = td.request_comparison.as_ref().unwrap().get_url_with_fallback(td.request.params);
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder()

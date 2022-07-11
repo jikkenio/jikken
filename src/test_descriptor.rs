@@ -25,6 +25,15 @@ impl RequestDescriptor {
         RequestDescriptor { verb: None, url: None, params: Vec::new(), headers: Vec::new(), body: None }
     }
 
+    pub fn get_url_with_fallback(&self, fallback: Vec<(String, String)>) -> String {
+        let joined: Vec<_> = if self.params.len() == 0 {
+            self.params.iter().map(|(k, v)| format!("{}={}", k, v)).collect()
+        } else {
+            fallback.iter().map(|(k, v)| format!("{}={}", k, v)).collect()
+        };
+        format!("{}?{}", self.url.as_ref().unwrap(), joined.join("&"))
+    }
+
     pub fn get_url(&self) -> String {
         let joined: Vec<_> = self.params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
         format!("{}?{}", self.url.as_ref().unwrap(), joined.join("&"))
@@ -48,13 +57,14 @@ pub struct TestDescriptor {
     pub request: RequestDescriptor,
     pub request_comparison: Option<RequestDescriptor>,
     pub response: Option<ResponseDescriptor>,
+    pub ignore: Vec<String>,
     pub file: String,
     pub is_comparison: bool,
 }
 
 impl TestDescriptor {
     pub fn new(file: String) -> TestDescriptor {
-        TestDescriptor { name: None, request: RequestDescriptor::new(), request_comparison: None, response: None, file: file, is_comparison: false }
+        TestDescriptor { name: None, request: RequestDescriptor::new(), request_comparison: None, response: None, ignore: Vec::new(), file: file, is_comparison: false }
     }
 
     pub fn load<'a>(&mut self, config: Option<Config>) {
@@ -215,7 +225,17 @@ impl TestDescriptor {
                                         multiline_body = true;
                                         response.body = Some(Vec::new());
                                         response.body.as_mut().unwrap().extend_from_slice(r[3..].as_bytes());
-                                    }
+                                    },
+                                    Some('I') => {
+                                        let result = TestDescriptor::parse_body_ignore(&r);
+                                        match result {
+                                            Some(r) => {
+                                                self.ignore.push(r.to_owned());
+                                                println!("found ignore ({})", r);
+                                            },
+                                            None => println!("unable to parse ignore field")
+                                        }
+                                    },
                                     Some(_) =>(), // println!("unknown response type"),
                                     None => () // println!("skip empty line")
                                 }
@@ -278,5 +298,10 @@ impl TestDescriptor {
             },
             None => return None
         };
+    }
+
+    fn parse_body_ignore(line: &str) -> Option<&str> {
+        let value = &line[3..];
+        Some(value)
     }
 }
