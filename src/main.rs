@@ -2,6 +2,7 @@
 mod test_descriptor;
 mod test_runner;
 mod config;
+mod config_settings;
 
 use walkdir::{DirEntry, WalkDir};
 use std::error::Error;
@@ -74,14 +75,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("Jikken found {} tests.", files.len());
 
+    let mut continue_on_failure = false;
+
+    match config {
+        Some(ref c) => {
+            if let Some(settings) = c.settings.as_ref() {
+                match settings.continue_on_failure {
+                    Some(cof) => {
+                        continue_on_failure = cof;
+                    },
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+
     for (i, file) in files.iter().enumerate() {
         let mut td = test_descriptor::TestDescriptor::new(file.to_string());
         td.load(config.clone());    
         let passed = runner.run(td, i + 1).await?;
         // bar.inc(1);
         
-        if !passed {
-            std::process::exit(1);
+        if !continue_on_failure {
+            if !passed {
+                std::process::exit(1);
+            }
         }
     }
 
