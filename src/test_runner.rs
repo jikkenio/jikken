@@ -3,8 +3,7 @@ use super::test_descriptor::{TestDescriptor, HttpVerb};
 use hyper::{Body, body, Client, Request, Method};
 use hyper_tls::HttpsConnector;
 use std::io::{self, Write};
-use serde_json::Value;
-// use serde::de;
+use serde_json::{Value, Map, json};
 
 pub struct TestRunner {
     run: u16,
@@ -77,7 +76,7 @@ impl TestRunner {
                             Ok(l) => {
                                 let rv: Value = l;
                                 // println!("Response: {}", rv.to_string());
-                                let body_test = TestRunner::validate_body(rv, v);
+                                let body_test = TestRunner::validate_body(rv, v, td.ignore);
                                 pass &= body_test;
                             },
                             Err(_) => {
@@ -167,8 +166,19 @@ impl TestRunner {
         let data = body::to_bytes(resp.into_body()).await?;
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
 
-        pass &= data == data_compare;
+        match serde_json::from_slice(data.as_ref()) {
+            Ok(data_json) => {
+                match serde_json::from_slice(data_compare.as_ref()) {
+                    Ok(data_compare_json) => {
+                        pass &= TestRunner::validate_body(data_json, data_compare_json, td.ignore);
+                    },
+                    _ => pass = false,
+                }
+            },
+            _ => pass = false,
+        };
 
+        // pass &= TestRunner::validate_body(data, data_compare, td.ignore);
 
         // let data_str = String::from_utf8(data.to_vec());
 
@@ -197,9 +207,31 @@ impl TestRunner {
         return result;
     }
 
-    fn validate_body(actual: Value, expected: Value) -> bool {
+    fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> bool {
+        if ignore.is_empty() {
+            return actual == expected;
+        }
 
-        return false;
+        let mut map: Map<String, Value> = serde_json::from_value(actual)
+            .expect("failed to read file");
+
+        for v in ignore {
+            if !v.contains(".") {
+                map.remove(&v);
+            }
+        }
+        
+        let adjusted_actual = json!(map);
+
+        return adjusted_actual == expected;
+        // get to the nested object "nested"
+        // let nested = map.get_mut("age")
+        //     .expect("should exist")
+        //     .as_object_mut()
+        //     .expect("should be an object");
+
+        // // now remove the child from there
+        // nested.remove("to.be.removed");
     }
 
     // fn request_from_td(rd: RequestDescriptor) -> Request {

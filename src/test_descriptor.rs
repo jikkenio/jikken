@@ -231,7 +231,7 @@ impl TestDescriptor {
                                         match result {
                                             Some(r) => {
                                                 self.ignore.push(r.to_owned());
-                                                println!("found ignore ({})", r);
+                                                // println!("found ignore ({})", r);
                                             },
                                             None => println!("unable to parse ignore field")
                                         }
