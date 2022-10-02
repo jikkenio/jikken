@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod test_descriptor;
+// mod yaml_test_descriptor;
 mod test_runner;
 mod config;
 mod config_settings;
@@ -7,6 +8,7 @@ mod config_settings;
 use walkdir::{DirEntry, WalkDir};
 use std::error::Error;
 use std::path::Path;
+use std::fs::File;
 // use indicatif::ProgressBar;
 
 // use clap::Parser;
@@ -52,7 +54,7 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config: Option<config::Config> = None;
+    let mut config: Option<config::Config> = None; // TODO: Separate config class from config file deserialization class
 
     let runner = test_runner::TestRunner::new();
 
@@ -91,19 +93,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         _ => {}
     }
 
-    for (i, file) in files.iter().enumerate() {
-        let mut td = test_descriptor::TestDescriptor::new(file.to_string());
-        td.load(config.clone());    
-        let passed = runner.run(td, i + 1).await?;
+    for (_i, file) in files.iter().enumerate() {
+        // let mut td = test_descriptor::TestDescriptor::new(file.to_string());
+        // td.load(config.clone());    
+        // let passed = runner.run(td, i + 1).await?;
         // bar.inc(1);
         
-        if !continue_on_failure {
-            if !passed {
-                std::process::exit(1);
-            }
+        // if !continue_on_failure {
+        //     if !passed {
+        //         std::process::exit(1);
+        //     }
+        // }
+
+        let file_opt = File::open(file);
+        match file_opt {
+            Ok(f) => {
+                let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_reader(f);
+                match td_opt {
+                    Ok(td) => {
+                        if !td.validate() {
+                            println!("Yaml")
+                        }
+                    },
+                    _ => {},
+                }
+            },
+            _ => {},
         }
     }
-
     // bar.finish();
 
     Ok(())
