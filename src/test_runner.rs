@@ -20,11 +20,11 @@ impl TestRunner {
         print!("Running `{}`...", td.name.clone().unwrap_or(format!("Test {}", count)));
         io::stdout().flush().unwrap();
 
-        let result: bool = if td.is_comparison {
-            TestRunner::validate_td_comparison_mode(td).await?
-        } else {
-            TestRunner::validate_td(td).await?
-        };
+        // let result: bool = if td.is_comparison {
+        //     TestRunner::validate_td_comparison_mode(td).await?
+        // } else {
+        let result: bool = TestRunner::validate_td(td).await?;
+        // };
 
         if result {
             println!("\x1b[32mPASSED!\x1b[0m");
@@ -36,17 +36,17 @@ impl TestRunner {
     }
 
     async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        if td.request.url.is_none() {
-            return Ok(false);
-        }
+        // if td.request.url.is_none() {
+        //     return Ok(false);
+        // }
         
-        let uri = td.request.url.unwrap();
+        let uri = td.request.url; //.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder()
             .uri(uri);
 
-        match td.request.verb {
+        match td.request.method {
             Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
             Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
             Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
@@ -54,8 +54,8 @@ impl TestRunner {
             None => req_builder = req_builder.method(Method::GET)
         }
         
-        for (k, v) in td.request.headers {
-            req_builder = req_builder.header(k, v);
+        for header in td.request.headers.unwrap() {
+            req_builder = req_builder.header(header.key.unwrap(), header.value.unwrap());
         }
 
         let req = req_builder.body(Body::empty()).unwrap();
@@ -70,13 +70,13 @@ impl TestRunner {
 
                 match r.body {
                     Some(b) => {
-                        let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
+                        // let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
                         let bytes = body::to_bytes(body).await?;
                         match serde_json::from_slice(bytes.as_ref()) {
                             Ok(l) => {
                                 let rv: Value = l;
                                 // println!("Response: {}", rv.to_string());
-                                let body_test = TestRunner::validate_body(rv, v, td.ignore);
+                                let body_test = TestRunner::validate_body(rv, b, Vec::new());
                                 pass &= body_test;
                             },
                             Err(_) => {
@@ -90,7 +90,7 @@ impl TestRunner {
                     None => (),
                 }
 
-                let status_test = match r.status_code {
+                let status_test = match r.status {
                     Some(code) => TestRunner::validate_status_code(parts.status, code),
                     None => true // none defined, skip this step
                 };
