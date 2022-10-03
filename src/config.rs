@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
-use serde::Deserialize;
 use super::config_settings;
+use serde::Deserialize;
+use std::collections::BTreeMap;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {

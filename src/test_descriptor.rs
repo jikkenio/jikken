@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum HttpVerb {
@@ -6,7 +6,7 @@ pub enum HttpVerb {
     POST,
     PUT,
     PATCH,
-    UNDEFINED
+    UNDEFINED,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -31,8 +31,42 @@ impl RequestDescriptor {
     }
 
     pub fn get_url(&self) -> String {
-        let joined: Vec<_> = self.params.unwrap_or(Vec::new()).iter().map(|kvp| format!("{}={}", kvp.key.unwrap(), kvp.value.unwrap())).collect();
+        let joined: Vec<_> = match &self.params {
+            Some(p) => p
+                .iter()
+                .map(|kvp| {
+                    format!(
+                        "{}={}",
+                        kvp.key.as_ref().unwrap(),
+                        kvp.value.as_ref().unwrap()
+                    )
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+
         format!("{}?{}", self.url, joined.join("&"))
+    }
+
+    pub fn get_headers(&self) -> Vec<(String, String)> {
+        match &self.headers {
+            Some(h) => 
+                h.iter()
+                .filter(|kvp| {
+                    if kvp.key.as_ref().unwrap_or(&String::from("")) == "" {
+                        return false;
+                    }
+                    if kvp.value.as_ref().unwrap_or(&String::from("")) == "" {
+                        return false;
+                    }
+                    true
+                })
+                .map(|kvp| {
+                    (kvp.key.as_ref().unwrap().clone(), kvp.value.as_ref().unwrap().clone())
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -55,7 +89,7 @@ impl ResponseDescriptor {
 pub struct TestDescriptor {
     pub name: Option<String>,
     pub request: RequestDescriptor,
-    pub compare:  Option<RequestDescriptor>,
+    pub compare: Option<RequestDescriptor>,
     pub response: Option<ResponseDescriptor>,
 }
 

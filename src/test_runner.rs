@@ -1,23 +1,34 @@
 #![allow(dead_code)]
-use super::test_descriptor::{TestDescriptor, HttpVerb};
-use hyper::{Body, body, Client, Request, Method};
+use super::test_descriptor::{HttpVerb, TestDescriptor};
+use hyper::{body, Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
+use serde_json::{json, Map, Value};
 use std::io::{self, Write};
-use serde_json::{Value, Map, json};
 
 pub struct TestRunner {
     run: u16,
     passed: u16,
-    failed: u16
+    failed: u16,
 }
 
 impl TestRunner {
     pub fn new() -> TestRunner {
-        TestRunner {run: 0, passed: 0, failed: 0}
+        TestRunner {
+            run: 0,
+            passed: 0,
+            failed: 0,
+        }
     }
 
-    pub async fn run(&self, td: TestDescriptor, count: usize) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        print!("Running `{}`...", td.name.clone().unwrap_or(format!("Test {}", count)));
+    pub async fn run(
+        &self,
+        td: TestDescriptor,
+        count: usize,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        print!(
+            "Running `{}`...",
+            td.name.clone().unwrap_or(format!("Test {}", count))
+        );
         io::stdout().flush().unwrap();
 
         // let result: bool = if td.is_comparison {
@@ -35,33 +46,33 @@ impl TestRunner {
         return Ok(result);
     }
 
-    async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    async fn validate_td(
+        td: TestDescriptor,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         // if td.request.url.is_none() {
         //     return Ok(false);
         // }
-        
+
         let uri = td.request.url; //.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
-        let mut req_builder = Request::builder()
-            .uri(uri);
+        let mut req_builder = Request::builder().uri(uri);
 
         match td.request.method {
             Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
             Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
             Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
             Some(_) => req_builder = req_builder.method(Method::GET),
-            None => req_builder = req_builder.method(Method::GET)
+            None => req_builder = req_builder.method(Method::GET),
         }
-        
+
         for header in td.request.headers.unwrap() {
             req_builder = req_builder.header(header.key.unwrap(), header.value.unwrap());
         }
 
         let req = req_builder.body(Body::empty()).unwrap();
         let resp = client.request(req).await?;
-    
-        
+
         let mut pass = true;
 
         match td.response {
@@ -78,7 +89,7 @@ impl TestRunner {
                                 // println!("Response: {}", rv.to_string());
                                 let body_test = TestRunner::validate_body(rv, b, Vec::new());
                                 pass &= body_test;
-                            },
+                            }
                             Err(_) => {
                                 // println!("Error: {}", e);
                                 // TODO: add body comparison messaging
@@ -86,20 +97,19 @@ impl TestRunner {
                             }
                         }
                         // println!("Body: {}", v.to_string());
-                    },
+                    }
                     None => (),
                 }
 
                 let status_test = match r.status {
                     Some(code) => TestRunner::validate_status_code(parts.status, code),
-                    None => true // none defined, skip this step
+                    None => true, // none defined, skip this step
                 };
                 pass &= status_test;
-            },
+            }
             None => (),
         }
 
-        
         // for (name, value) in resp.headers() {
         //     println!("Header: {} -> {}", name, value.to_str().unwrap());
         // }
@@ -108,45 +118,52 @@ impl TestRunner {
         // pass &= data == data_compare;
         // let data_str = String::from_utf8(data.to_vec());
         // println!("Body: {}", data_str.unwrap_or(String::from("unable to load body data")));
-        
+
         Ok(pass)
     }
 
-    async fn validate_td_comparison_mode(td: TestDescriptor) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let uri = td.request.get_url();
-        let uri_compare = td.request_comparison.as_ref().unwrap().get_url_with_fallback(td.request.params);
+    async fn validate_td_comparison_mode(
+        td: TestDescriptor,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let uri = td.request.url;
+        let uri_compare = td.compare.as_ref().unwrap().get_url();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
-        let mut req_builder = Request::builder()
-            .uri(uri);
+        let mut req_builder = Request::builder().uri(uri);
 
-        match td.request.verb {
+        match td.request.method {
             Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
             Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
             Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
             Some(_) => req_builder = req_builder.method(Method::GET),
-            None => req_builder = req_builder.method(Method::GET)
+            None => req_builder = req_builder.method(Method::GET),
         }
-    
-        for (k, v) in td.request.headers {
-            req_builder = req_builder.header(k, v);
+
+        for kvp in td.request.headers.unwrap() {
+            req_builder = req_builder.header(kvp.key.unwrap(), kvp.value.unwrap());
         }
 
         let req = req_builder.body(Body::empty()).unwrap();
 
-        let mut req_comparison_builder = Request::builder()
-            .uri(uri_compare);
+        let mut req_comparison_builder = Request::builder().uri(uri_compare);
 
-        match td.request_comparison.as_ref().unwrap().verb {
-            Some(HttpVerb::POST) => req_comparison_builder = req_comparison_builder.method(Method::POST),
-            Some(HttpVerb::PATCH) => req_comparison_builder = req_comparison_builder.method(Method::PATCH),
-            Some(HttpVerb::PUT) => req_comparison_builder = req_comparison_builder.method(Method::PUT),
+        match td.compare.as_ref().unwrap().method {
+            Some(HttpVerb::POST) => {
+                req_comparison_builder = req_comparison_builder.method(Method::POST)
+            }
+            Some(HttpVerb::PATCH) => {
+                req_comparison_builder = req_comparison_builder.method(Method::PATCH)
+            }
+            Some(HttpVerb::PUT) => {
+                req_comparison_builder = req_comparison_builder.method(Method::PUT)
+            }
             Some(_) => req_comparison_builder = req_comparison_builder.method(Method::GET),
-            None => req_comparison_builder = req_comparison_builder.method(Method::GET)
+            None => req_comparison_builder = req_comparison_builder.method(Method::GET),
         }
-    
-        for (k, v) in td.request_comparison.unwrap().headers {
-            req_comparison_builder = req_comparison_builder.header(k, v);
+
+        for kvp in td.compare.unwrap().headers.unwrap() {
+            req_comparison_builder =
+                req_comparison_builder.header(kvp.key.unwrap(), kvp.value.unwrap());
         }
 
         let req_comparison = req_comparison_builder.body(Body::empty()).unwrap();
@@ -158,7 +175,7 @@ impl TestRunner {
         let status_test = TestRunner::validate_status_codes(resp.status(), resp_compare.status());
 
         pass &= status_test;
-          
+
         // for (name, value) in resp.headers() {
         //     println!("Header: {} -> {}", name, value.to_str().unwrap());
         // }
@@ -167,13 +184,11 @@ impl TestRunner {
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
 
         match serde_json::from_slice(data.as_ref()) {
-            Ok(data_json) => {
-                match serde_json::from_slice(data_compare.as_ref()) {
-                    Ok(data_compare_json) => {
-                        pass &= TestRunner::validate_body(data_json, data_compare_json, td.ignore);
-                    },
-                    _ => pass = false,
+            Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
+                Ok(data_compare_json) => {
+                    pass &= TestRunner::validate_body(data_json, data_compare_json, Vec::new());
                 }
+                _ => pass = false,
             },
             _ => pass = false,
         };
@@ -183,7 +198,7 @@ impl TestRunner {
         // let data_str = String::from_utf8(data.to_vec());
 
         // println!("Body: {}", data_str.unwrap_or(String::from("unable to load body data")));
-        
+
         Ok(pass)
     }
 
@@ -191,7 +206,11 @@ impl TestRunner {
         let result = actual == expected;
         let label = if result { "PASS" } else { "FAIL" };
         if label == "FAIL" {
-            println!("Expected: {}, Actual: {}", expected.as_u16(), actual.as_u16());
+            println!(
+                "Expected: {}, Actual: {}",
+                expected.as_u16(),
+                actual.as_u16()
+            );
         }
         // println!("validating status code: {}", label);
         return result;
@@ -207,20 +226,21 @@ impl TestRunner {
         return result;
     }
 
+    // TODO: I need to add support for ignore when comparing two urls.
     fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> bool {
         if ignore.is_empty() {
             return actual == expected;
         }
 
-        let mut map: Map<String, Value> = serde_json::from_value(actual)
-            .expect("failed to read file");
+        let mut map: Map<String, Value> =
+            serde_json::from_value(actual).expect("failed to read file");
 
         for v in ignore {
             if !v.contains(".") {
                 map.remove(&v);
             }
         }
-        
+
         let adjusted_actual = json!(map);
 
         return adjusted_actual == expected;
@@ -245,7 +265,7 @@ impl TestRunner {
     //         Some(_) => req_builder = req_builder.method(Method::GET),
     //         None => req_builder = req_builder.method(Method::GET)
     //     }
-    
+
     //     for (k, v) in rd.headers {
     //         req_builder = req_builder.header(k, v);
     //     }
