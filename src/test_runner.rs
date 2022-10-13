@@ -53,12 +53,14 @@ impl TestRunner {
         //     return Ok(false);
         // }
 
-        let uri = td.request.url; //.unwrap();
+        let uri = &td.request.url; //.unwrap();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
 
-        match td.request.method {
+        println!("uri: {}", uri);
+
+        match &td.request.method {
             Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
             Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
             Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
@@ -66,8 +68,8 @@ impl TestRunner {
             None => req_builder = req_builder.method(Method::GET),
         }
 
-        for header in td.request.headers.unwrap() {
-            req_builder = req_builder.header(header.key.unwrap(), header.value.unwrap());
+        for header in (&td.request).get_headers() {
+            req_builder = req_builder.header(header.0, header.1);
         }
 
         let req = req_builder.body(Body::empty()).unwrap();
@@ -75,11 +77,11 @@ impl TestRunner {
 
         let mut pass = true;
 
-        match td.response {
+        match &td.response {
             Some(r) => {
                 let (parts, body) = resp.into_parts();
 
-                match r.body {
+                match &r.body {
                     Some(b) => {
                         // let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
                         let bytes = body::to_bytes(body).await?;
@@ -87,7 +89,8 @@ impl TestRunner {
                             Ok(l) => {
                                 let rv: Value = l;
                                 // println!("Response: {}", rv.to_string());
-                                let body_test = TestRunner::validate_body(rv, b, Vec::new());
+                                let body_test =
+                                    TestRunner::validate_body(rv, b.clone(), Vec::new());
                                 pass &= body_test;
                             }
                             Err(_) => {
@@ -125,13 +128,13 @@ impl TestRunner {
     async fn validate_td_comparison_mode(
         td: TestDescriptor,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let uri = td.request.url;
-        let uri_compare = td.compare.as_ref().unwrap().get_url();
+        let uri = &td.request.url;
+        let uri_compare = td.compare.clone().unwrap().get_url();
         let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
 
-        match td.request.method {
+        match &td.request.method {
             Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
             Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
             Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
@@ -139,15 +142,15 @@ impl TestRunner {
             None => req_builder = req_builder.method(Method::GET),
         }
 
-        for kvp in td.request.headers.unwrap() {
-            req_builder = req_builder.header(kvp.key.unwrap(), kvp.value.unwrap());
+        for header in &td.request.get_headers() {
+            req_builder = req_builder.header(&header.0, &header.1);
         }
 
         let req = req_builder.body(Body::empty()).unwrap();
 
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
 
-        match td.compare.as_ref().unwrap().method {
+        match td.compare.clone().unwrap().method {
             Some(HttpVerb::POST) => {
                 req_comparison_builder = req_comparison_builder.method(Method::POST)
             }
@@ -161,9 +164,8 @@ impl TestRunner {
             None => req_comparison_builder = req_comparison_builder.method(Method::GET),
         }
 
-        for kvp in td.compare.unwrap().headers.unwrap() {
-            req_comparison_builder =
-                req_comparison_builder.header(kvp.key.unwrap(), kvp.value.unwrap());
+        for header in &td.compare.unwrap().get_headers() {
+            req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
         }
 
         let req_comparison = req_comparison_builder.body(Body::empty()).unwrap();

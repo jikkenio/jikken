@@ -6,7 +6,7 @@ mod config_settings;
 mod test_runner;
 
 use std::error::Error;
-use std::fs::File;
+use std::fs;
 use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
 // use indicatif::ProgressBar;
@@ -48,6 +48,33 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
     let data = std::fs::read_to_string(file)?;
     let config: config::Config = toml::from_str(&data)?;
     Ok(config)
+}
+
+fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -> Option<String> {
+    let original_data_opt = fs::read_to_string(file);
+
+    match original_data_opt {
+        Ok(original_data) => {
+            match config_opt {
+                Some(config) => {
+                    if let Some(globals) = config.globals.as_ref() {
+                        let mut modified_data = original_data.clone();
+                        for (key, value) in globals {
+                            let key_pattern = format!("#{}#", key);
+                            modified_data = modified_data.replace(&key_pattern, &value);
+                        }
+                        return Some(modified_data);
+                    };
+                }
+                _ => {}
+            }
+            return Some(original_data);
+        }
+        Err(err) => {
+            println!("error loading file: {}", err);
+            return None;
+        }
+    };
 }
 
 #[tokio::main]
@@ -103,10 +130,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         //     }
         // }
 
-        let file_opt = File::open(file);
+        let file_opt = get_file_with_modifications(file, config.clone());
         match file_opt {
-            Ok(f) => {
-                let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_reader(f);
+            Some(f) => {
+                let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
                 match td_opt {
                     Ok(td) => {
                         if !td.validate() {
