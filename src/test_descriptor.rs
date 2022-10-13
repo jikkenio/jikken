@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum HttpVerb {
     GET,
     POST,
@@ -9,13 +9,13 @@ pub enum HttpVerb {
     UNDEFINED,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HttpKvp {
     pub key: Option<String>,
     pub value: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestDescriptor {
     pub method: Option<HttpVerb>,
     pub url: String,
@@ -50,8 +50,8 @@ impl RequestDescriptor {
 
     pub fn get_headers(&self) -> Vec<(String, String)> {
         match &self.headers {
-            Some(h) => 
-                h.iter()
+            Some(h) => h
+                .iter()
                 .filter(|kvp| {
                     if kvp.key.as_ref().unwrap_or(&String::from("")) == "" {
                         return false;
@@ -62,7 +62,10 @@ impl RequestDescriptor {
                     true
                 })
                 .map(|kvp| {
-                    (kvp.key.as_ref().unwrap().clone(), kvp.value.as_ref().unwrap().clone())
+                    (
+                        kvp.key.as_ref().unwrap().clone(),
+                        kvp.value.as_ref().unwrap().clone(),
+                    )
                 })
                 .collect(),
             _ => Vec::new(),
@@ -70,7 +73,7 @@ impl RequestDescriptor {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
     pub status: Option<u16>,
     pub headers: Option<Vec<HttpKvp>>,
@@ -85,7 +88,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TestDescriptor {
     pub name: Option<String>,
     pub request: RequestDescriptor,
