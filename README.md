@@ -15,6 +15,16 @@ request:
 
     }
     
+compare:
+    method:
+    url:
+    params: 
+    headers:
+      - 
+    body: {
+
+    }
+    
 response: 
     status:
     headers:
