@@ -1,3 +1,4 @@
+use hyper::Method;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -7,6 +8,17 @@ pub enum HttpVerb {
     Put,
     Patch,
     Undefined,
+}
+
+impl HttpVerb {
+    pub fn as_method(&self) -> Method {
+        match &self {
+            HttpVerb::Post => Method::POST,
+            HttpVerb::Patch => Method::PATCH,
+            HttpVerb::Put => Method::PUT,
+            _ => Method::GET,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,12 +109,17 @@ pub struct TestDescriptor {
 }
 
 // TODO: add validation logic to verify the descriptor is valid
+// TODO: Validation should be type driven for compile time correctness
 impl TestDescriptor {
     pub fn validate(&self) -> bool {
-        let valid_request = self.request.validate();
-        if let Some(resp) = &self.response {
-            return valid_request && resp.validate();
+        let mut valid_td = self.request.validate();
+        if let Some(compare) = &self.compare {
+            valid_td &= compare.validate();
         }
-        valid_request
+        if let Some(resp) = &self.response {
+            valid_td &= resp.validate();
+        }
+
+        valid_td
     }
 }
