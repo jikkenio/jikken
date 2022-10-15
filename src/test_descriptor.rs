@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum HttpVerb {
-    GET,
-    POST,
-    PUT,
-    PATCH,
-    UNDEFINED,
+    Get,
+    Post,
+    Put,
+    Patch,
+    Undefined,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

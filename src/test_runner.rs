@@ -43,7 +43,7 @@ impl TestRunner {
             println!("\x1b[31mFAILED!\x1b[0m");
         }
 
-        return Ok(result);
+        Ok(result)
     }
 
     async fn validate_td(
@@ -61,9 +61,9 @@ impl TestRunner {
         println!("uri: {}", uri);
 
         match &td.request.method {
-            Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
-            Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
-            Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
+            Some(HttpVerb::Post) => req_builder = req_builder.method(Method::POST),
+            Some(HttpVerb::Patch) => req_builder = req_builder.method(Method::PATCH),
+            Some(HttpVerb::Put) => req_builder = req_builder.method(Method::PUT),
             Some(_) => req_builder = req_builder.method(Method::GET),
             None => req_builder = req_builder.method(Method::GET),
         }
@@ -135,9 +135,9 @@ impl TestRunner {
         let mut req_builder = Request::builder().uri(uri);
 
         match &td.request.method {
-            Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
-            Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
-            Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
+            Some(HttpVerb::Post) => req_builder = req_builder.method(Method::POST),
+            Some(HttpVerb::Patch) => req_builder = req_builder.method(Method::PATCH),
+            Some(HttpVerb::Put) => req_builder = req_builder.method(Method::PUT),
             Some(_) => req_builder = req_builder.method(Method::GET),
             None => req_builder = req_builder.method(Method::GET),
         }
@@ -151,13 +151,13 @@ impl TestRunner {
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
 
         match td.compare.clone().unwrap().method {
-            Some(HttpVerb::POST) => {
+            Some(HttpVerb::Post) => {
                 req_comparison_builder = req_comparison_builder.method(Method::POST)
             }
-            Some(HttpVerb::PATCH) => {
+            Some(HttpVerb::Patch) => {
                 req_comparison_builder = req_comparison_builder.method(Method::PATCH)
             }
-            Some(HttpVerb::PUT) => {
+            Some(HttpVerb::Put) => {
                 req_comparison_builder = req_comparison_builder.method(Method::PUT)
             }
             Some(_) => req_comparison_builder = req_comparison_builder.method(Method::GET),
@@ -215,7 +215,7 @@ impl TestRunner {
             );
         }
         // println!("validating status code: {}", label);
-        return result;
+        result
     }
 
     fn validate_status_code(actual: hyper::StatusCode, expected: u16) -> bool {
@@ -225,7 +225,7 @@ impl TestRunner {
             println!("Expected: {}, Actual: {}", expected, actual.as_u16());
         }
         // println!("validating status code: {}", label);
-        return result;
+        result
     }
 
     // TODO: I need to add support for ignore when comparing two urls.
@@ -238,14 +238,14 @@ impl TestRunner {
             serde_json::from_value(actual).expect("failed to read file");
 
         for v in ignore {
-            if !v.contains(".") {
+            if !v.contains('.') {
                 map.remove(&v);
             }
         }
 
         let adjusted_actual = json!(map);
 
-        return adjusted_actual == expected;
+        adjusted_actual == expected
         // get to the nested object "nested"
         // let nested = map.get_mut("age")
         //     .expect("should exist")

@@ -36,7 +36,7 @@ fn get_files() -> Vec<String> {
 
     WalkDir::new(".")
         .into_iter()
-        .filter_entry(|e| is_jkt(e))
+        .filter_entry(is_jkt)
         .filter_map(|v| v.ok())
         .filter(|x| !x.file_type().is_dir())
         .for_each(|x| results.push(String::from(x.path().to_str().unwrap())));
@@ -55,26 +55,23 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
 
     match original_data_opt {
         Ok(original_data) => {
-            match config_opt {
-                Some(config) => {
-                    if let Some(globals) = config.globals.as_ref() {
-                        let mut modified_data = original_data.clone();
-                        for (key, value) in globals {
-                            let key_pattern = format!("#{}#", key);
-                            modified_data = modified_data.replace(&key_pattern, &value);
-                        }
-                        return Some(modified_data);
-                    };
+            if let Some(config) = config_opt {
+                if let Some(globals) = config.globals.as_ref() {
+                    let mut modified_data = original_data;
+                    for (key, value) in globals {
+                        let key_pattern = format!("#{}#", key);
+                        modified_data = modified_data.replace(&key_pattern, value);
+                    }
+                    return Some(modified_data);
                 }
-                _ => {}
             }
-            return Some(original_data);
+            Some(original_data)
         }
         Err(err) => {
             println!("error loading file: {}", err);
-            return None;
+            None
         }
-    };
+    }
 }
 
 #[tokio::main]
@@ -104,18 +101,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mut continue_on_failure = false;
 
-    match config {
-        Some(ref c) => {
-            if let Some(settings) = c.settings.as_ref() {
-                match settings.continue_on_failure {
-                    Some(cof) => {
-                        continue_on_failure = cof;
-                    }
-                    _ => {}
-                }
+    if let Some(ref c) = config {
+        if let Some(settings) = c.settings.as_ref() {
+            if let Some(cof) = settings.continue_on_failure {
+                continue_on_failure = cof;
             }
         }
-        _ => {}
     }
 
     for (i, file) in files.iter().enumerate() {
@@ -131,27 +122,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // }
 
         let file_opt = get_file_with_modifications(file, config.clone());
-        match file_opt {
-            Some(f) => {
-                let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
-                match td_opt {
-                    Ok(td) => {
-                        if !td.validate() {
-                            println!("Invalid Test Definition File: {}", file);
-                            continue;
-                        }
+        if let Some(f) = file_opt {
+            let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
+            if let Ok(td) = td_opt {
+                if !td.validate() {
+                    println!("Invalid Test Definition File: {}", file);
+                    continue;
+                }
 
-                        let passed = runner.run(td, i + 1).await?;
-                        if !continue_on_failure {
-                            if !passed {
-                                std::process::exit(1);
-                            }
-                        }
-                    }
-                    _ => {}
+                let passed = runner.run(td, i + 1).await?;
+                if !continue_on_failure && !passed {
+                    std::process::exit(1);
                 }
             }
-            _ => {}
         }
     }
     // bar.finish();
