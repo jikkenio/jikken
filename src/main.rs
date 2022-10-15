@@ -1,26 +1,12 @@
-#![allow(dead_code)]
-mod test_descriptor;
-// mod yaml_test_descriptor;
 mod config;
 mod config_settings;
+mod test_descriptor;
 mod test_runner;
 
 use std::error::Error;
 use std::fs;
 use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
-// use indicatif::ProgressBar;
-
-// use clap::Parser;
-
-// #[path = "parsertest_descriptor.rs"] mod
-
-// #[derive(Parser, Debug)]
-// #[clap(author, version, about, long_about = None)]
-// struct Args {
-//     #[clap(short, long, default_value = ".")]
-//     file: String
-// }
 
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &DirEntry) -> bool {
@@ -45,7 +31,7 @@ fn get_files() -> Vec<String> {
 }
 
 fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
-    let data = std::fs::read_to_string(file)?;
+    let data = fs::read_to_string(file)?;
     let config: config::Config = toml::from_str(&data)?;
     Ok(config)
 }
@@ -75,8 +61,9 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // TODO: Separate config class from config file deserialization class
+    // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let runner = test_runner::TestRunner::new();
 
@@ -94,9 +81,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let files = get_files();
-
-    // let bar = ProgressBar::new(files.len() as u64);
-
     println!("Jikken found {} tests.", files.len());
 
     let mut continue_on_failure = false;
@@ -110,17 +94,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     for (i, file) in files.iter().enumerate() {
-        // let mut td = test_descriptor::TestDescriptor::new(file.to_string());
-        // td.load(config.clone());
-        // let passed = runner.run(td, i + 1).await?;
-        // bar.inc(1);
-
-        // if !continue_on_failure {
-        //     if !passed {
-        //         std::process::exit(1);
-        //     }
-        // }
-
         let file_opt = get_file_with_modifications(file, config.clone());
         if let Some(f) = file_opt {
             let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
@@ -137,7 +110,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
     }
-    // bar.finish();
 
     Ok(())
 }

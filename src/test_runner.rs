@@ -3,6 +3,7 @@ use super::test_descriptor::{HttpVerb, TestDescriptor};
 use hyper::{body, Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 use serde_json::{json, Map, Value};
+use std::error::Error;
 use std::io::{self, Write};
 
 pub struct TestRunner {
@@ -24,7 +25,7 @@ impl TestRunner {
         &self,
         td: TestDescriptor,
         count: usize,
-    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         print!(
             "Running `{}`...",
             td.name.clone().unwrap_or(format!("Test {}", count))
@@ -46,29 +47,24 @@ impl TestRunner {
         Ok(result)
     }
 
-    async fn validate_td(
-        td: TestDescriptor,
-    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        // if td.request.url.is_none() {
-        //     return Ok(false);
-        // }
+    fn resolve_http_method(verb: &Option<HttpVerb>) -> Method {
+        match &verb {
+            Some(HttpVerb::Post) => Method::POST,
+            Some(HttpVerb::Patch) => Method::PATCH,
+            Some(HttpVerb::Put) => Method::PUT,
+            Some(_) => Method::GET,
+            None => Method::GET,
+        }
+    }
 
-        let uri = &td.request.url; //.unwrap();
-        let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
+    async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        let uri = &td.request.url;
+        let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
+        req_builder = req_builder.method(TestRunner::resolve_http_method(&td.request.method));
 
-        println!("uri: {}", uri);
-
-        match &td.request.method {
-            Some(HttpVerb::Post) => req_builder = req_builder.method(Method::POST),
-            Some(HttpVerb::Patch) => req_builder = req_builder.method(Method::PATCH),
-            Some(HttpVerb::Put) => req_builder = req_builder.method(Method::PUT),
-            Some(_) => req_builder = req_builder.method(Method::GET),
-            None => req_builder = req_builder.method(Method::GET),
-        }
-
-        for header in (&td.request).get_headers() {
+        for header in td.request.get_headers() {
             req_builder = req_builder.header(header.0, header.1);
         }
 
@@ -77,40 +73,33 @@ impl TestRunner {
 
         let mut pass = true;
 
-        match &td.response {
-            Some(r) => {
-                let (parts, body) = resp.into_parts();
+        if let Some(r) = &td.response {
+            let (parts, body) = resp.into_parts();
 
-                match &r.body {
-                    Some(b) => {
-                        // let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
-                        let bytes = body::to_bytes(body).await?;
-                        match serde_json::from_slice(bytes.as_ref()) {
-                            Ok(l) => {
-                                let rv: Value = l;
-                                // println!("Response: {}", rv.to_string());
-                                let body_test =
-                                    TestRunner::validate_body(rv, b.clone(), Vec::new());
-                                pass &= body_test;
-                            }
-                            Err(_) => {
-                                // println!("Error: {}", e);
-                                // TODO: add body comparison messaging
-                                pass = false;
-                            }
-                        }
-                        // println!("Body: {}", v.to_string());
+            if let Some(b) = &r.body {
+                // let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
+                let bytes = body::to_bytes(body).await?;
+                match serde_json::from_slice(bytes.as_ref()) {
+                    Ok(l) => {
+                        let rv: Value = l;
+                        // println!("Response: {}", rv.to_string());
+                        let body_test = TestRunner::validate_body(rv, b.clone(), Vec::new());
+                        pass &= body_test;
                     }
-                    None => (),
+                    Err(_) => {
+                        // println!("Error: {}", e);
+                        // TODO: add body comparison messaging
+                        pass = false;
+                    }
                 }
-
-                let status_test = match r.status {
-                    Some(code) => TestRunner::validate_status_code(parts.status, code),
-                    None => true, // none defined, skip this step
-                };
-                pass &= status_test;
+                // println!("Body: {}", v.to_string());
             }
-            None => (),
+
+            let status_test = match r.status {
+                Some(code) => TestRunner::validate_status_code(parts.status, code),
+                None => true, // none defined, skip this step
+            };
+            pass &= status_test;
         }
 
         // for (name, value) in resp.headers() {
@@ -125,22 +114,16 @@ impl TestRunner {
         Ok(pass)
     }
 
+    // TODO: Possibly refactor/combine logic to avoid so much duplication
     async fn validate_td_comparison_mode(
         td: TestDescriptor,
-    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.request.url;
         let uri_compare = td.compare.clone().unwrap().get_url();
-        let client = Client::builder().build::<_, hyper::Body>(HttpsConnector::new());
+        let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
-
-        match &td.request.method {
-            Some(HttpVerb::Post) => req_builder = req_builder.method(Method::POST),
-            Some(HttpVerb::Patch) => req_builder = req_builder.method(Method::PATCH),
-            Some(HttpVerb::Put) => req_builder = req_builder.method(Method::PUT),
-            Some(_) => req_builder = req_builder.method(Method::GET),
-            None => req_builder = req_builder.method(Method::GET),
-        }
+        req_builder = req_builder.method(TestRunner::resolve_http_method(&td.request.method));
 
         for header in &td.request.get_headers() {
             req_builder = req_builder.header(&header.0, &header.1);
@@ -149,20 +132,9 @@ impl TestRunner {
         let req = req_builder.body(Body::empty()).unwrap();
 
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
-
-        match td.compare.clone().unwrap().method {
-            Some(HttpVerb::Post) => {
-                req_comparison_builder = req_comparison_builder.method(Method::POST)
-            }
-            Some(HttpVerb::Patch) => {
-                req_comparison_builder = req_comparison_builder.method(Method::PATCH)
-            }
-            Some(HttpVerb::Put) => {
-                req_comparison_builder = req_comparison_builder.method(Method::PUT)
-            }
-            Some(_) => req_comparison_builder = req_comparison_builder.method(Method::GET),
-            None => req_comparison_builder = req_comparison_builder.method(Method::GET),
-        }
+        req_comparison_builder = req_comparison_builder.method(TestRunner::resolve_http_method(
+            &td.compare.clone().unwrap().method,
+        ));
 
         for header in &td.compare.unwrap().get_headers() {
             req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
