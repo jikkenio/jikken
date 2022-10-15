@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HttpVerb {
     Get,
     Post,
@@ -9,13 +9,13 @@ pub enum HttpVerb {
     Undefined,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HttpKvp {
     pub key: Option<String>,
     pub value: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestDescriptor {
     pub method: Option<HttpVerb>,
     pub url: String,
@@ -73,7 +73,7 @@ impl RequestDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
     pub status: Option<u16>,
     pub headers: Option<Vec<HttpKvp>>,
@@ -88,7 +88,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDescriptor {
     pub name: Option<String>,
     pub request: RequestDescriptor,
@@ -99,6 +99,10 @@ pub struct TestDescriptor {
 // TODO: add validation logic to verify the descriptor is valid
 impl TestDescriptor {
     pub fn validate(&self) -> bool {
-        self.request.validate()
+        let valid_request = self.request.validate();
+        if let Some(resp) = &self.response {
+            return valid_request && resp.validate();
+        }
+        valid_request
     }
 }
