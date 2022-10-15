@@ -1,5 +1,4 @@
 mod config;
-mod config_settings;
 mod test_descriptor;
 mod test_runner;
 
@@ -65,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
-    let runner = test_runner::TestRunner::new();
+    let mut runner = test_runner::TestRunner::new();
 
     if Path::new(".jikken").exists() {
         let config_raw = get_config(".jikken");
@@ -107,7 +106,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 if !continue_on_failure && !passed {
                     std::process::exit(1);
                 }
+            } else {
+                println!("serde_yaml failed"); // TODO: Add meaningful output
             }
+        } else {
+            println!("file failed to load"); // TODO: Add meaningful output
         }
     }
 

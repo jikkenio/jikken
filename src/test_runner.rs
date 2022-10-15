@@ -1,6 +1,6 @@
-#![allow(dead_code)]
-use super::test_descriptor::{HttpVerb, TestDescriptor};
-use hyper::{body, Body, Client, Method, Request};
+use super::test_descriptor::TestDescriptor;
+use crate::test_descriptor::HttpVerb::Undefined;
+use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use serde_json::{json, Map, Value};
 use std::error::Error;
@@ -22,7 +22,7 @@ impl TestRunner {
     }
 
     pub async fn run(
-        &self,
+        &mut self,
         td: TestDescriptor,
         count: usize,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -32,37 +32,42 @@ impl TestRunner {
         );
         io::stdout().flush().unwrap();
 
-        // let result: bool = if td.is_comparison {
-        //     TestRunner::validate_td_comparison_mode(td).await?
-        // } else {
-        let result: bool = TestRunner::validate_td(td).await?;
-        // };
+        self.run += 1;
+        let result: bool = if td.compare.is_some() {
+            TestRunner::validate_td_comparison_mode(td).await?
+        } else {
+            TestRunner::validate_td(td).await?
+        };
 
         if result {
             println!("\x1b[32mPASSED!\x1b[0m");
+            self.passed += 1;
         } else {
             println!("\x1b[31mFAILED!\x1b[0m");
+            self.failed += 1;
         }
 
         Ok(result)
     }
 
-    fn resolve_http_method(verb: &Option<HttpVerb>) -> Method {
-        match &verb {
-            Some(HttpVerb::Post) => Method::POST,
-            Some(HttpVerb::Patch) => Method::PATCH,
-            Some(HttpVerb::Put) => Method::PUT,
-            Some(_) => Method::GET,
-            None => Method::GET,
-        }
-    }
+    // fn resolve_http_method(verb: &Option<HttpVerb>) -> Method {
+    //     match &verb {
+    //         Some(HttpVerb::Post) => Method::POST,
+    //         Some(HttpVerb::Patch) => Method::PATCH,
+    //         Some(HttpVerb::Put) => Method::PUT,
+    //         Some(_) => Method::GET,
+    //         None => Method::GET,
+    //     }
+    // }
 
+    // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
     async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.request.url;
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
-        req_builder = req_builder.method(TestRunner::resolve_http_method(&td.request.method));
+        req_builder =
+            req_builder.method(&td.request.method.as_ref().unwrap_or(&Undefined).as_method());
 
         for header in td.request.get_headers() {
             req_builder = req_builder.header(header.0, header.1);
@@ -102,15 +107,6 @@ impl TestRunner {
             pass &= status_test;
         }
 
-        // for (name, value) in resp.headers() {
-        //     println!("Header: {} -> {}", name, value.to_str().unwrap());
-        // }
-        // let data = body::to_bytes(resp.into_body()).await?;
-        // let data_compare = body::to_bytes(resp_compare.into_body()).await?;
-        // pass &= data == data_compare;
-        // let data_str = String::from_utf8(data.to_vec());
-        // println!("Body: {}", data_str.unwrap_or(String::from("unable to load body data")));
-
         Ok(pass)
     }
 
@@ -123,18 +119,25 @@ impl TestRunner {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
-        req_builder = req_builder.method(TestRunner::resolve_http_method(&td.request.method));
+        req_builder =
+            req_builder.method(&td.request.method.as_ref().unwrap_or(&Undefined).as_method());
 
-        for header in &td.request.get_headers() {
+        for header in td.request.get_headers() {
             req_builder = req_builder.header(&header.0, &header.1);
         }
 
+        // TODO: support bodies for comparison request
         let req = req_builder.body(Body::empty()).unwrap();
-
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
-        req_comparison_builder = req_comparison_builder.method(TestRunner::resolve_http_method(
-            &td.compare.clone().unwrap().method,
-        ));
+        req_comparison_builder = req_comparison_builder.method(
+            &td.compare
+                .clone()
+                .unwrap()
+                .method
+                .as_ref()
+                .unwrap_or(&Undefined)
+                .as_method(),
+        );
 
         for header in &td.compare.unwrap().get_headers() {
             req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
@@ -150,10 +153,6 @@ impl TestRunner {
 
         pass &= status_test;
 
-        // for (name, value) in resp.headers() {
-        //     println!("Header: {} -> {}", name, value.to_str().unwrap());
-        // }
-
         let data = body::to_bytes(resp.into_body()).await?;
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
 
@@ -166,12 +165,6 @@ impl TestRunner {
             },
             _ => pass = false,
         };
-
-        // pass &= TestRunner::validate_body(data, data_compare, td.ignore);
-
-        // let data_str = String::from_utf8(data.to_vec());
-
-        // println!("Body: {}", data_str.unwrap_or(String::from("unable to load body data")));
 
         Ok(pass)
     }
@@ -186,7 +179,6 @@ impl TestRunner {
                 actual.as_u16()
             );
         }
-        // println!("validating status code: {}", label);
         result
     }
 
@@ -196,11 +188,11 @@ impl TestRunner {
         if label == "FAIL" {
             println!("Expected: {}, Actual: {}", expected, actual.as_u16());
         }
-        // println!("validating status code: {}", label);
         result
     }
 
-    // TODO: I need to add support for ignore when comparing two urls.
+    // TODO: Add support for ignore when comparing two urls.
+    // TODO: Add support for nested ignore hierarchies.
     fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> bool {
         if ignore.is_empty() {
             return actual == expected;
@@ -218,34 +210,5 @@ impl TestRunner {
         let adjusted_actual = json!(map);
 
         adjusted_actual == expected
-        // get to the nested object "nested"
-        // let nested = map.get_mut("age")
-        //     .expect("should exist")
-        //     .as_object_mut()
-        //     .expect("should be an object");
-
-        // // now remove the child from there
-        // nested.remove("to.be.removed");
     }
-
-    // fn request_from_td(rd: RequestDescriptor) -> Request {
-    //     let mut req_builder = Request::builder()
-    //         .uri(rd.url.unwrap());
-
-    //     match rd.verb {
-    //         Some(HttpVerb::POST) => req_builder = req_builder.method(Method::POST),
-    //         Some(HttpVerb::PATCH) => req_builder = req_builder.method(Method::PATCH),
-    //         Some(HttpVerb::PUT) => req_builder = req_builder.method(Method::PUT),
-    //         Some(_) => req_builder = req_builder.method(Method::GET),
-    //         None => req_builder = req_builder.method(Method::GET)
-    //     }
-
-    //     for (k, v) in rd.headers {
-    //         req_builder = req_builder.header(k, v);
-    //     }
-
-    //     let req = req_builder.body(Body::empty()).unwrap();
-
-    //     return req;
-    // }
 }
