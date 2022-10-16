@@ -101,11 +101,44 @@ impl ResponseDescriptor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VariableTypes {
+    Int,
+    String,
+    Date,
+    Datetime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VariableRange {
+    pub min: String,
+    pub max: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Modifier {
+    pub operation: String,
+    pub value: String,
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestVariable {
+    pub name: String,
+    pub data_type: VariableTypes,
+    pub value: Option<String>,
+    pub range: Option<VariableRange>,
+    pub modifier: Option<Modifier>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDescriptor {
     pub name: Option<String>,
     pub request: RequestDescriptor,
     pub compare: Option<RequestDescriptor>,
     pub response: Option<ResponseDescriptor>,
+    pub variables: Option<Vec<TestVariable>>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid

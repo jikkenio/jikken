@@ -8,9 +8,12 @@ name:
 request:
     method:
     url:
-    params: 
+    params:
+      - key:
+        value:
     headers:
-      - 
+      - key:
+        value:
     body: {
 
     }
@@ -19,8 +22,11 @@ compare:
     method:
     url:
     params: 
+      - key:
+        value:
     headers:
-      - 
+      - key:
+        value:
     body: {
 
     }
@@ -28,10 +34,24 @@ compare:
 response: 
     status:
     headers:
-        -
+      - key:
+        value:
     body: {
 
     }
     ignore:
         - 
+
+variables:
+  - name: 
+    dataType:
+    value: 
+    range:
+        min:
+        max:
+    modifier:
+        operation: 
+        value: 
+        unit: 
+    format:
 ```
