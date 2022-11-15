@@ -62,7 +62,7 @@ impl TestRunner {
 
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
     async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.request.url;
+        let uri = &td.request.get_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
@@ -114,7 +114,7 @@ impl TestRunner {
     async fn validate_td_comparison_mode(
         td: TestDescriptor,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.request.url;
+        let uri = &td.request.get_url();
         let uri_compare = td.compare.clone().unwrap().get_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
