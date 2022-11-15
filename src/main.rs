@@ -95,19 +95,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     for (i, file) in files.iter().enumerate() {
         let file_opt = get_file_with_modifications(file, config.clone());
         if let Some(f) = file_opt {
-            let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
-            if let Ok(td) = td_opt {
-                if !td.validate() {
-                    println!("Invalid Test Definition File: {}", file);
-                    continue;
+            let td_opt: Result<test_descriptor::TestDescriptor, serde_yaml::Error> = serde_yaml::from_str(&f);
+            match td_opt {
+                Ok(td) => {
+                    if !td.validate() {
+                        println!("Invalid Test Definition File: {}", file);
+                        continue;
+                    }
+    
+                    let passed = runner.run(td, i + 1).await?;
+                    if !continue_on_failure && !passed {
+                        std::process::exit(1);
+                    }
                 }
-
-                let passed = runner.run(td, i + 1).await?;
-                if !continue_on_failure && !passed {
-                    std::process::exit(1);
+                Err(e) => {
+                    println!("Parsing error: {}", e);
                 }
-            } else {
-                println!("serde_yaml failed"); // TODO: Add meaningful output
             }
         } else {
             println!("file failed to load"); // TODO: Add meaningful output
