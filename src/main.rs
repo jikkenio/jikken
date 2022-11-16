@@ -44,7 +44,7 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
                 if let Some(globals) = config.globals.as_ref() {
                     let mut modified_data = original_data;
                     for (key, value) in globals {
-                        let key_pattern = format!("#{}#", key);
+                        let key_pattern = format!("{{{}}}", key);
                         modified_data = modified_data.replace(&key_pattern, value);
                     }
                     return Some(modified_data);
