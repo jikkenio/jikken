@@ -1,5 +1,7 @@
 use hyper::Method;
 use serde::{Deserialize, Serialize};
+use chrono::{NaiveDateTime, Local, offset::TimeZone, Days, Months};
+use std::collections::{HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HttpVerb {
@@ -132,6 +134,91 @@ pub struct TestVariable {
     pub format: Option<String>,
 }
 
+impl TestVariable {
+    pub fn generate_value(&self) -> String {
+        return match self.data_type {
+            VariableTypes::Int => String::from(""),
+            VariableTypes::String => String::from(""),
+            VariableTypes::Date => {
+                // TODO: Add proper error handling
+                if let Some(v) = &self.value {
+                    if v.starts_with("$") {
+                        let mut result_date;
+                        if v == "$TODAY" || v == "$NOW" {
+                            result_date = Local::now();
+                        } else {
+                            let parse_attempt = NaiveDateTime::parse_from_str(&v, "%Y-%m-%d");
+                            if let Ok(p) = parse_attempt {
+                                result_date = Local.from_local_datetime(&p).unwrap();
+                            } else {
+                                return String::from("");
+                            }
+                        }
+
+                        // TODO: Change modifiers to static types with enums
+                        if let Some(m) = &self.modifier {
+                            let mod_value_result = m.value.parse::<u64>();
+                            if let Ok(mod_value) = mod_value_result {
+                                match m.operation.to_lowercase().as_str() {
+                                    "add" => {
+                                        let modified_date = match m.unit.to_lowercase().as_str() {
+                                            "days" => {
+                                                result_date.checked_add_days(Days::new(mod_value))
+                                            },
+                                            "weeks" => {
+                                                result_date.checked_add_days(Days::new(mod_value*7))
+                                            },
+                                            "months" => {
+                                                result_date.checked_add_months(Months::new(mod_value as u32))
+                                            },
+                                            // TODO: add support for years
+                                            _ => {
+                                                None
+                                            }
+                                        };
+
+                                        if let Some(md) = modified_date {
+                                            result_date = md;
+                                        }
+                                    },
+                                    "subtract" => {
+                                        let modified_date = match m.unit.to_lowercase().as_str() {
+                                            "days" => {
+                                                result_date.checked_sub_days(Days::new(mod_value))
+                                            },
+                                            "weeks" => {
+                                                result_date.checked_sub_days(Days::new(mod_value*7))
+                                            },
+                                            "months" => {
+                                                result_date.checked_sub_months(Months::new(mod_value as u32))
+                                            },
+                                            // TODO: add support for years
+                                            _ => {
+                                                None
+                                            }
+                                        };
+
+                                        if let Some(md) = modified_date {
+                                            result_date = md;
+                                        }
+                                    },
+                                    _ => {
+
+                                    }
+                                }
+                            }
+                        }
+
+                        return format!("{}", result_date.format("%Y-%m-%d"));
+                    }
+                }
+                return String::from("");
+            },
+            VariableTypes::Datetime => String::from(""),
+        };
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDescriptor {
     pub name: Option<String>,
@@ -154,5 +241,48 @@ impl TestDescriptor {
         }
 
         valid_td
+    }
+
+    pub fn process_variables(&mut self) {
+        let mut variable_map = HashMap::new();
+
+        if let Some(variables) = &self.variables {
+            for v in variables {
+                variable_map.insert(format!("{{{}}}", &v.name), v.generate_value());
+            }
+        }
+
+        if variable_map.is_empty() {
+            return;
+        }
+
+        if let Some(params) = &self.request.params {
+            let mut new_params = Vec::new();
+            let mut any_modification = false;
+
+            for p in params.iter() {
+                let mut new_p = p.clone();
+                if let Some(p_value) = &p.value {
+                    if p_value.starts_with("{") {
+                        for (key, value) in &variable_map {
+                            let new_value = p_value.replace(key, &value);
+
+                            if new_value != *p_value {
+                                new_p.value = Some(new_value);
+                                any_modification = true;
+                            }
+                        }
+                    }
+                }
+
+                new_params.push(new_p)
+            }
+
+            if any_modification {
+                self.request.params = Some(new_params);
+            }
+        }
+
+        // println!("Resolved url: {}", self.request.get_url());
     }
 }

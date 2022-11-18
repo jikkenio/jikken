@@ -30,3 +30,4 @@ serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
 indicatif = {version = "*", features = ["rayon"]}
 exitcode = {version = "1.1.2"}
+chrono = {version = "0.4.23"}
