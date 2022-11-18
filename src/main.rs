@@ -97,11 +97,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(f) = file_opt {
             let td_opt: Result<test_descriptor::TestDescriptor, serde_yaml::Error> = serde_yaml::from_str(&f);
             match td_opt {
-                Ok(td) => {
+                Ok(mut td) => {
                     if !td.validate() {
                         println!("Invalid Test Definition File: {}", file);
                         continue;
                     }
+
+                    td.process_variables();
     
                     let passed = runner.run(td, i + 1).await?;
                     if !continue_on_failure && !passed {
