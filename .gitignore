@@ -12,7 +12,7 @@ Cargo.lock
 
 # Added by cargo
 
-/target
+target/
 
 .jikken
 .idea/
