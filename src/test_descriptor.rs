@@ -311,7 +311,7 @@ impl TestDescriptor {
             for p in params.iter() {
                 let mut new_p = p.clone();
                 if let Some(p_value) = &p.value {
-                    if p_value.starts_with("{") {
+                    if p_value.starts_with("#") {
                         for (key, value) in &variable_map {
                             let new_value = p_value.replace(key, &value);
 
