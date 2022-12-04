@@ -1,11 +1,15 @@
 mod config;
-mod test_descriptor;
+mod errors;
+mod test_definition;
+mod test_file;
 mod test_runner;
 
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use std::collections::HashMap;
 use walkdir::{DirEntry, WalkDir};
+use chrono::{Local};
 
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &DirEntry) -> bool {
@@ -38,6 +42,10 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
 fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -> Option<String> {
     let original_data_opt = fs::read_to_string(file);
 
+    let mut built_in_globals = HashMap::new();
+
+    built_in_globals.insert("#TODAY#", format!("{}", Local::now().format("%Y-%m-%d")));
+    
     match original_data_opt {
         Ok(original_data) => {
             if let Some(config) = config_opt {
@@ -46,6 +54,10 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
                     for (key, value) in globals {
                         let key_pattern = format!("#{}#", key);
                         modified_data = modified_data.replace(&key_pattern, value);
+                    }
+
+                    for (key, value) in built_in_globals {
+                        modified_data = modified_data.replace(key, value.as_str());
                     }
                     return Some(modified_data);
                 }
@@ -95,23 +107,33 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     for (i, file) in files.iter().enumerate() {
         let file_opt = get_file_with_modifications(file, config.clone());
         if let Some(f) = file_opt {
-            let td_opt: Result<test_descriptor::TestDescriptor, serde_yaml::Error> = serde_yaml::from_str(&f);
-            match td_opt {
-                Ok(mut td) => {
-                    if !td.validate() {
-                        println!("Invalid Test Definition File: {}", file);
-                        continue;
-                    }
+            let file_opt: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
+                serde_yaml::from_str(&f);
+            match file_opt {
+                Ok(test_file) => {
+                    let td_opt = test_definition::TestDefinition::new(test_file);
 
-                    td.process_variables();
-                    
-                    let passed = runner.run(td, i + 1).await?;
-                    if !continue_on_failure && !passed {
-                        std::process::exit(1);
+                    match td_opt {
+                        Ok(td) => {
+                            if !td.validate() {
+                                println!("Invalid Test Definition File: {}", file);
+                                continue;
+                            }
+        
+                            // td.process_variables();
+        
+                            let passed = runner.run(td, i + 1).await?;
+                            if !continue_on_failure && !passed {
+                                std::process::exit(1);
+                            }
+                        },
+                        Err(e) => {
+                            println!("Test Definition parsing error: {}", e);        
+                        }
                     }
                 }
                 Err(e) => {
-                    println!("Parsing error: {}", e);
+                    println!("File parsing error: {}, ({})", e, file);
                 }
             }
         } else {

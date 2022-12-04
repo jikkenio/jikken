@@ -1,5 +1,4 @@
-use super::test_descriptor::TestDescriptor;
-use crate::test_descriptor::HttpVerb::Undefined;
+use crate::test_definition::TestDefinition;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use serde_json::{json, Map, Value};
@@ -23,7 +22,7 @@ impl TestRunner {
 
     pub async fn run(
         &mut self,
-        td: TestDescriptor,
+        td: TestDefinition,
         count: usize,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         print!(
@@ -50,26 +49,16 @@ impl TestRunner {
         Ok(result)
     }
 
-    // fn resolve_http_method(verb: &Option<HttpVerb>) -> Method {
-    //     match &verb {
-    //         Some(HttpVerb::Post) => Method::POST,
-    //         Some(HttpVerb::Patch) => Method::PATCH,
-    //         Some(HttpVerb::Put) => Method::PUT,
-    //         Some(_) => Method::GET,
-    //         None => Method::GET,
-    //     }
-    // }
-
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
-    async fn validate_td(td: TestDescriptor) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.request.get_url();
+    async fn validate_td(td: TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
         req_builder =
-            req_builder.method(&td.request.method.as_ref().unwrap_or(&Undefined).as_method());
+            req_builder.method(&td.request.method.as_method());
 
-        for header in td.request.get_headers() {
+        for header in td.get_request_headers() {
             req_builder = req_builder.header(header.0, header.1);
         }
 
@@ -112,17 +101,18 @@ impl TestRunner {
 
     // TODO: Possibly refactor/combine logic to avoid so much duplication
     async fn validate_td_comparison_mode(
-        td: TestDescriptor,
+        td: TestDefinition,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.request.get_url();
-        let uri_compare = td.compare.clone().unwrap().get_url();
+        let uri = &td.get_request_url();
+        let uri_compare = td.get_compare_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
-        let mut req_builder = Request::builder().uri(uri);
-        req_builder =
-            req_builder.method(&td.request.method.as_ref().unwrap_or(&Undefined).as_method());
+        println!("Url: {}", uri);
 
-        for header in td.request.get_headers() {
+        let mut req_builder = Request::builder().uri(uri);
+        req_builder = req_builder.method(&td.request.method.as_method());
+
+        for header in td.get_request_headers() {
             req_builder = req_builder.header(&header.0, &header.1);
         }
 
@@ -133,13 +123,10 @@ impl TestRunner {
             &td.compare
                 .clone()
                 .unwrap()
-                .method
-                .as_ref()
-                .unwrap_or(&Undefined)
-                .as_method(),
+                .method.as_method(),
         );
 
-        for header in &td.compare.unwrap().get_headers() {
+        for header in &td.get_compare_headers() {
             req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
         }
 
