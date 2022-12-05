@@ -24,11 +24,13 @@ impl TestRunner {
         &mut self,
         td: &TestDefinition,
         count: usize,
-        iteration: u32
+        iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         print!(
             "Running `{}`...",
-            td.name.clone().unwrap_or(format!("Test {} - Iteration {}", count, iteration))
+            td.name
+                .clone()
+                .unwrap_or(format!("Test {} - Iteration {}", count, iteration))
         );
         io::stdout().flush().unwrap();
 
@@ -56,8 +58,7 @@ impl TestRunner {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
-        req_builder =
-            req_builder.method(&td.request.method.as_method());
+        req_builder = req_builder.method(&td.request.method.as_method());
 
         for header in td.get_request_headers() {
             req_builder = req_builder.header(header.0, header.1);
@@ -104,8 +105,8 @@ impl TestRunner {
     async fn validate_td_comparison_mode(
         td: &TestDefinition,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.get_request_url();
         let uri_compare = td.get_compare_url();
+        let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         // println!("Url: {}", uri);
@@ -119,7 +120,8 @@ impl TestRunner {
         }
 
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
-        req_comparison_builder = req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
+        req_comparison_builder =
+            req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
 
         for header in td.get_compare_headers() {
             req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
@@ -147,16 +149,19 @@ impl TestRunner {
             Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
                 Ok(data_compare_json) => {
                     pass &= TestRunner::validate_body(data_json, data_compare_json, Vec::new());
-                },
+                }
                 _ => {
-                    // println!("json data failed validation: ({:?}), ({:?})", data, data_compare);
+                    println!(
+                        "json data failed validation: ({:?}), ({:?})",
+                        data, data_compare
+                    );
                     pass = false
-                },
+                }
             },
             _ => {
-                // println!("no json data req({:?}) compare({:?})", data, data_compare);
+                println!("no json data req({:?}) compare({:?})", data, data_compare);
                 pass = data == data_compare;
-            },
+            }
         };
 
         Ok(pass)
@@ -188,7 +193,13 @@ impl TestRunner {
     // TODO: Add support for nested ignore hierarchies.
     fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> bool {
         if ignore.is_empty() {
-            return actual == expected;
+            let r = actual == expected;
+
+            // if !r {
+            //     println!("data doesn't match: req({}) compare({})", actual, expected)
+            // }
+
+            return r;
         }
 
         let mut map: Map<String, Value> =
@@ -202,6 +213,12 @@ impl TestRunner {
 
         let adjusted_actual = json!(map);
 
-        adjusted_actual == expected
+        let result = adjusted_actual == expected;
+
+        // if !result {
+        //     println!("data doesn't match: req({}) compare({})", adjusted_actual, expected)
+        // }
+
+        return result;
     }
 }
