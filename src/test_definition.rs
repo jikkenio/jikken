@@ -458,7 +458,7 @@ impl TestDefinition {
                 }
             }
 
-            if let Some(compare) = self.compare.clone() {
+            if let Some(compare) = &self.compare {
                 for header in compare.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
                         header.matches_variable.set(true);
@@ -466,7 +466,7 @@ impl TestDefinition {
                     }                    
                 }
 
-                for param in compare.params {
+                for param in compare.params.iter() {
                     if param.value.contains(var_pattern.as_str()) {
                         param.matches_variable.set(true);
                         // println!("setting match true: {}", param.param);
@@ -474,7 +474,7 @@ impl TestDefinition {
                 }
             }
 
-            if let Some(response) = self.response.clone() {
+            if let Some(response) = &self.response {
                 for header in response.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
                         header.matches_variable.set(true);

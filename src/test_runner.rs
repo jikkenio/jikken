@@ -108,7 +108,8 @@ impl TestRunner {
         let uri_compare = td.get_compare_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
-        println!("Url: {}", uri);
+        // println!("Url: {}", uri);
+        // println!("Compare_Url: {}", uri_compare);
 
         let mut req_builder = Request::builder().uri(uri);
         req_builder = req_builder.method(&td.request.method.as_method());
@@ -117,20 +118,15 @@ impl TestRunner {
             req_builder = req_builder.header(&header.0, &header.1);
         }
 
-        // TODO: support bodies for comparison request
-        let req = req_builder.body(Body::empty()).unwrap();
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
-        req_comparison_builder = req_comparison_builder.method(
-            &td.compare
-                .clone()
-                .unwrap()
-                .method.as_method(),
-        );
+        req_comparison_builder = req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
 
-        for header in &td.get_compare_headers() {
+        for header in td.get_compare_headers() {
             req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
         }
 
+        // TODO: support bodies for comparison request
+        let req = req_builder.body(Body::empty()).unwrap();
         let req_comparison = req_comparison_builder.body(Body::empty()).unwrap();
 
         let resp = client.request(req).await?;
@@ -138,6 +134,9 @@ impl TestRunner {
 
         let mut pass = true;
         let status_test = TestRunner::validate_status_codes(resp.status(), resp_compare.status());
+
+        // println!("Status req({}) compare({})", resp.status(), resp_compare.status());
+        // println!("req({:?}) compare({:?})", resp, resp_compare);
 
         pass &= status_test;
 
@@ -148,10 +147,16 @@ impl TestRunner {
             Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
                 Ok(data_compare_json) => {
                     pass &= TestRunner::validate_body(data_json, data_compare_json, Vec::new());
-                }
-                _ => pass = false,
+                },
+                _ => {
+                    // println!("json data failed validation: ({:?}), ({:?})", data, data_compare);
+                    pass = false
+                },
             },
-            _ => pass = false,
+            _ => {
+                // println!("no json data req({:?}) compare({:?})", data, data_compare);
+                pass = data == data_compare;
+            },
         };
 
         Ok(pass)
