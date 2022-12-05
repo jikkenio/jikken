@@ -532,7 +532,7 @@ impl TestDefinition {
             }
 
             let replacement = variable.generate_value();
-            return (variable.name.clone(), parameter.value.replace(var_pattern.as_str(), replacement.as_str()));            
+            return (parameter.param.clone(), parameter.value.replace(var_pattern.as_str(), replacement.as_str()));            
         }
 
         (String::from(""), String::from(""))
