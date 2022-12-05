@@ -200,11 +200,11 @@ impl TestVariable {
         })
     }
 
-    pub fn generate_value(&self) -> String {
+    pub fn generate_value(&self, update: bool) -> String {
         let result = match self.data_type {
-            VariableTypes::Int => self.generate_int_value(),
-            VariableTypes::String => self.generate_string_value(),
-            VariableTypes::Date => self.generate_date_value(),
+            VariableTypes::Int => self.generate_int_value(update),
+            VariableTypes::String => self.generate_string_value(update),
+            VariableTypes::Date => self.generate_date_value(update),
             VariableTypes::Datetime => String::from(""),
         };
 
@@ -213,7 +213,7 @@ impl TestVariable {
         return result;
     }
 
-    fn generate_int_value(&self) -> String {
+    fn generate_int_value(&self, update: bool) -> String {
         match &self.value {
             serde_yaml::Value::Number(v) => {
                 // println!("number expression: {:?}", v);
@@ -223,7 +223,7 @@ impl TestVariable {
                 // println!("sequence expression: {:?}", seq);
                 // println!("current index: {}", self.index.get());
 
-                if seq.len() < (self.index.get() + 1) as usize {
+                if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
 
@@ -233,9 +233,10 @@ impl TestVariable {
                     _ => 0,
                 };
 
-                // println!("test_number: {}", test_string);
-                self.index.set(self.index.get() + 1);
-                // println!("new index: {}", self.index.get());
+                if update {
+                    self.index.set(self.index.get() + 1);
+                }
+
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
@@ -248,7 +249,7 @@ impl TestVariable {
         }
     }
 
-    fn generate_string_value(&self) -> String {
+    fn generate_string_value(&self, update: bool) -> String {
         match &self.value {
             serde_yaml::Value::String(v) => {
                 // println!("number expression: {:?}", v);
@@ -258,7 +259,7 @@ impl TestVariable {
                 // println!("sequence expression: {:?}", seq);
                 // println!("current index: {}", self.index.get());
 
-                if seq.len() < (self.index.get() + 1) as usize {
+                if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
 
@@ -268,9 +269,10 @@ impl TestVariable {
                     _ => "".to_string(),
                 };
 
-                // println!("test_number: {}", test_string);
-                self.index.set(self.index.get() + 1);
-                // println!("new index: {}", self.index.get());
+                if update {
+                    self.index.set(self.index.get() + 1);
+                }
+
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
@@ -283,13 +285,13 @@ impl TestVariable {
         }
     }
 
-    fn generate_date_value(&self) -> String {
+    fn generate_date_value(&self, update: bool) -> String {
         // TODO: Add proper error handling
         match &self.value {
             serde_yaml::Value::String(v) => {
                 // println!("string expression: {:?}", v);
                 let mut result_date;
-                
+
                 let parse_attempt = NaiveDate::parse_from_str(&v, "%Y-%m-%d");
                 if let Ok(p) = parse_attempt {
                     result_date = Local
@@ -344,7 +346,7 @@ impl TestVariable {
             }
             serde_yaml::Value::Sequence(seq) => {
                 // println!("sequence expression: {:?}", seq);
-                if seq.len() < (self.index.get() + 1) as usize {
+                if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
 
@@ -358,7 +360,10 @@ impl TestVariable {
                 // println!("test_string: {}", test_string);
 
                 let parse_attempt = NaiveDate::parse_from_str(test_string, "%Y-%m-%d");
-                self.index.set(self.index.get() + 1);
+
+                if update {
+                    self.index.set(self.index.get() + 1);
+                }
 
                 match parse_attempt {
                     Ok(p) => {
@@ -462,15 +467,14 @@ impl TestDefinition {
                 for header in compare.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
                         header.matches_variable.set(true);
-
-                    }                    
+                    }
                 }
 
                 for param in compare.params.iter() {
                     if param.value.contains(var_pattern.as_str()) {
                         param.matches_variable.set(true);
                         // println!("setting match true: {}", param.param);
-                    }                
+                    }
                 }
             }
 
@@ -492,7 +496,7 @@ impl TestDefinition {
             .iter()
             .map(|param| {
                 if param.matches_variable.get() {
-                    let p = self.get_processed_param(param);
+                    let p = self.get_processed_param(param, true);
                     format!("{}={}", p.0, p.1)
                 } else {
                     format!("{}={}", param.param, param.value)
@@ -506,12 +510,14 @@ impl TestDefinition {
     pub fn get_compare_url(&self) -> String {
         // TODO: make this safe with optionals
         let joined: Vec<_> = self
-            .compare.clone().unwrap()
+            .compare
+            .clone()
+            .unwrap()
             .params
             .iter()
             .map(|param| {
                 if param.matches_variable.get() {
-                    let p = self.get_processed_param(param);
+                    let p = self.get_processed_param(param, false);
                     format!("{}={}", p.0, p.1)
                 } else {
                     format!("{}={}", param.param, param.value)
@@ -522,7 +528,7 @@ impl TestDefinition {
         format!("{}?{}", self.compare.clone().unwrap().url, joined.join("&"))
     }
 
-    fn get_processed_param(&self, parameter: &HttpParameter) -> (String, String) {
+    fn get_processed_param(&self, parameter: &HttpParameter, update: bool) -> (String, String) {
         // println!("processing param: {}", parameter.param);
         for variable in self.variables.iter() {
             let var_pattern = format!("${}$", variable.name);
@@ -531,8 +537,13 @@ impl TestDefinition {
                 continue;
             }
 
-            let replacement = variable.generate_value();
-            return (parameter.param.clone(), parameter.value.replace(var_pattern.as_str(), replacement.as_str()));            
+            let replacement = variable.generate_value(update);
+            return (
+                parameter.param.clone(),
+                parameter
+                    .value
+                    .replace(var_pattern.as_str(), replacement.as_str()),
+            );
         }
 
         (String::from(""), String::from(""))
@@ -549,7 +560,9 @@ impl TestDefinition {
 
     pub fn get_compare_headers(&self) -> Vec<(String, String)> {
         // TODO: inject variable replacement
-        self.compare.clone().unwrap()
+        self.compare
+            .clone()
+            .unwrap()
             .headers
             .iter()
             .map(|kvp| (kvp.header.clone(), kvp.value.clone()))

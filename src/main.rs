@@ -4,13 +4,13 @@ mod test_definition;
 mod test_file;
 mod test_runner;
 
+use chrono::Local;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
-use test_definition::TestDefinition;
 use std::path::Path;
-use std::collections::HashMap;
+use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
-use chrono::{Local};
 
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &DirEntry) -> bool {
@@ -46,7 +46,7 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
     let mut built_in_globals = HashMap::new();
 
     built_in_globals.insert("#TODAY#", format!("{}", Local::now().format("%Y-%m-%d")));
-    
+
     match original_data_opt {
         Ok(original_data) => {
             if let Some(config) = config_opt {
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             }
 
                             let boxed_td: Box<TestDefinition> = Box::from(td);
-        
+
                             // td.process_variables();
                             for iteration in 0..boxed_td.iterate {
                                 match runner.run(boxed_td.as_ref(), i + 1, iteration + 1).await {
@@ -130,15 +130,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                         if !continue_on_failure && !passed {
                                             std::process::exit(1);
                                         }
-                                    },
+                                    }
                                     Err(e) => {
                                         println!("Test failed to run: {}", e)
                                     }
                                 }
                             }
-                        },
+                        }
                         Err(e) => {
-                            println!("Test Definition parsing error: {}", e);        
+                            println!("Test Definition parsing error: {}", e);
                         }
                     }
                 }
