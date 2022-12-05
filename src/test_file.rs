@@ -46,6 +46,7 @@ pub struct UnvalidatedVariable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedTest {
     pub name: Option<String>,
+    pub iterate: Option<u32>,
     pub request: UnvalidatedRequest,
     pub compare: Option<UnvalidatedRequest>,
     pub response: Option<UnvalidatedResponse>,

@@ -6,6 +6,7 @@ mod test_runner;
 
 use std::error::Error;
 use std::fs;
+use test_definition::TestDefinition;
 use std::path::Path;
 use std::collections::HashMap;
 use walkdir::{DirEntry, WalkDir};
@@ -119,12 +120,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                 println!("Invalid Test Definition File: {}", file);
                                 continue;
                             }
+
+                            let boxed_td: Box<TestDefinition> = Box::from(td);
         
                             // td.process_variables();
-        
-                            let passed = runner.run(td, i + 1).await?;
-                            if !continue_on_failure && !passed {
-                                std::process::exit(1);
+                            for iteration in 0..boxed_td.iterate {
+                                match runner.run(boxed_td.as_ref(), i + 1, iteration + 1).await {
+                                    Ok(passed) => {
+                                        if !continue_on_failure && !passed {
+                                            std::process::exit(1);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        println!("Test failed to run: {}", e)
+                                    }
+                                }
                             }
                         },
                         Err(e) => {

@@ -202,22 +202,92 @@ impl TestVariable {
 
     pub fn generate_value(&self) -> String {
         let result = match self.data_type {
-            VariableTypes::Int => String::from(""),
-            VariableTypes::String => String::from(""),
-            VariableTypes::Date => Self::generate_date_value(self),
+            VariableTypes::Int => self.generate_int_value(),
+            VariableTypes::String => self.generate_string_value(),
+            VariableTypes::Date => self.generate_date_value(),
             VariableTypes::Datetime => String::from(""),
         };
 
-        println!("result: {}", result);
+        // println!("result: {}", result);
 
         return result;
+    }
+
+    fn generate_int_value(&self) -> String {
+        match &self.value {
+            serde_yaml::Value::Number(v) => {
+                // println!("number expression: {:?}", v);
+                return format!("{}", v);
+            }
+            serde_yaml::Value::Sequence(seq) => {
+                // println!("sequence expression: {:?}", seq);
+                // println!("current index: {}", self.index.get());
+
+                if seq.len() < (self.index.get() + 1) as usize {
+                    self.index.set(0);
+                }
+
+                let test = &seq[self.index.get() as usize];
+                let test_string = match test {
+                    serde_yaml::Value::Number(st) => st.as_i64().unwrap_or(0),
+                    _ => 0,
+                };
+
+                // println!("test_number: {}", test_string);
+                self.index.set(self.index.get() + 1);
+                // println!("new index: {}", self.index.get());
+                return format!("{}", test_string);
+            }
+            serde_yaml::Value::Mapping(map) => {
+                println!("map expression: {:?}", map);
+                return String::from("no");
+            }
+            _ => {
+                return String::from("");
+            }
+        }
+    }
+
+    fn generate_string_value(&self) -> String {
+        match &self.value {
+            serde_yaml::Value::String(v) => {
+                // println!("number expression: {:?}", v);
+                return format!("{}", v);
+            }
+            serde_yaml::Value::Sequence(seq) => {
+                // println!("sequence expression: {:?}", seq);
+                // println!("current index: {}", self.index.get());
+
+                if seq.len() < (self.index.get() + 1) as usize {
+                    self.index.set(0);
+                }
+
+                let test = &seq[self.index.get() as usize];
+                let test_string = match test {
+                    serde_yaml::Value::String(st) => st.to_string(),
+                    _ => "".to_string(),
+                };
+
+                // println!("test_number: {}", test_string);
+                self.index.set(self.index.get() + 1);
+                // println!("new index: {}", self.index.get());
+                return format!("{}", test_string);
+            }
+            serde_yaml::Value::Mapping(map) => {
+                println!("map expression: {:?}", map);
+                return String::from("no");
+            }
+            _ => {
+                return String::from("");
+            }
+        }
     }
 
     fn generate_date_value(&self) -> String {
         // TODO: Add proper error handling
         match &self.value {
             serde_yaml::Value::String(v) => {
-                println!("string expression: {:?}", v);
+                // println!("string expression: {:?}", v);
                 let mut result_date;
                 
                 let parse_attempt = NaiveDate::parse_from_str(&v, "%Y-%m-%d");
@@ -273,7 +343,7 @@ impl TestVariable {
                 return format!("{}", result_date.format("%Y-%m-%d"));
             }
             serde_yaml::Value::Sequence(seq) => {
-                println!("sequence expression: {:?}", seq);
+                // println!("sequence expression: {:?}", seq);
                 if seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
@@ -285,7 +355,7 @@ impl TestVariable {
                     _ => "",
                 };
 
-                println!("test_string: {}", test_string);
+                // println!("test_string: {}", test_string);
 
                 let parse_attempt = NaiveDate::parse_from_str(test_string, "%Y-%m-%d");
                 self.index.set(self.index.get() + 1);
@@ -321,11 +391,11 @@ impl TestVariable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDefinition {
     pub name: Option<String>,
+    pub iterate: u32,
     pub request: RequestDescriptor,
     pub compare: Option<RequestDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<TestVariable>,
-    // variable_map: HashMap<String, TestVariable>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -334,6 +404,7 @@ impl TestDefinition {
     pub fn new(test: UnvalidatedTest) -> Result<TestDefinition, ValidationError> {
         let td = TestDefinition {
             name: test.name,
+            iterate: test.iterate.unwrap_or(1),
             request: RequestDescriptor::new(test.request)?,
             compare: RequestDescriptor::new_opt(test.compare)?,
             response: ResponseDescriptor::new_opt(test.response)?,
@@ -369,15 +440,15 @@ impl TestDefinition {
     }
 
     fn update_variable_matching(&self) {
-        println!("updating variable matching");
+        // println!("updating variable matching");
         for variable in self.variables.iter() {
             let var_pattern = format!("${}$", variable.name.trim());
-            println!("pattern: {}", var_pattern);
+            // println!("pattern: {}", var_pattern);
 
             for header in self.request.headers.iter() {
                 if header.value.contains(var_pattern.as_str()) {
                     header.matches_variable.set(true);
-                    println!("setting match true: {}", header.header);
+                    // println!("setting match true: {}", header.header);
                 }
             }
 
@@ -398,7 +469,7 @@ impl TestDefinition {
                 for param in compare.params {
                     if param.value.contains(var_pattern.as_str()) {
                         param.matches_variable.set(true);
-                        println!("setting match true: {}", param.param);
+                        // println!("setting match true: {}", param.param);
                     }                
                 }
             }
@@ -452,7 +523,7 @@ impl TestDefinition {
     }
 
     fn get_processed_param(&self, parameter: &HttpParameter) -> (String, String) {
-        println!("processing param: {}", parameter.param);
+        // println!("processing param: {}", parameter.param);
         for variable in self.variables.iter() {
             let var_pattern = format!("${}$", variable.name);
 
