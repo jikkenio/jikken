@@ -59,7 +59,7 @@ impl RequestDescriptor {
             Some(params) => params
                 .iter()
                 .map(|v| HttpParameter {
-                    param: v.param.as_ref(),
+                    param: v.param.clone(),
                     value: v.value.clone(),
                     matches_variable: Cell::from(false),
                 })
