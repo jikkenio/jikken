@@ -22,12 +22,13 @@ impl TestRunner {
 
     pub async fn run(
         &mut self,
-        td: TestDefinition,
+        td: &TestDefinition,
         count: usize,
+        iteration: u32
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         print!(
             "Running `{}`...",
-            td.name.clone().unwrap_or(format!("Test {}", count))
+            td.name.clone().unwrap_or(format!("Test {} - Iteration {}", count, iteration))
         );
         io::stdout().flush().unwrap();
 
@@ -50,7 +51,7 @@ impl TestRunner {
     }
 
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
-    async fn validate_td(td: TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td(td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
@@ -101,7 +102,7 @@ impl TestRunner {
 
     // TODO: Possibly refactor/combine logic to avoid so much duplication
     async fn validate_td_comparison_mode(
-        td: TestDefinition,
+        td: &TestDefinition,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.get_request_url();
         let uri_compare = td.get_compare_url();
