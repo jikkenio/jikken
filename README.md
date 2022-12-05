@@ -119,7 +119,8 @@ variables:
 
 # config file format
 
-```[settings]
+```
+[settings]
 continueOnFailure=true
 
 [globals]
