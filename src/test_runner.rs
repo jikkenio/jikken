@@ -171,7 +171,7 @@ impl TestRunner {
             },
             _ => {
                 trace!("no json data req({:?}) compare({:?})", data, data_compare);
-                pass = data == data_compare;
+                pass &= data == data_compare;
             }
         };
 
