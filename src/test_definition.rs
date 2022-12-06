@@ -4,6 +4,7 @@ use crate::test_file::{
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 
@@ -208,7 +209,7 @@ impl TestVariable {
             VariableTypes::Datetime => String::from(""),
         };
 
-        // println!("result: {}", result);
+        trace!("generate_value result: {}", result);
 
         return result;
     }
@@ -216,13 +217,11 @@ impl TestVariable {
     fn generate_int_value(&self, update: bool) -> String {
         match &self.value {
             serde_yaml::Value::Number(v) => {
-                // println!("number expression: {:?}", v);
+                trace!("number expression: {:?}", v);
                 return format!("{}", v);
             }
             serde_yaml::Value::Sequence(seq) => {
-                // println!("sequence expression: {:?}", seq);
-                // println!("current index: {}", self.index.get());
-
+                trace!("sequence expression: {:?}", seq);
                 if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
@@ -240,7 +239,7 @@ impl TestVariable {
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
-                println!("map expression: {:?}", map);
+                trace!("map expression: {:?}", map);
                 return String::from("no");
             }
             _ => {
@@ -252,12 +251,11 @@ impl TestVariable {
     fn generate_string_value(&self, update: bool) -> String {
         match &self.value {
             serde_yaml::Value::String(v) => {
-                // println!("number expression: {:?}", v);
+                trace!("number expression: {:?}", v);
                 return format!("{}", v);
             }
             serde_yaml::Value::Sequence(seq) => {
-                // println!("sequence expression: {:?}", seq);
-                // println!("current index: {}", self.index.get());
+                trace!("sequence expression: {:?}", seq);
 
                 if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
@@ -276,7 +274,7 @@ impl TestVariable {
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
-                println!("map expression: {:?}", map);
+                trace!("map expression: {:?}", map);
                 return String::from("no");
             }
             _ => {
@@ -289,7 +287,7 @@ impl TestVariable {
         // TODO: Add proper error handling
         match &self.value {
             serde_yaml::Value::String(v) => {
-                // println!("string expression: {:?}", v);
+                trace!("string expression: {:?}", v);
                 let mut result_date;
 
                 let parse_attempt = NaiveDate::parse_from_str(&v, "%Y-%m-%d");
@@ -345,7 +343,7 @@ impl TestVariable {
                 return format!("{}", result_date.format("%Y-%m-%d"));
             }
             serde_yaml::Value::Sequence(seq) => {
-                // println!("sequence expression: {:?}", seq);
+                trace!("sequence expression: {:?}", seq);
                 if update && seq.len() < (self.index.get() + 1) as usize {
                     self.index.set(0);
                 }
@@ -356,8 +354,6 @@ impl TestVariable {
                     serde_yaml::Value::String(st) => st,
                     _ => "",
                 };
-
-                // println!("test_string: {}", test_string);
 
                 let parse_attempt = NaiveDate::parse_from_str(test_string, "%Y-%m-%d");
 
@@ -383,7 +379,7 @@ impl TestVariable {
                 }
             }
             serde_yaml::Value::Mapping(map) => {
-                println!("map expression: {:?}", map);
+                trace!("map expression: {:?}", map);
                 return String::from("no");
             }
             _ => {
@@ -445,21 +441,22 @@ impl TestDefinition {
     }
 
     fn update_variable_matching(&self) {
-        // println!("updating variable matching");
+        trace!("updating variable matching");
         for variable in self.variables.iter() {
             let var_pattern = format!("${}$", variable.name.trim());
-            // println!("pattern: {}", var_pattern);
+            trace!("pattern: {}", var_pattern);
 
             for header in self.request.headers.iter() {
                 if header.value.contains(var_pattern.as_str()) {
                     header.matches_variable.set(true);
-                    // println!("setting match true: {}", header.header);
+                    trace!("setting match true: {}", header.header);
                 }
             }
 
             for param in self.request.params.iter() {
                 if param.value.contains(var_pattern.as_str()) {
                     param.matches_variable.set(true);
+                    trace!("setting match true: {}", param.param);
                 }
             }
 
@@ -467,13 +464,14 @@ impl TestDefinition {
                 for header in compare.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
                         header.matches_variable.set(true);
+                        trace!("compare setting match true: {}", header.header);
                     }
                 }
 
                 for param in compare.params.iter() {
                     if param.value.contains(var_pattern.as_str()) {
                         param.matches_variable.set(true);
-                        // println!("setting match true: {}", param.param);
+                        trace!("compare setting match true: {}", param.param);
                     }
                 }
             }
@@ -482,6 +480,7 @@ impl TestDefinition {
                 for header in response.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
                         header.matches_variable.set(true);
+                        trace!("response setting match true: {}", header.header);
                     }
                 }
             }

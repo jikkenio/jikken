@@ -1,13 +1,15 @@
 mod config;
 mod errors;
+mod logger;
 mod test_definition;
 mod test_file;
 mod test_runner;
 
 use chrono::Local;
+use log::{error, info, Level, LevelFilter};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs;
+use std::{fs, env};
 use std::path::Path;
 use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
@@ -74,10 +76,27 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let args: Vec<String> = env::args().collect();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
+    let log_level = if args.contains(&String::from("-v")) {
+        Level::Trace
+    } else {
+        Level::Error
+    };
+
+    let my_logger = logger::SimpleLogger {
+        level: log_level,
+    };
+    
+    if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
+        error!("Error creating logger: {}", e);
+        panic!("unable to create logger");
+    }
+
+    log::set_max_level(LevelFilter::Trace);
 
     if Path::new(".jikken").exists() {
         let config_raw = get_config(".jikken");
@@ -86,14 +105,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 config = Some(c);
             }
             Err(e) => {
-                println!("invalid configuration file: {}", e);
+                error!("invalid configuration file: {}", e);
                 std::process::exit(exitcode::CONFIG);
             }
         }
     }
 
     let files = get_files();
-    println!("Jikken found {} tests.", files.len());
+    info!("Jikken found {} tests.", files.len());
 
     let mut continue_on_failure = false;
 
@@ -104,6 +123,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
     }
+
+    let total_count = files.len();
 
     for (i, file) in files.iter().enumerate() {
         let file_opt = get_file_with_modifications(file, config.clone());
@@ -117,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     match td_opt {
                         Ok(td) => {
                             if !td.validate() {
-                                println!("Invalid Test Definition File: {}", file);
+                                error!("Invalid Test Definition File: {}", file);
                                 continue;
                             }
 
@@ -125,29 +146,32 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                             // td.process_variables();
                             for iteration in 0..boxed_td.iterate {
-                                match runner.run(boxed_td.as_ref(), i + 1, iteration + 1).await {
+                                match runner
+                                    .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
+                                    .await
+                                {
                                     Ok(passed) => {
                                         if !continue_on_failure && !passed {
                                             std::process::exit(1);
                                         }
                                     }
                                     Err(e) => {
-                                        println!("Test failed to run: {}", e)
+                                        error!("Test failed to run: {}", e)
                                     }
                                 }
                             }
                         }
                         Err(e) => {
-                            println!("Test Definition parsing error: {}", e);
+                            error!("Test Definition parsing error: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    println!("File parsing error: {}, ({})", e, file);
+                    error!("File parsing error: {}, ({})", e, file);
                 }
             }
         } else {
-            println!("file failed to load"); // TODO: Add meaningful output
+            error!("file failed to load"); // TODO: Add meaningful output
         }
     }
 
