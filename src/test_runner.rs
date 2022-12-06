@@ -1,6 +1,7 @@
 use crate::test_definition::TestDefinition;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
+use log::{error, trace};
 use serde_json::{json, Map, Value};
 use std::error::Error;
 use std::io::{self, Write};
@@ -24,13 +25,16 @@ impl TestRunner {
         &mut self,
         td: &TestDefinition,
         count: usize,
+        total: usize,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         print!(
-            "Running `{}`...",
-            td.name
-                .clone()
-                .unwrap_or(format!("Test {} - Iteration {}", count, iteration))
+            "Running ({}\\{}) `{}` Iteration({}\\{})...",
+            count,
+            total,
+            td.name.clone().unwrap_or(format!("Test {}", count)),
+            iteration,
+            td.iterate
         );
         io::stdout().flush().unwrap();
 
@@ -82,8 +86,8 @@ impl TestRunner {
                         let body_test = TestRunner::validate_body(rv, b.clone(), Vec::new());
                         pass &= body_test;
                     }
-                    Err(_) => {
-                        // println!("Error: {}", e);
+                    Err(e) => {
+                        error!("{}", e);
                         // TODO: add body comparison messaging
                         pass = false;
                     }
@@ -109,8 +113,8 @@ impl TestRunner {
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
-        // println!("Url: {}", uri);
-        // println!("Compare_Url: {}", uri_compare);
+        trace!("Url: {}", uri);
+        trace!("Compare_Url: {}", uri_compare);
 
         let mut req_builder = Request::builder().uri(uri);
         req_builder = req_builder.method(&td.request.method.as_method());
@@ -137,8 +141,7 @@ impl TestRunner {
         let mut pass = true;
         let status_test = TestRunner::validate_status_codes(resp.status(), resp_compare.status());
 
-        // println!("Status req({}) compare({})", resp.status(), resp_compare.status());
-        // println!("req({:?}) compare({:?})", resp, resp_compare);
+        trace!("req({:?}) compare({:?})", resp, resp_compare);
 
         pass &= status_test;
 
@@ -151,15 +154,16 @@ impl TestRunner {
                     pass &= TestRunner::validate_body(data_json, data_compare_json, Vec::new());
                 }
                 _ => {
-                    println!(
+                    trace!(
                         "json data failed validation: ({:?}), ({:?})",
-                        data, data_compare
+                        data,
+                        data_compare
                     );
                     pass = false
                 }
             },
             _ => {
-                println!("no json data req({:?}) compare({:?})", data, data_compare);
+                trace!("no json data req({:?}) compare({:?})", data, data_compare);
                 pass = data == data_compare;
             }
         };
@@ -171,7 +175,7 @@ impl TestRunner {
         let result = actual == expected;
         let label = if result { "PASS" } else { "FAIL" };
         if label == "FAIL" {
-            println!(
+            error!(
                 "Expected: {}, Actual: {}",
                 expected.as_u16(),
                 actual.as_u16()
@@ -184,7 +188,7 @@ impl TestRunner {
         let result = actual.as_u16() == expected;
         let label = if result { "PASS" } else { "FAIL" };
         if label == "FAIL" {
-            println!("Expected: {}, Actual: {}", expected, actual.as_u16());
+            error!("Expected: {}, Actual: {}", expected, actual.as_u16());
         }
         result
     }
@@ -195,9 +199,9 @@ impl TestRunner {
         if ignore.is_empty() {
             let r = actual == expected;
 
-            // if !r {
-            //     println!("data doesn't match: req({}) compare({})", actual, expected)
-            // }
+            if !r {
+                trace!("data doesn't match: req({}) compare({})", actual, expected)
+            }
 
             return r;
         }
@@ -215,9 +219,13 @@ impl TestRunner {
 
         let result = adjusted_actual == expected;
 
-        // if !result {
-        //     println!("data doesn't match: req({}) compare({})", adjusted_actual, expected)
-        // }
+        if !result {
+            trace!(
+                "data doesn't match: req({}) compare({})",
+                adjusted_actual,
+                expected
+            )
+        }
 
         return result;
     }
