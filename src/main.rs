@@ -81,6 +81,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
+
+    let tag_pattern_opt = if let Some(p) = args.iter().position(|a| a == "-t") {
+        Some(args[p+1].to_lowercase())
+    } else {
+        None
+    };
+
     let log_level = if args.contains(&String::from("-v")) {
         Level::Trace
     } else {
@@ -124,7 +131,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let total_count = files.len();
+    let total_count = match tag_pattern_opt {
+        Some(_) => 0,
+        None => files.len(),
+    };
 
     for (i, file) in files.iter().enumerate() {
         let file_opt = get_file_with_modifications(file, config.clone());
@@ -140,6 +150,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             if !td.validate() {
                                 error!("Invalid Test Definition File: {}", file);
                                 continue;
+                            }
+
+                            if let Some(tag) = tag_pattern_opt.as_ref() {
+                                if !td.tags.contains(&tag) {
+                                    continue;
+                                }
                             }
 
                             let boxed_td: Box<TestDefinition> = Box::from(td);
