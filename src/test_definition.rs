@@ -392,6 +392,7 @@ impl TestVariable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDefinition {
     pub name: Option<String>,
+    pub tags: Vec<String>,
     pub iterate: u32,
     pub request: RequestDescriptor,
     pub compare: Option<RequestDescriptor>,
@@ -403,8 +404,15 @@ pub struct TestDefinition {
 // TODO: Validation should be type driven for compile time correctness
 impl TestDefinition {
     pub fn new(test: UnvalidatedTest) -> Result<TestDefinition, ValidationError> {
+        let new_tags = if let Some(tags) = test.tags {
+            tags.to_lowercase().split_whitespace().map(|s| s.to_string()).collect()
+        } else {
+            Vec::new()
+        };
+
         let td = TestDefinition {
             name: test.name,
+            tags: new_tags,
             iterate: test.iterate.unwrap_or(1),
             request: RequestDescriptor::new(test.request)?,
             compare: RequestDescriptor::new_opt(test.compare)?,
