@@ -139,14 +139,15 @@ impl TestRunner {
         let resp_compare = client.request(req_comparison).await?;
 
         let mut pass = true;
-        let mut status_test = TestRunner::validate_status_codes(resp.status(), resp_compare.status());
+        let mut status_test =
+            TestRunner::validate_status_codes(resp.status(), resp_compare.status());
 
         if let Some(td_response) = &td.response {
             if let Some(td_response_status) = td_response.status {
-                status_test = status_test && TestRunner::validate_status_code(resp.status(), td_response_status);
+                status_test = status_test
+                    && TestRunner::validate_status_code(resp.status(), td_response_status);
             }
         }
-        
 
         trace!("req({:?}) compare({:?})", resp, resp_compare);
 

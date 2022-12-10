@@ -9,8 +9,8 @@ use chrono::Local;
 use log::{error, info, Level, LevelFilter};
 use std::collections::HashMap;
 use std::error::Error;
-use std::{fs, env};
 use std::path::Path;
+use std::{env, fs};
 use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
 
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut runner = test_runner::TestRunner::new();
 
     let tag_pattern_opt = if let Some(p) = args.iter().position(|a| a == "-t") {
-        Some(args[p+1].to_lowercase())
+        Some(args[p + 1].to_lowercase())
     } else {
         None
     };
@@ -94,10 +94,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Level::Error
     };
 
-    let my_logger = logger::SimpleLogger {
-        level: log_level,
-    };
-    
+    let my_logger = logger::SimpleLogger { level: log_level };
+
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
         error!("Error creating logger: {}", e);
         panic!("unable to create logger");

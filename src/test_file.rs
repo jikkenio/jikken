@@ -23,6 +23,20 @@ pub struct UnvalidatedRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedCompareRequest {
+    pub method: Option<HttpVerb>,
+    pub url: String,
+    pub params: Option<Vec<UnvalidatedHttpParameter>>,
+    pub add_params: Option<Vec<UnvalidatedHttpParameter>>,
+    pub ignore_params: Option<Vec<String>>,
+    pub headers: Option<Vec<UnvalidatedHttpHeader>>,
+    pub add_headers: Option<Vec<UnvalidatedHttpHeader>>,
+    pub ignore_headers: Option<Vec<String>>,
+    pub body: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedResponse {
     pub status: Option<u16>,
     pub headers: Option<Vec<UnvalidatedHttpHeader>>,
@@ -49,7 +63,7 @@ pub struct UnvalidatedTest {
     pub tags: Option<String>,
     pub iterate: Option<u32>,
     pub request: UnvalidatedRequest,
-    pub compare: Option<UnvalidatedRequest>,
+    pub compare: Option<UnvalidatedCompareRequest>,
     pub response: Option<UnvalidatedResponse>,
     pub variables: Option<Vec<UnvalidatedVariable>>,
 }
