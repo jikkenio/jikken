@@ -1,4 +1,4 @@
-use log::{Log, Level, Metadata, Record};
+use log::{Level, Log, Metadata, Record};
 
 pub struct SimpleLogger {
     pub level: Level,
@@ -23,7 +23,7 @@ impl Log for SimpleLogger {
             }
             Level::Trace => {
                 println!("{}", record.args());
-            },
+            }
             _ => {}
         }
     }

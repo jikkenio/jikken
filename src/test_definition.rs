@@ -1,12 +1,14 @@
 use crate::errors::ValidationError;
 use crate::test_file::{
-    UnvalidatedRequest, UnvalidatedResponse, UnvalidatedTest, UnvalidatedVariable,
+    UnvalidatedCompareRequest, UnvalidatedRequest, UnvalidatedResponse, UnvalidatedTest,
+    UnvalidatedVariable,
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
 use log::trace;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HttpVerb {
@@ -89,13 +91,109 @@ impl RequestDescriptor {
         })
     }
 
+    pub fn validate(&self) -> bool {
+        true
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompareDescriptor {
+    pub method: HttpVerb,
+    pub url: String,
+    pub params: Vec<HttpParameter>,
+    pub add_params: Vec<HttpParameter>,
+    pub ignore_params: Vec<String>,
+    pub headers: Vec<HttpHeader>,
+    pub add_headers: Vec<HttpHeader>,
+    pub ignore_headers: Vec<String>,
+    pub body: Option<serde_json::Value>,
+}
+
+impl CompareDescriptor {
     pub fn new_opt(
-        request: Option<UnvalidatedRequest>,
-    ) -> Result<Option<RequestDescriptor>, ValidationError> {
-        match request {
-            Some(req) => match RequestDescriptor::new(req) {
-                Ok(result) => Ok(Some(result)),
-                Err(e) => Err(e),
+        request_opt: Option<UnvalidatedCompareRequest>,
+    ) -> Result<Option<CompareDescriptor>, ValidationError> {
+        match request_opt {
+            Some(request) => {
+                let validated_params = match request.params {
+                    Some(params) => params
+                        .iter()
+                        .map(|p| HttpParameter {
+                            param: p.param.clone(),
+                            value: p.value.clone(),
+                            matches_variable: Cell::from(false),
+                        })
+                        .collect(),
+                    None => Vec::new(),
+                };
+
+                let mut validated_add_params = Vec::new();
+                let mut validated_ignore_params = Vec::new();
+
+                if validated_params.len() == 0 {
+                    validated_add_params = match request.add_params {
+                        Some(params) => params
+                            .iter()
+                            .map(|p| HttpParameter {
+                                param: p.param.clone(),
+                                value: p.value.clone(),
+                                matches_variable: Cell::from(false),
+                            })
+                            .collect(),
+                        None => Vec::new(),
+                    };
+
+                    validated_ignore_params = match request.ignore_params {
+                        Some(params) => params.iter().map(|p| p.clone()).collect(),
+                        None => Vec::new(),
+                    };
+                }
+
+                let validated_headers = match request.headers {
+                    Some(headers) => headers
+                        .iter()
+                        .map(|h| HttpHeader {
+                            header: h.header.clone(),
+                            value: h.value.clone(),
+                            matches_variable: Cell::from(false),
+                        })
+                        .collect(),
+                    None => Vec::new(),
+                };
+
+                let mut validated_add_headers = Vec::new();
+                let mut validated_ignore_headers = Vec::new();
+
+                if validated_headers.len() == 0 {
+                    validated_add_headers = match request.add_headers {
+                        Some(headers) => headers
+                            .iter()
+                            .map(|h| HttpHeader {
+                                header: h.header.clone(),
+                                value: h.value.clone(),
+                                matches_variable: Cell::from(false),
+                            })
+                            .collect(),
+                        None => Vec::new(),
+                    };
+
+                    validated_ignore_headers = match request.ignore_headers {
+                        Some(headers) => headers.iter().map(|h| h.clone()).collect(),
+                        None => Vec::new(),
+                    };
+                }
+
+                Ok(Some(CompareDescriptor {
+                    method: request.method.unwrap_or(HttpVerb::Get),
+                    url: request.url,
+                    params: validated_params,
+                    add_params: validated_add_params,
+                    ignore_params: validated_ignore_params,
+                    headers: validated_headers,
+                    add_headers: validated_add_headers,
+                    ignore_headers: validated_ignore_headers,
+                    body: request.body,
+                }))
             },
             None => Ok(None),
         }
@@ -117,9 +215,9 @@ pub struct ResponseDescriptor {
 // TODO: add validation logic to verify the descriptor is valid
 impl ResponseDescriptor {
     pub fn new_opt(
-        request: Option<UnvalidatedResponse>,
+        response: Option<UnvalidatedResponse>,
     ) -> Result<Option<ResponseDescriptor>, ValidationError> {
-        match request {
+        match response {
             Some(req) => {
                 let validated_headers = match req.headers {
                     Some(headers) => headers
@@ -395,7 +493,7 @@ pub struct TestDefinition {
     pub tags: Vec<String>,
     pub iterate: u32,
     pub request: RequestDescriptor,
-    pub compare: Option<RequestDescriptor>,
+    pub compare: Option<CompareDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<TestVariable>,
 }
@@ -405,7 +503,10 @@ pub struct TestDefinition {
 impl TestDefinition {
     pub fn new(test: UnvalidatedTest) -> Result<TestDefinition, ValidationError> {
         let new_tags = if let Some(tags) = test.tags {
-            tags.to_lowercase().split_whitespace().map(|s| s.to_string()).collect()
+            tags.to_lowercase()
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect()
         } else {
             Vec::new()
         };
@@ -415,7 +516,7 @@ impl TestDefinition {
             tags: new_tags,
             iterate: test.iterate.unwrap_or(1),
             request: RequestDescriptor::new(test.request)?,
-            compare: RequestDescriptor::new_opt(test.compare)?,
+            compare: CompareDescriptor::new_opt(test.compare)?,
             response: ResponseDescriptor::new_opt(test.response)?,
             variables: TestDefinition::validate_variables_opt(test.variables)?,
         };
@@ -476,10 +577,24 @@ impl TestDefinition {
                     }
                 }
 
+                for header in compare.add_headers.iter() {
+                    if header.value.contains(var_pattern.as_str()) {
+                        header.matches_variable.set(true);
+                        trace!("compare add_header setting match true: {}", header.header);
+                    }
+                }
+
                 for param in compare.params.iter() {
                     if param.value.contains(var_pattern.as_str()) {
                         param.matches_variable.set(true);
                         trace!("compare setting match true: {}", param.param);
+                    }
+                }
+
+                for param in compare.add_params.iter() {
+                    if param.value.contains(var_pattern.as_str()) {
+                        param.matches_variable.set(true);
+                        trace!("compare add_param setting match true: {}", param.param);
                     }
                 }
             }
@@ -515,24 +630,42 @@ impl TestDefinition {
     }
 
     pub fn get_compare_url(&self) -> String {
-        // TODO: make this safe with optionals
-        let joined: Vec<_> = self
-            .compare
-            .clone()
-            .unwrap()
-            .params
-            .iter()
-            .map(|param| {
-                if param.matches_variable.get() {
-                    let p = self.get_processed_param(param, false);
-                    format!("{}={}", p.0, p.1)
-                } else {
-                    format!("{}={}", param.param, param.value)
-                }
-            })
-            .collect();
+        match self.compare.as_ref() {
+            Some(compare) => {
+                let ignore_lookup: HashSet<String> = compare.ignore_params.iter().cloned().collect();
 
-        format!("{}?{}", self.compare.clone().unwrap().url, joined.join("&"))
+                let joined: Vec<String>;
+        
+                if compare.params.len() > 0 {
+                    joined = compare.params.iter()
+                        .map(|param| {
+                            if param.matches_variable.get() {
+                                let p = self.get_processed_param(param, false);
+                                format!("{}={}", p.0, p.1)
+                            } else {
+                                format!("{}={}", param.param, param.value)
+                            }
+                        })
+                        .collect();
+                } else {
+                    joined = self.request.params.iter()
+                        .filter(|p| !ignore_lookup.contains(&p.param))
+                        .chain(compare.add_params.iter())
+                        .map(|p| {
+                            if p.matches_variable.get() {
+                                let param = self.get_processed_param(p, false);
+                                format!("{}={}", param.0, param.1)
+                            } else {
+                                format!("{}={}", p.param, p.value)
+                            }
+                        })
+                        .collect();
+                }
+
+                format!("{}?{}", self.compare.clone().unwrap().url, joined.join("&"))
+            },
+            None => String::from(""),
+        }
     }
 
     fn get_processed_param(&self, parameter: &HttpParameter, update: bool) -> (String, String) {
