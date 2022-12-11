@@ -180,25 +180,11 @@ impl TestRunner {
     }
 
     fn validate_status_codes(actual: hyper::StatusCode, expected: hyper::StatusCode) -> bool {
-        let result = actual == expected;
-        // let label = if result { "PASS" } else { "FAIL" };
-        // if label == "FAIL" {
-        //     error!(
-        //         "Expected: {}, Actual: {}",
-        //         expected.as_u16(),
-        //         actual.as_u16()
-        //     );
-        // }
-        result
+        return actual == expected;
     }
 
     fn validate_status_code(actual: hyper::StatusCode, expected: u16) -> bool {
-        let result = actual.as_u16() == expected;
-        // let label = if result { "PASS" } else { "FAIL" };
-        // if label == "FAIL" {
-        //     error!("Expected: {}, Actual: {}", expected, actual.as_u16());
-        // }
-        result
+        return actual.as_u16() == expected;
     }
 
     // TODO: Add support for ignore when comparing two urls.
