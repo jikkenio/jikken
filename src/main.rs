@@ -6,13 +6,24 @@ mod test_file;
 mod test_runner;
 
 use chrono::Local;
-use log::{error, info, Level, LevelFilter};
+use clap::Parser;
+use log::{error, info, trace, Level, LevelFilter};
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::path::Path;
-use std::{env, fs};
 use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = String::from(""))]
+    tag: String,
+
+    #[arg(short, long, default_value_t = false)]
+    verbose: bool,
+}
 
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &DirEntry) -> bool {
@@ -76,19 +87,19 @@ fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
 
-    let tag_pattern_opt = if let Some(p) = args.iter().position(|a| a == "-t") {
-        Some(args[p + 1].to_lowercase())
+    let tag_pattern_opt = if args.tag.len() > 0 {
+        Some(args.tag.to_lowercase())
     } else {
         None
     };
 
-    let log_level = if args.contains(&String::from("-v")) {
+    let log_level = if args.verbose {
         Level::Trace
     } else {
         Level::Error
@@ -129,63 +140,66 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let total_count = match tag_pattern_opt {
-        Some(_) => 0,
-        None => files.len(),
-    };
-
-    for (i, file) in files.iter().enumerate() {
-        let file_opt = get_file_with_modifications(file, config.clone());
-        if let Some(f) = file_opt {
-            let file_opt: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
-                serde_yaml::from_str(&f);
-            match file_opt {
-                Ok(test_file) => {
-                    let td_opt = test_definition::TestDefinition::new(test_file);
-
-                    match td_opt {
-                        Ok(td) => {
-                            if !td.validate() {
-                                error!("Invalid Test Definition File: {}", file);
-                                continue;
-                            }
-
-                            if let Some(tag) = tag_pattern_opt.as_ref() {
-                                if !td.tags.contains(&tag) {
-                                    continue;
-                                }
-                            }
-
-                            let boxed_td: Box<TestDefinition> = Box::from(td);
-
-                            // td.process_variables();
-                            for iteration in 0..boxed_td.iterate {
-                                match runner
-                                    .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
-                                    .await
-                                {
-                                    Ok(passed) => {
-                                        if !continue_on_failure && !passed {
-                                            std::process::exit(1);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        error!("Test failed to run: {}", e)
-                                    }
-                                }
-                            }
-                        }
+    let tests_to_run: Vec<TestDefinition> = files.iter()
+        .map(|f| get_file_with_modifications(f, config.clone()))
+        .filter_map(|f| {
+            match f {
+                Some(file_data) => {
+                    let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> = serde_yaml::from_str(&file_data);
+                    match result {
+                        Ok(file) => Some(file),
                         Err(e) => {
-                            error!("Test Definition parsing error: {}", e);
-                        }
+                            trace!("unable to parse file data: {}", e);
+                            None
+                        },
+                    }        
+                },
+                None => None,
+            }
+        })
+        .filter_map(|f| {
+            let result = TestDefinition::new(f);
+            match result {
+                Ok(td) => {
+                    if !td.validate() {
+                        error!("test failed validation: {}", td.name.unwrap_or("unnamed test".to_string()));
+                        None
+                    } else {
+                        Some(td)
+                    }
+                },
+                Err(e) => {
+                    trace!("test definition creation failed: {}", e);
+                    None
+                },
+            }
+        }).collect();
+
+    let total_count = tests_to_run.len();
+
+    for (i, td) in tests_to_run.into_iter().enumerate() {
+        if let Some(tag) = tag_pattern_opt.as_ref() {
+            if !td.tags.contains(&tag) {
+                continue;
+            }
+        }
+
+        let boxed_td: Box<TestDefinition> = Box::from(td);
+
+        for iteration in 0..boxed_td.iterate {
+            match runner
+                .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
+                .await
+            {
+                Ok(passed) => {
+                    if !continue_on_failure && !passed {
+                        std::process::exit(1);
                     }
                 }
                 Err(e) => {
-                    error!("File parsing error: {}, ({})", e, file);
+                    error!("Test failed to run: {}", e)
                 }
             }
-        } else {
-            error!("file failed to load"); // TODO: Add meaningful output
         }
     }
 

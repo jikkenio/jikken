@@ -194,7 +194,7 @@ impl CompareDescriptor {
                     ignore_headers: validated_ignore_headers,
                     body: request.body,
                 }))
-            },
+            }
             None => Ok(None),
         }
     }
@@ -632,12 +632,15 @@ impl TestDefinition {
     pub fn get_compare_url(&self) -> String {
         match self.compare.as_ref() {
             Some(compare) => {
-                let ignore_lookup: HashSet<String> = compare.ignore_params.iter().cloned().collect();
+                let ignore_lookup: HashSet<String> =
+                    compare.ignore_params.iter().cloned().collect();
 
                 let joined: Vec<String>;
-        
+
                 if compare.params.len() > 0 {
-                    joined = compare.params.iter()
+                    joined = compare
+                        .params
+                        .iter()
                         .map(|param| {
                             if param.matches_variable.get() {
                                 let p = self.get_processed_param(param, false);
@@ -648,7 +651,10 @@ impl TestDefinition {
                         })
                         .collect();
                 } else {
-                    joined = self.request.params.iter()
+                    joined = self
+                        .request
+                        .params
+                        .iter()
                         .filter(|p| !ignore_lookup.contains(&p.param))
                         .chain(compare.add_params.iter())
                         .map(|p| {
@@ -663,7 +669,7 @@ impl TestDefinition {
                 }
 
                 format!("{}?{}", self.compare.clone().unwrap().url, joined.join("&"))
-            },
+            }
             None => String::from(""),
         }
     }
@@ -723,12 +729,15 @@ impl TestDefinition {
 
         match self.compare.as_ref() {
             Some(compare) => {
-                let ignore_lookup: HashSet<String> = compare.ignore_headers.iter().cloned().collect();
+                let ignore_lookup: HashSet<String> =
+                    compare.ignore_headers.iter().cloned().collect();
 
                 let results: Vec<(String, String)>;
-        
+
                 if compare.headers.len() > 0 {
-                    results = compare.headers.iter()
+                    results = compare
+                        .headers
+                        .iter()
                         .map(|h| {
                             if h.matches_variable.get() {
                                 let header = self.get_processed_header(h, false);
@@ -739,7 +748,10 @@ impl TestDefinition {
                         })
                         .collect();
                 } else {
-                    results = self.request.headers.iter()
+                    results = self
+                        .request
+                        .headers
+                        .iter()
                         .filter(|h| !ignore_lookup.contains(&h.header))
                         .chain(compare.add_headers.iter())
                         .map(|h| {
@@ -754,7 +766,7 @@ impl TestDefinition {
                 }
 
                 results
-            },
+            }
             None => Vec::new(),
         }
     }
