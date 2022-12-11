@@ -14,12 +14,16 @@ use std::fs;
 use std::path::Path;
 use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
+use std::collections::HashSet;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value_t = String::from(""))]
-    tag: String,
+    #[arg(short, long)]
+    tags: Vec<String>,
+
+    #[arg(long, default_value_t = false)]
+    tags_or: bool,
 
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
@@ -93,12 +97,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
 
-    let tag_pattern_opt = if args.tag.len() > 0 {
-        Some(args.tag.to_lowercase())
-    } else {
-        None
-    };
-
     let log_level = if args.verbose {
         Level::Trace
     } else {
@@ -165,6 +163,27 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         error!("test failed validation: {}", td.name.unwrap_or("unnamed test".to_string()));
                         None
                     } else {
+                        if args.tags.len() > 0 {
+                            let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
+                            if args.tags_or {
+                                for t in args.tags.iter() {
+                                    if td_tags.contains(t) {
+                                        return Some(td);
+                                    }
+                                }
+
+                                trace!("test `{}` doesn't match any tags: {}", td.name.unwrap_or("".to_string()), args.tags.join(", "));
+                                return None;
+                            } else {
+                                for t in args.tags.iter() {
+                                    if !td_tags.contains(t) {
+                                        trace!("test `{}` is missing tag: {}", td.name.unwrap_or("".to_string()), t);
+                                        return None;
+                                    }
+                                }
+                            }
+                        }
+
                         Some(td)
                     }
                 },
@@ -176,14 +195,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }).collect();
 
     let total_count = tests_to_run.len();
-
+    
     for (i, td) in tests_to_run.into_iter().enumerate() {
-        if let Some(tag) = tag_pattern_opt.as_ref() {
-            if !td.tags.contains(&tag) {
-                continue;
-            }
-        }
-
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         for iteration in 0..boxed_td.iterate {
