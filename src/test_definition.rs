@@ -689,6 +689,26 @@ impl TestDefinition {
         (String::from(""), String::from(""))
     }
 
+    fn get_processed_header(&self, header: &HttpHeader, update: bool) -> (String, String) {
+        for variable in self.variables.iter() {
+            let var_pattern = format!("${}$", variable.name);
+
+            if !header.value.contains(var_pattern.as_str()) {
+                continue;
+            }
+
+            let replacement = variable.generate_value(update);
+            return (
+                header.header.clone(),
+                header
+                    .value
+                    .replace(var_pattern.as_str(), replacement.as_str()),
+            );
+        }
+
+        (String::from(""), String::from(""))
+    }
+
     pub fn get_request_headers(&self) -> Vec<(String, String)> {
         // TODO: inject variable replacement
         self.request
@@ -700,13 +720,43 @@ impl TestDefinition {
 
     pub fn get_compare_headers(&self) -> Vec<(String, String)> {
         // TODO: inject variable replacement
-        self.compare
-            .clone()
-            .unwrap()
-            .headers
-            .iter()
-            .map(|kvp| (kvp.header.clone(), kvp.value.clone()))
-            .collect()
+
+        match self.compare.as_ref() {
+            Some(compare) => {
+                let ignore_lookup: HashSet<String> = compare.ignore_headers.iter().cloned().collect();
+
+                let results: Vec<(String, String)>;
+        
+                if compare.headers.len() > 0 {
+                    results = compare.headers.iter()
+                        .map(|h| {
+                            if h.matches_variable.get() {
+                                let header = self.get_processed_header(h, false);
+                                (header.0, header.1)
+                            } else {
+                                (h.header.clone(), h.value.clone())
+                            }
+                        })
+                        .collect();
+                } else {
+                    results = self.request.headers.iter()
+                        .filter(|h| !ignore_lookup.contains(&h.header))
+                        .chain(compare.add_headers.iter())
+                        .map(|h| {
+                            if h.matches_variable.get() {
+                                let header = self.get_processed_header(h, false);
+                                (header.0, header.1)
+                            } else {
+                                (h.header.clone(), h.value.clone())
+                            }
+                        })
+                        .collect();
+                }
+
+                results
+            },
+            None => Vec::new(),
+        }
     }
 
     pub fn validate(&self) -> bool {
