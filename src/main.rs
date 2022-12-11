@@ -19,7 +19,7 @@ use std::collections::HashSet;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short, long = "tag", name = "tag")]
     tags: Vec<String>,
 
     #[arg(long, default_value_t = false)]
