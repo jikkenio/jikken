@@ -1,4 +1,5 @@
 use crate::test_definition::TestDefinition;
+use crate::errors::TestFailure;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, trace};
@@ -27,7 +28,7 @@ impl TestRunner {
         count: usize,
         total: usize,
         iteration: u32,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    ) -> bool {
         print!(
             "Running Test ({}\\{}) `{}` Iteration({}\\{})...",
             count,
@@ -39,21 +40,24 @@ impl TestRunner {
         io::stdout().flush().unwrap();
 
         self.run += 1;
-        let result: bool = if td.compare.is_some() {
-            TestRunner::validate_td_comparison_mode(td).await?
+        let result = if td.compare.is_some() {
+            TestRunner::validate_td_comparison_mode(td).await
         } else {
-            TestRunner::validate_td(td).await?
+            TestRunner::validate_td(td).await
         };
-
-        if result {
-            println!("\x1b[32mPASSED!\x1b[0m");
-            self.passed += 1;
-        } else {
-            println!("\x1b[31mFAILED!\x1b[0m");
-            self.failed += 1;
+        
+        match result {
+            Ok(_) => {
+                println!("\x1b[32mPASSED!\x1b[0m");
+                self.passed += 1;
+                return true;
+            },
+            Err(e) => {
+                println!("\x1b[31mFAILED!\x1b[0m");
+                println!("{}", e);
+                return false;
+            }
         }
-
-        Ok(result)
     }
 
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
@@ -71,38 +75,29 @@ impl TestRunner {
         let req = req_builder.body(Body::empty()).unwrap();
         let resp = client.request(req).await?;
 
-        let mut pass = true;
-
         if let Some(r) = &td.response {
             let (parts, body) = resp.into_parts();
 
             if let Some(b) = &r.body {
-                // let v: Value = serde_json::from_str(&String::from_utf8(b).unwrap())?;
                 let bytes = body::to_bytes(body).await?;
                 match serde_json::from_slice(bytes.as_ref()) {
                     Ok(l) => {
                         let rv: Value = l;
-                        // println!("Response: {}", rv.to_string());
-                        let body_test = TestRunner::validate_body(rv, b.clone(), Vec::new());
-                        pass &= body_test;
+                        TestRunner::validate_body(rv, b.clone(), Vec::new())?;
                     }
                     Err(e) => {
                         error!("{}", e);
-                        // TODO: add body comparison messaging
-                        pass = false;
+                        return Err(Box::from(TestFailure{reason: "response is not valid JSON".to_string()}));
                     }
                 }
-                // println!("Body: {}", v.to_string());
             }
 
-            let status_test = match r.status {
-                Some(code) => TestRunner::validate_status_code(parts.status, code),
-                None => true, // none defined, skip this step
-            };
-            pass &= status_test;
+            if let Some(code) = r.status {
+                TestRunner::validate_status_code(parts.status, code)?;
+            }
         }
 
-        Ok(pass)
+        Ok(true)
     }
 
     // TODO: Possibly refactor/combine logic to avoid so much duplication
@@ -138,20 +133,13 @@ impl TestRunner {
         let resp = client.request(req).await?;
         let resp_compare = client.request(req_comparison).await?;
 
-        let mut pass = true;
-        let mut status_test =
-            TestRunner::validate_status_codes(resp.status(), resp_compare.status());
+        TestRunner::validate_status_codes(resp.status(), resp_compare.status())?;
 
         if let Some(td_response) = &td.response {
             if let Some(td_response_status) = td_response.status {
-                status_test = status_test
-                    && TestRunner::validate_status_code(resp.status(), td_response_status);
+                TestRunner::validate_status_code(resp.status(), td_response_status)?;
             }
         }
-
-        trace!("req({:?}) compare({:?})", resp, resp_compare);
-
-        pass &= status_test;
 
         let data = body::to_bytes(resp.into_body()).await?;
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
@@ -159,45 +147,61 @@ impl TestRunner {
         match serde_json::from_slice(data.as_ref()) {
             Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
                 Ok(data_compare_json) => {
-                    pass &= TestRunner::validate_body(data_json, data_compare_json, Vec::new());
+                    TestRunner::validate_body(data_json, data_compare_json, Vec::new())?;
                 }
-                _ => {
-                    trace!(
-                        "json data failed validation: ({:?}), ({:?})",
-                        data,
-                        data_compare
-                    );
-                    pass = false
+                Err(e) => {
+                    error!("{}", e);
+                    return Err(Box::from(TestFailure{reason: "comparison response is not valid JSON".to_string()}));
                 }
             },
-            _ => {
-                trace!("no json data req({:?}) compare({:?})", data, data_compare);
-                pass &= data == data_compare;
+            Err(e) => {
+                error!("{}", e);
+                return Err(Box::from(TestFailure{reason: "response is not valid JSON".to_string()}));
             }
         };
 
-        Ok(pass)
+        Ok(true)
     }
 
-    fn validate_status_codes(actual: hyper::StatusCode, expected: hyper::StatusCode) -> bool {
-        return actual == expected;
+    fn validate_status_codes(actual: hyper::StatusCode, expected: hyper::StatusCode) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        let equality = actual == expected;
+        if !equality {
+            return Err(Box::from(TestFailure{reason: format!("http status codes don't match: actual({}) expected({})",  actual, expected)}));
+        }
+
+        Ok(true)
     }
 
-    fn validate_status_code(actual: hyper::StatusCode, expected: u16) -> bool {
-        return actual.as_u16() == expected;
+    fn validate_status_code(actual: hyper::StatusCode, expected: u16) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        let equality = actual.as_u16() == expected;
+        if !equality {
+            return Err(Box::from(TestFailure{reason: format!("http status codes don't match: actual({}) expected({})",  actual, expected)}));
+        }
+        
+        Ok(true)
     }
 
     // TODO: Add support for ignore when comparing two urls.
     // TODO: Add support for nested ignore hierarchies.
-    fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> bool {
+    fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if ignore.is_empty() {
             let r = actual == expected;
 
             if !r {
-                trace!("data doesn't match: req({}) compare({})", actual, expected)
+                trace!("data doesn't match: req({}) compare({})", actual, expected);
+
+                let result = assert_json_diff::assert_json_matches_no_panic(&actual, &expected, assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict));
+                match result {
+                    Ok(_) => {
+                        return Err(Box::from(TestFailure{reason: "response body doesn't match".to_string()}));
+                    },
+                    Err(msg) => {
+                        return Err(Box::from(TestFailure{reason: format!("response body doesn't match\n{}", msg)}));
+                    }
+                }
             }
 
-            return r;
+            return Ok(r);
         }
 
         let mut map: Map<String, Value> =
@@ -218,9 +222,19 @@ impl TestRunner {
                 "data doesn't match: req({}) compare({})",
                 adjusted_actual,
                 expected
-            )
+            );
+
+            let result = assert_json_diff::assert_json_matches_no_panic(&adjusted_actual, &expected, assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict));
+                match result {
+                    Ok(_) => {
+                        return Err(Box::from(TestFailure{reason: "response body doesn't match".to_string()}));
+                    },
+                    Err(msg) => {
+                        return Err(Box::from(TestFailure{reason: format!("response body doesn't match\n{}", msg)}));
+                    }
+            }
         }
 
-        return result;
+        Ok(result)
     }
 }
