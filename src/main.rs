@@ -200,18 +200,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         for iteration in 0..boxed_td.iterate {
-            match runner
+            let passed = runner
                 .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
-                .await
-            {
-                Ok(passed) => {
-                    if !continue_on_failure && !passed {
-                        std::process::exit(1);
-                    }
-                }
-                Err(e) => {
-                    error!("Test failed to run: {}", e)
-                }
+                .await;
+            
+            if !continue_on_failure && !passed {
+                std::process::exit(1);
             }
         }
     }
