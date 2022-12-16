@@ -1,5 +1,5 @@
-use crate::test_definition::TestDefinition;
 use crate::errors::TestFailure;
+use crate::test_definition::TestDefinition;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, trace};
@@ -45,13 +45,13 @@ impl TestRunner {
         } else {
             TestRunner::validate_td(td).await
         };
-        
+
         match result {
             Ok(_) => {
                 println!("\x1b[32mPASSED!\x1b[0m");
                 self.passed += 1;
                 return true;
-            },
+            }
             Err(e) => {
                 println!("\x1b[31mFAILED!\x1b[0m");
                 println!("{}", e);
@@ -87,7 +87,9 @@ impl TestRunner {
                     }
                     Err(e) => {
                         error!("{}", e);
-                        return Err(Box::from(TestFailure{reason: "response is not valid JSON".to_string()}));
+                        return Err(Box::from(TestFailure {
+                            reason: "response is not valid JSON".to_string(),
+                        }));
                     }
                 }
             }
@@ -151,52 +153,84 @@ impl TestRunner {
                 }
                 Err(e) => {
                     error!("{}", e);
-                    return Err(Box::from(TestFailure{reason: "comparison response is not valid JSON".to_string()}));
+                    return Err(Box::from(TestFailure {
+                        reason: "comparison response is not valid JSON".to_string(),
+                    }));
                 }
             },
             Err(e) => {
                 error!("{}", e);
-                return Err(Box::from(TestFailure{reason: "response is not valid JSON".to_string()}));
+                return Err(Box::from(TestFailure {
+                    reason: "response is not valid JSON".to_string(),
+                }));
             }
         };
 
         Ok(true)
     }
 
-    fn validate_status_codes(actual: hyper::StatusCode, expected: hyper::StatusCode) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn validate_status_codes(
+        actual: hyper::StatusCode,
+        expected: hyper::StatusCode,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let equality = actual == expected;
         if !equality {
-            return Err(Box::from(TestFailure{reason: format!("http status codes don't match: actual({}) expected({})",  actual, expected)}));
+            return Err(Box::from(TestFailure {
+                reason: format!(
+                    "http status codes don't match: actual({}) expected({})",
+                    actual, expected
+                ),
+            }));
         }
 
         Ok(true)
     }
 
-    fn validate_status_code(actual: hyper::StatusCode, expected: u16) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn validate_status_code(
+        actual: hyper::StatusCode,
+        expected: u16,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let equality = actual.as_u16() == expected;
         if !equality {
-            return Err(Box::from(TestFailure{reason: format!("http status codes don't match: actual({}) expected({})",  actual, expected)}));
+            return Err(Box::from(TestFailure {
+                reason: format!(
+                    "http status codes don't match: actual({}) expected({})",
+                    actual, expected
+                ),
+            }));
         }
-        
+
         Ok(true)
     }
 
     // TODO: Add support for ignore when comparing two urls.
     // TODO: Add support for nested ignore hierarchies.
-    fn validate_body(actual: Value, expected: Value, ignore: Vec<String>) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn validate_body(
+        actual: Value,
+        expected: Value,
+        ignore: Vec<String>,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if ignore.is_empty() {
             let r = actual == expected;
 
             if !r {
                 trace!("data doesn't match: req({}) compare({})", actual, expected);
 
-                let result = assert_json_diff::assert_json_matches_no_panic(&actual, &expected, assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict));
+                let result = assert_json_diff::assert_json_matches_no_panic(
+                    &actual,
+                    &expected,
+                    assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
+                );
                 match result {
                     Ok(_) => {
-                        return Err(Box::from(TestFailure{reason: "response body doesn't match".to_string()}));
-                    },
+                        return Err(Box::from(TestFailure {
+                            reason: "response body doesn't match".to_string(),
+                        }));
+                    }
                     Err(msg) => {
-                        return Err(Box::from(TestFailure{reason: format!("response body doesn't match\n{}", msg)}));
+                        return Err(Box::from(TestFailure {
+                            reason: format!("response body doesn't match\n{}", msg),
+                        }));
                     }
                 }
             }
@@ -224,14 +258,22 @@ impl TestRunner {
                 expected
             );
 
-            let result = assert_json_diff::assert_json_matches_no_panic(&adjusted_actual, &expected, assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict));
-                match result {
-                    Ok(_) => {
-                        return Err(Box::from(TestFailure{reason: "response body doesn't match".to_string()}));
-                    },
-                    Err(msg) => {
-                        return Err(Box::from(TestFailure{reason: format!("response body doesn't match\n{}", msg)}));
-                    }
+            let result = assert_json_diff::assert_json_matches_no_panic(
+                &adjusted_actual,
+                &expected,
+                assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
+            );
+            match result {
+                Ok(_) => {
+                    return Err(Box::from(TestFailure {
+                        reason: "response body doesn't match".to_string(),
+                    }));
+                }
+                Err(msg) => {
+                    return Err(Box::from(TestFailure {
+                        reason: format!("response body doesn't match\n{}", msg),
+                    }));
+                }
             }
         }
 

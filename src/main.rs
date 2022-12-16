@@ -9,12 +9,12 @@ use chrono::Local;
 use clap::Parser;
 use log::{error, info, trace, Level, LevelFilter};
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
 use test_definition::TestDefinition;
 use walkdir::{DirEntry, WalkDir};
-use std::collections::HashSet;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -138,29 +138,32 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let tests_to_run: Vec<TestDefinition> = files.iter()
+    let tests_to_run: Vec<TestDefinition> = files
+        .iter()
         .map(|f| get_file_with_modifications(f, config.clone()))
-        .filter_map(|f| {
-            match f {
-                Some(file_data) => {
-                    let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> = serde_yaml::from_str(&file_data);
-                    match result {
-                        Ok(file) => Some(file),
-                        Err(e) => {
-                            trace!("unable to parse file data: {}", e);
-                            None
-                        },
-                    }        
-                },
-                None => None,
+        .filter_map(|f| match f {
+            Some(file_data) => {
+                let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
+                    serde_yaml::from_str(&file_data);
+                match result {
+                    Ok(file) => Some(file),
+                    Err(e) => {
+                        trace!("unable to parse file data: {}", e);
+                        None
+                    }
+                }
             }
+            None => None,
         })
         .filter_map(|f| {
             let result = TestDefinition::new(f);
             match result {
                 Ok(td) => {
                     if !td.validate() {
-                        error!("test failed validation: {}", td.name.unwrap_or("unnamed test".to_string()));
+                        error!(
+                            "test failed validation: {}",
+                            td.name.unwrap_or("unnamed test".to_string())
+                        );
                         None
                     } else {
                         if args.tags.len() > 0 {
@@ -172,12 +175,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                     }
                                 }
 
-                                trace!("test `{}` doesn't match any tags: {}", td.name.unwrap_or("".to_string()), args.tags.join(", "));
+                                trace!(
+                                    "test `{}` doesn't match any tags: {}",
+                                    td.name.unwrap_or("".to_string()),
+                                    args.tags.join(", ")
+                                );
                                 return None;
                             } else {
                                 for t in args.tags.iter() {
                                     if !td_tags.contains(t) {
-                                        trace!("test `{}` is missing tag: {}", td.name.unwrap_or("".to_string()), t);
+                                        trace!(
+                                            "test `{}` is missing tag: {}",
+                                            td.name.unwrap_or("".to_string()),
+                                            t
+                                        );
                                         return None;
                                     }
                                 }
@@ -186,16 +197,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                         Some(td)
                     }
-                },
+                }
                 Err(e) => {
                     trace!("test definition creation failed: {}", e);
                     None
-                },
+                }
             }
-        }).collect();
+        })
+        .collect();
 
     let total_count = tests_to_run.len();
-    
+
     for (i, td) in tests_to_run.into_iter().enumerate() {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
@@ -203,7 +215,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             let passed = runner
                 .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
                 .await;
-            
+
             if !continue_on_failure && !passed {
                 std::process::exit(1);
             }
