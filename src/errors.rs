@@ -13,7 +13,7 @@ impl fmt::Display for ValidationError {
 
 #[derive(Debug, Clone)]
 pub struct TestFailure {
-    pub reason: String
+    pub reason: String,
 }
 
 impl std::error::Error for TestFailure {}
