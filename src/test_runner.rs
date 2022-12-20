@@ -1,9 +1,10 @@
 use crate::errors::TestFailure;
 use crate::test_definition::TestDefinition;
+use crate::json_filter::filter_json;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, trace};
-use serde_json::{json, Map, Value};
+use serde_json::Value;
 use std::error::Error;
 use std::io::{self, Write};
 
@@ -55,6 +56,7 @@ impl TestRunner {
             Err(e) => {
                 println!("\x1b[31mFAILED!\x1b[0m");
                 println!("{}", e);
+                self.failed += 1;
                 return false;
             }
         }
@@ -210,57 +212,24 @@ impl TestRunner {
         expected: Value,
         ignore: Vec<String>,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        if ignore.is_empty() {
-            let r = actual == expected;
 
-            if !r {
-                trace!("data doesn't match: req({}) compare({})", actual, expected);
+        let mut modified_actual = actual.clone();
+        let mut modified_expected = expected.clone();
 
-                let result = assert_json_diff::assert_json_matches_no_panic(
-                    &actual,
-                    &expected,
-                    assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
-                );
-                match result {
-                    Ok(_) => {
-                        return Err(Box::from(TestFailure {
-                            reason: "response body doesn't match".to_string(),
-                        }));
-                    }
-                    Err(msg) => {
-                        return Err(Box::from(TestFailure {
-                            reason: format!("response body doesn't match\n{}", msg),
-                        }));
-                    }
-                }
-            }
-
-            return Ok(r);
+        // TODO: make this more efficient, with a single pass filter
+        for path in ignore.iter() {
+            modified_actual = filter_json(path, 0, modified_actual)?;
+            modified_expected = filter_json(path, 0, modified_expected)?;
         }
 
-        let mut map: Map<String, Value> =
-            serde_json::from_value(actual).expect("failed to read file");
+        let r = actual == expected;
 
-        for v in ignore {
-            if !v.contains('.') {
-                map.remove(&v);
-            }
-        }
-
-        let adjusted_actual = json!(map);
-
-        let result = adjusted_actual == expected;
-
-        if !result {
-            trace!(
-                "data doesn't match: req({}) compare({})",
-                adjusted_actual,
-                expected
-            );
+        if !r {
+            trace!("data doesn't match: req({}) compare({})", actual, expected);
 
             let result = assert_json_diff::assert_json_matches_no_panic(
-                &adjusted_actual,
-                &expected,
+                &modified_actual,
+                &modified_expected,
                 assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
             );
             match result {
@@ -277,6 +246,6 @@ impl TestRunner {
             }
         }
 
-        Ok(result)
+        Ok(r)
     }
 }
