@@ -490,6 +490,7 @@ impl TestVariable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDefinition {
     pub name: Option<String>,
+    pub id: String,
     pub tags: Vec<String>,
     pub iterate: u32,
     pub request: RequestDescriptor,
@@ -513,6 +514,7 @@ impl TestDefinition {
 
         let td = TestDefinition {
             name: test.name,
+            id: test.id.unwrap_or("".to_string()),
             tags: new_tags,
             iterate: test.iterate.unwrap_or(1),
             request: RequestDescriptor::new(test.request)?,
