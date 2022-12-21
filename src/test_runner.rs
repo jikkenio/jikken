@@ -77,6 +77,13 @@ impl TestRunner {
         let req = req_builder.body(Body::empty()).unwrap();
         let resp = client.request(req).await?;
 
+        let ignored_json_fields = match &td.response {
+            Some(r) => {
+                r.ignore.to_owned()
+            },
+            None => Vec::new()
+        };
+
         if let Some(r) = &td.response {
             let (parts, body) = resp.into_parts();
 
@@ -85,7 +92,7 @@ impl TestRunner {
                 match serde_json::from_slice(bytes.as_ref()) {
                     Ok(l) => {
                         let rv: Value = l;
-                        TestRunner::validate_body(rv, b.clone(), Vec::new())?;
+                        TestRunner::validate_body(rv, b.clone(), ignored_json_fields)?;
                     }
                     Err(e) => {
                         error!("{}", e);
@@ -147,11 +154,17 @@ impl TestRunner {
 
         let data = body::to_bytes(resp.into_body()).await?;
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
+        let ignored_json_fields = match &td.response {
+            Some(r) => {
+                r.ignore.to_owned()
+            },
+            None => Vec::new()
+        };
 
         match serde_json::from_slice(data.as_ref()) {
             Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
                 Ok(data_compare_json) => {
-                    TestRunner::validate_body(data_json, data_compare_json, Vec::new())?;
+                    TestRunner::validate_body(data_json, data_compare_json, ignored_json_fields)?;
                 }
                 Err(e) => {
                     error!("{}", e);
