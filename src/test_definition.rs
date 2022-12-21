@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum HttpVerb {
     Get,
     Post,
@@ -252,7 +252,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum VariableTypes {
     Int,
     String,
@@ -266,7 +266,7 @@ pub struct Range {
     pub max: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Modifier {
     pub operation: String,
     pub value: String,
@@ -491,6 +491,7 @@ impl TestVariable {
 pub struct TestDefinition {
     pub name: Option<String>,
     pub id: String,
+    pub requires: Option<String>,
     pub tags: Vec<String>,
     pub iterate: u32,
     pub request: RequestDescriptor,
@@ -503,7 +504,7 @@ pub struct TestDefinition {
 // TODO: Validation should be type driven for compile time correctness
 impl TestDefinition {
     pub fn new(test: UnvalidatedTest) -> Result<TestDefinition, ValidationError> {
-        let new_tags = if let Some(tags) = test.tags {
+        let new_tags = if let Some(tags) = test.tags.as_ref() {
             tags.to_lowercase()
                 .split_whitespace()
                 .map(|s| s.to_string())
@@ -512,9 +513,12 @@ impl TestDefinition {
             Vec::new()
         };
 
+        let generated_id = test.generate_id();
+
         let td = TestDefinition {
             name: test.name,
-            id: test.id.unwrap_or("".to_string()),
+            id: test.id.unwrap_or(generated_id).to_lowercase(),
+            requires: test.requires,
             tags: new_tags,
             iterate: test.iterate.unwrap_or(1),
             request: RequestDescriptor::new(test.request)?,

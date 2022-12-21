@@ -139,7 +139,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let tests_to_run: Vec<TestDefinition> = files
+    let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
+    let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
         .map(|f| get_file_with_modifications(f, config.clone()))
         .filter_map(|f| match f {
@@ -176,15 +177,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                     }
                                 }
 
+                                tests_to_ignore.push(td.clone());
+
                                 trace!(
                                     "test `{}` doesn't match any tags: {}",
                                     td.name.unwrap_or("".to_string()),
                                     args.tags.join(", ")
                                 );
+
                                 return None;
                             } else {
                                 for t in args.tags.iter() {
                                     if !td_tags.contains(t) {
+                                        tests_to_ignore.push(td.clone());
+
                                         trace!(
                                             "test `{}` is missing tag: {}",
                                             td.name.unwrap_or("".to_string()),
@@ -207,9 +213,40 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         })
         .collect();
 
-    let total_count = tests_to_run.len();
+    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run.clone()
+        .into_iter()
+        .chain(tests_to_ignore.into_iter())
+        .map(|td| (td.id.clone(), td))
+        .collect();
 
-    for (i, td) in tests_to_run.into_iter().enumerate() {
+    tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+
+    let mut duplicate_filter: HashSet<String> = HashSet::new();
+    
+    let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+    
+    for td in tests_to_run.into_iter() {
+        match &td.requires {
+            Some(req) => {
+                if tests_by_id.contains_key(req) {
+                    if !duplicate_filter.contains(req) {
+                        duplicate_filter.insert(req.clone());
+                        tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().to_owned());
+                    }
+                }
+            },
+            _ => {}
+        }
+
+        if !duplicate_filter.contains(&td.id) {
+            duplicate_filter.insert(td.id.clone());
+            tests_to_run_with_dependencies.push(td);
+        }
+    }
+
+    let total_count = tests_to_run_with_dependencies.len();
+
+    for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         for iteration in 0..boxed_td.iterate {
