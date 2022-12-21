@@ -60,6 +60,7 @@ pub struct UnvalidatedVariable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedTest {
     pub name: Option<String>,
+    pub id: Option<String>,
     pub tags: Option<String>,
     pub iterate: Option<u32>,
     pub request: UnvalidatedRequest,
