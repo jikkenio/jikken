@@ -235,10 +235,10 @@ impl TestRunner {
             modified_expected = filter_json(path, 0, modified_expected)?;
         }
 
-        let r = actual == expected;
+        let r = modified_actual == modified_expected;
 
         if !r {
-            trace!("data doesn't match: req({}) compare({})", actual, expected);
+            trace!("data doesn't match: req({}) compare({})", modified_actual, modified_expected);
 
             let result = assert_json_diff::assert_json_matches_no_panic(
                 &modified_actual,
