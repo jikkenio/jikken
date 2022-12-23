@@ -5,6 +5,7 @@ mod test_definition;
 mod test_file;
 mod test_runner;
 mod json_filter;
+mod json_extractor;
 
 use chrono::Local;
 use clap::Parser;

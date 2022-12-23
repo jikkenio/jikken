@@ -1,4 +1,4 @@
-use crate::test_definition::{HttpVerb, Modifier, VariableTypes};
+use crate::test_definition::{HttpVerb, Modifier, VariableTypes, ResponseExtraction};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -66,6 +66,7 @@ pub struct UnvalidatedResponse {
     pub headers: Option<Vec<UnvalidatedHttpHeader>>,
     pub body: Option<serde_json::Value>,
     pub ignore: Option<Vec<String>>,
+    pub extract: Option<Vec<ResponseExtraction>>,
 }
 
 impl Hash for UnvalidatedResponse {

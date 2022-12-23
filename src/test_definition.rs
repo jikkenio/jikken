@@ -204,12 +204,19 @@ impl CompareDescriptor {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct ResponseExtraction {
+    pub name: String,
+    pub field: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
     pub status: Option<u16>,
     pub headers: Vec<HttpHeader>,
     pub body: Option<serde_json::Value>,
     pub ignore: Vec<String>,
+    pub extract: Vec<ResponseExtraction>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -236,11 +243,17 @@ impl ResponseDescriptor {
                     None => Vec::new(),
                 };
 
+                let validated_extraction = match req.extract {
+                    Some(extract) => extract,
+                    None => Vec::new(),
+                };
+
                 Ok(Some(ResponseDescriptor {
                     status: req.status,
                     headers: validated_headers,
                     body: req.body,
                     ignore: validated_ignore,
+                    extract: validated_extraction,
                 }))
             }
             None => Ok(None),
