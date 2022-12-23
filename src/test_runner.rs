@@ -2,16 +2,21 @@ use crate::errors::TestFailure;
 use crate::test_definition::TestDefinition;
 use crate::json_filter::filter_json;
 use hyper::{body, Body, Client, Request};
+use hyper::header::HeaderValue;
 use hyper_tls::HttpsConnector;
 use log::{error, trace};
 use serde_json::Value;
 use std::error::Error;
 use std::io::{self, Write};
+use std::collections::HashMap;
+use crate::json_extractor::extract_json;
 
 pub struct TestRunner {
     run: u16,
     passed: u16,
     failed: u16,
+
+    global_variables: HashMap<String, String>,
 }
 
 impl TestRunner {
@@ -20,6 +25,8 @@ impl TestRunner {
             run: 0,
             passed: 0,
             failed: 0,
+
+            global_variables: HashMap::new(),
         }
     }
 
@@ -42,10 +49,16 @@ impl TestRunner {
 
         self.run += 1;
         let result = if td.compare.is_some() {
-            TestRunner::validate_td_comparison_mode(td).await
+            self.validate_td_comparison_mode(td).await
         } else {
-            TestRunner::validate_td(td).await
+            self.validate_td(td).await
         };
+
+        // if self.global_variables.len() > 0 {
+        //     for v in self.global_variables.iter() {
+        //         println!("variable ({}) value({})", v.0, v.1);
+        //     }
+        // }
 
         match result {
             Ok(_) => {
@@ -63,7 +76,7 @@ impl TestRunner {
     }
 
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
-    async fn validate_td(td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td(&mut self, td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
@@ -71,10 +84,25 @@ impl TestRunner {
         req_builder = req_builder.method(&td.request.method.as_method());
 
         for header in td.get_request_headers() {
-            req_builder = req_builder.header(header.0, header.1);
+            let mut header_value: String = header.1;
+            
+            for gv in self.global_variables.iter() {
+                let key_search = format!("${}$", gv.0);
+                header_value = header_value.replace(&key_search, gv.1);
+            }
+
+            req_builder = req_builder.header(header.0, header_value);
         }
 
-        let req = req_builder.body(Body::empty()).unwrap();
+        let req_body = match &td.request.body {
+            Some(b) => {
+                req_builder = req_builder.header("Content-Type", HeaderValue::from_static("application/json"));
+                Body::from(b.to_string())
+            },
+            None => Body::empty(),
+        };
+
+        let req = req_builder.body(req_body).unwrap();
         let resp = client.request(req).await?;
 
         let ignored_json_fields = match &td.response {
@@ -87,21 +115,38 @@ impl TestRunner {
         if let Some(r) = &td.response {
             let (parts, body) = resp.into_parts();
 
-            if let Some(b) = &r.body {
-                let bytes = body::to_bytes(body).await?;
-                match serde_json::from_slice(bytes.as_ref()) {
-                    Ok(l) => {
-                        let rv: Value = l;
+            let bytes = body::to_bytes(body).await?;
+            match serde_json::from_slice(bytes.as_ref()) {
+                Ok(l) => {
+                    let rv: Value = l;
+                    for v in &r.extract {
+                        match extract_json(&v.field, 0, rv.clone()) {
+                            Ok(result) => {
+                                let converted_result = match result {
+                                    serde_json::Value::Bool(b) => b.to_string(),
+                                    serde_json::Value::Number(n) => n.to_string(),
+                                    serde_json::Value::String(s) => s.to_string(),
+                                    _ => "".to_string(),
+                                };
+                                self.global_variables.insert(v.name.clone(), converted_result);
+                            },
+                            _ => {}
+                        }
+                    }
+
+                    if let Some(b) = &r.body {
                         TestRunner::validate_body(rv, b.clone(), ignored_json_fields)?;
-                    }
-                    Err(e) => {
-                        error!("{}", e);
-                        return Err(Box::from(TestFailure {
-                            reason: "response is not valid JSON".to_string(),
-                        }));
-                    }
+                    }                    
+                }
+                Err(e) => {
+                    error!("{}", e);
+                    return Err(Box::from(TestFailure {
+                        reason: "response is not valid JSON".to_string(),
+                    }));
                 }
             }
+
+            
 
             if let Some(code) = r.status {
                 TestRunner::validate_status_code(parts.status, code)?;
@@ -112,9 +157,7 @@ impl TestRunner {
     }
 
     // TODO: Possibly refactor/combine logic to avoid so much duplication
-    async fn validate_td_comparison_mode(
-        td: &TestDefinition,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td_comparison_mode(&mut self, td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri_compare = td.get_compare_url();
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
@@ -126,7 +169,14 @@ impl TestRunner {
         req_builder = req_builder.method(&td.request.method.as_method());
 
         for header in td.get_request_headers() {
-            req_builder = req_builder.header(&header.0, &header.1);
+            let mut header_value: String = header.1;
+            
+            for gv in self.global_variables.iter() {
+                let key_search = format!("${}$", gv.0);
+                header_value = header_value.replace(&key_search, gv.1);
+            }
+
+            req_builder = req_builder.header(&header.0, header_value);
         }
 
         let mut req_comparison_builder = Request::builder().uri(uri_compare);
@@ -134,7 +184,14 @@ impl TestRunner {
             req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
 
         for header in td.get_compare_headers() {
-            req_comparison_builder = req_comparison_builder.header(&header.0, &header.1);
+            let mut header_value: String = header.1;
+            
+            for gv in self.global_variables.iter() {
+                let key_search = format!("${}$", gv.0);
+                header_value = header_value.replace(&key_search, gv.1);
+            }
+
+            req_comparison_builder = req_comparison_builder.header(&header.0, header_value);
         }
 
         // TODO: support bodies for comparison request
