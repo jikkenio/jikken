@@ -1,13 +1,19 @@
 use serde_json::{json, Map, Value};
 use std::error::Error;
 
-pub fn filter_json(path: &str, depth: usize, json: serde_json::Value) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
+pub fn filter_json(
+    path: &str,
+    depth: usize,
+    json: serde_json::Value,
+) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
     let path_segments: Vec<&str> = path.split(".").collect();
 
     // println!("path ({}), depth({}), json({})", path, depth, json);
 
-    if depth + 1 > path_segments.len() { return Ok(json) }
-    
+    if depth + 1 > path_segments.len() {
+        return Ok(json);
+    }
+
     if path_segments.len() == depth + 1 {
         let segment = path_segments[depth];
 
@@ -15,28 +21,28 @@ pub fn filter_json(path: &str, depth: usize, json: serde_json::Value) -> Result<
         match json {
             serde_json::Value::Object(_) => {
                 let mut map: Map<String, Value> = serde_json::from_value(json)?;
-                
+
                 if map.contains_key(segment) {
                     map.remove(segment);
                 }
-                
+
                 return Ok(json!(map));
-            },
+            }
             serde_json::Value::Array(a) => {
                 let mut results = Vec::new();
-                
+
                 for item in a.into_iter() {
                     match item {
                         serde_json::Value::Object(_) => {
                             results.push(filter_json(path, depth, item)?);
-                        },
-                        _ => results.push(item)
+                        }
+                        _ => results.push(item),
                     }
                 }
 
                 return Ok(json!(results));
-            },
-            _ => return Ok(json)
+            }
+            _ => return Ok(json),
         }
     }
 
@@ -45,33 +51,38 @@ pub fn filter_json(path: &str, depth: usize, json: serde_json::Value) -> Result<
     match json {
         serde_json::Value::Object(_) => {
             let mut map: Map<String, Value> = serde_json::from_value(json)?;
-            
+
             if map.contains_key(current_segment) {
-                let result = filter_json(path, depth + 1, map.get(current_segment).unwrap_or(&serde_json::Value::Null).clone())?;
+                let result = filter_json(
+                    path,
+                    depth + 1,
+                    map.get(current_segment)
+                        .unwrap_or(&serde_json::Value::Null)
+                        .clone(),
+                )?;
                 map.remove(current_segment);
                 map.insert(current_segment.to_string(), result);
             }
 
             return Ok(json!(map));
-        },
+        }
         serde_json::Value::Array(a) => {
             let mut results = Vec::new();
-            
+
             for item in a.into_iter() {
                 match item {
                     serde_json::Value::Object(_) => {
                         results.push(filter_json(path, depth, item)?);
-                    },
-                    _ => results.push(item)
+                    }
+                    _ => results.push(item),
                 }
             }
 
             return Ok(json!(results));
-        },
-        _ => return Ok(json)
+        }
+        _ => return Ok(json),
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -98,8 +109,10 @@ mod test {
         let expected_data = r#"{
             "test": "name"
         }"#;
-    
-        let result = json_filter::filter_json("items", 0, serde_json::from_str(input_data).unwrap()).unwrap();
+
+        let result =
+            json_filter::filter_json("items", 0, serde_json::from_str(input_data).unwrap())
+                .unwrap();
         let expected_result: serde_json::Value = serde_json::from_str(expected_data).unwrap();
         assert_eq!(result, expected_result);
     }
@@ -130,8 +143,10 @@ mod test {
         },{
             "test": "name2"
         }]"#;
-    
-        let result = json_filter::filter_json("items", 0, serde_json::from_str(input_data).unwrap()).unwrap();
+
+        let result =
+            json_filter::filter_json("items", 0, serde_json::from_str(input_data).unwrap())
+                .unwrap();
         let expected_result: serde_json::Value = serde_json::from_str(expected_data).unwrap();
         assert_eq!(result, expected_result);
     }
@@ -166,8 +181,10 @@ mod test {
                 "one": 5
             }]
         }"#;
-    
-        let result = json_filter::filter_json("items.two", 0, serde_json::from_str(input_data).unwrap()).unwrap();
+
+        let result =
+            json_filter::filter_json("items.two", 0, serde_json::from_str(input_data).unwrap())
+                .unwrap();
         let expected_result: serde_json::Value = serde_json::from_str(expected_data).unwrap();
         assert_eq!(result, expected_result);
     }
@@ -213,8 +230,10 @@ mod test {
                 "one": 1
             }]
         }]"#;
-    
-        let result = json_filter::filter_json("items.two", 0, serde_json::from_str(input_data).unwrap()).unwrap();
+
+        let result =
+            json_filter::filter_json("items.two", 0, serde_json::from_str(input_data).unwrap())
+                .unwrap();
         let expected_result: serde_json::Value = serde_json::from_str(expected_data).unwrap();
         assert_eq!(result, expected_result);
     }
@@ -243,7 +262,9 @@ mod test {
             }]
         }]"#;
 
-        let result = json_filter::filter_json("items.three", 0, serde_json::from_str(input_data).unwrap()).unwrap();
+        let result =
+            json_filter::filter_json("items.three", 0, serde_json::from_str(input_data).unwrap())
+                .unwrap();
         let expected_result: serde_json::Value = serde_json::from_str(input_data).unwrap();
         assert_eq!(result, expected_result);
     }

@@ -1,4 +1,4 @@
-use crate::test_definition::{HttpVerb, Modifier, VariableTypes, ResponseExtraction};
+use crate::test_definition::{HttpVerb, Modifier, ResponseExtraction, VariableTypes};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

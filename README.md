@@ -1,11 +1,13 @@
 # jikken
-A high performance REST API testing toolkit that is source control friendly. This project is currently in early beta.
+Jikken is a powerful REST API testing toolkit that is source control friendly. This project is currently in early beta.
+
+The goal of this project is to provide a CLI tool that can be used for automated API testing. The tests are defined in a YAML/JSON format. The design is intended to be simple for common scenarios, but provide a rich featureset to enable complex ones. The current focus is to enable smoke and regression testing (data validation), but in time we plan to add features to enable performance testing as well.
 
 # test definition format
 
 The definition file is a YAML/JSON file with the following layout:
 
-```
+```yaml
 name:
 request:
     method:
@@ -61,7 +63,7 @@ variables:
 It supports global variable replacements (denoted by being wrapped with `#`) as defined in the config file. Local variables are replaced by wrapping their names with `$`.
 A (hopefully) working example:
 
-```
+```yaml
 name: Usage Report
 iterate: 2
 request:
@@ -119,7 +121,7 @@ variables:
 
 # config file format
 
-```
+```ini
 [settings]
 continueOnFailure=true
 
