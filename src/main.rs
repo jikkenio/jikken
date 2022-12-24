@@ -1,11 +1,11 @@
 mod config;
 mod errors;
+mod json_extractor;
+mod json_filter;
 mod logger;
 mod test_definition;
 mod test_file;
 mod test_runner;
-mod json_filter;
-mod json_extractor;
 
 use chrono::Local;
 use clap::Parser;
@@ -214,7 +214,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         })
         .collect();
 
-    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run.clone()
+    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
+        .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
         .map(|td| (td.id.clone(), td))
@@ -223,19 +224,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
 
     let mut duplicate_filter: HashSet<String> = HashSet::new();
-    
+
     let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
-    
+
     for td in tests_to_run.into_iter() {
         match &td.requires {
             Some(req) => {
                 if tests_by_id.contains_key(req) {
                     if !duplicate_filter.contains(req) {
                         duplicate_filter.insert(req.clone());
-                        tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().to_owned());
+                        tests_to_run_with_dependencies
+                            .push(tests_by_id.get(req).unwrap().to_owned());
                     }
                 }
-            },
+            }
             _ => {}
         }
 

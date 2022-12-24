@@ -1,15 +1,15 @@
 use crate::errors::TestFailure;
-use crate::test_definition::TestDefinition;
+use crate::json_extractor::extract_json;
 use crate::json_filter::filter_json;
-use hyper::{body, Body, Client, Request};
+use crate::test_definition::TestDefinition;
 use hyper::header::HeaderValue;
+use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, trace};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
-use std::collections::HashMap;
-use crate::json_extractor::extract_json;
 
 pub struct TestRunner {
     run: u16,
@@ -54,12 +54,6 @@ impl TestRunner {
             self.validate_td(td).await
         };
 
-        // if self.global_variables.len() > 0 {
-        //     for v in self.global_variables.iter() {
-        //         println!("variable ({}) value({})", v.0, v.1);
-        //     }
-        // }
-
         match result {
             Ok(_) => {
                 println!("\x1b[32mPASSED!\x1b[0m");
@@ -76,7 +70,10 @@ impl TestRunner {
     }
 
     // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
-    async fn validate_td(&mut self, td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td(
+        &mut self,
+        td: &TestDefinition,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
@@ -85,7 +82,7 @@ impl TestRunner {
 
         for header in td.get_request_headers() {
             let mut header_value: String = header.1;
-            
+
             for gv in self.global_variables.iter() {
                 let key_search = format!("${}$", gv.0);
                 header_value = header_value.replace(&key_search, gv.1);
@@ -96,9 +93,10 @@ impl TestRunner {
 
         let req_body = match &td.request.body {
             Some(b) => {
-                req_builder = req_builder.header("Content-Type", HeaderValue::from_static("application/json"));
+                req_builder = req_builder
+                    .header("Content-Type", HeaderValue::from_static("application/json"));
                 Body::from(b.to_string())
-            },
+            }
             None => Body::empty(),
         };
 
@@ -106,10 +104,8 @@ impl TestRunner {
         let resp = client.request(req).await?;
 
         let ignored_json_fields = match &td.response {
-            Some(r) => {
-                r.ignore.to_owned()
-            },
-            None => Vec::new()
+            Some(r) => r.ignore.to_owned(),
+            None => Vec::new(),
         };
 
         if let Some(r) = &td.response {
@@ -128,15 +124,16 @@ impl TestRunner {
                                     serde_json::Value::String(s) => s.to_string(),
                                     _ => "".to_string(),
                                 };
-                                self.global_variables.insert(v.name.clone(), converted_result);
-                            },
+                                self.global_variables
+                                    .insert(v.name.clone(), converted_result);
+                            }
                             _ => {}
                         }
                     }
 
                     if let Some(b) = &r.body {
                         TestRunner::validate_body(rv, b.clone(), ignored_json_fields)?;
-                    }                    
+                    }
                 }
                 Err(e) => {
                     error!("{}", e);
@@ -145,8 +142,6 @@ impl TestRunner {
                     }));
                 }
             }
-
-            
 
             if let Some(code) = r.status {
                 TestRunner::validate_status_code(parts.status, code)?;
@@ -157,7 +152,10 @@ impl TestRunner {
     }
 
     // TODO: Possibly refactor/combine logic to avoid so much duplication
-    async fn validate_td_comparison_mode(&mut self, td: &TestDefinition) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td_comparison_mode(
+        &mut self,
+        td: &TestDefinition,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let uri_compare = td.get_compare_url();
         let uri = &td.get_request_url();
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
@@ -170,7 +168,7 @@ impl TestRunner {
 
         for header in td.get_request_headers() {
             let mut header_value: String = header.1;
-            
+
             for gv in self.global_variables.iter() {
                 let key_search = format!("${}$", gv.0);
                 header_value = header_value.replace(&key_search, gv.1);
@@ -185,7 +183,7 @@ impl TestRunner {
 
         for header in td.get_compare_headers() {
             let mut header_value: String = header.1;
-            
+
             for gv in self.global_variables.iter() {
                 let key_search = format!("${}$", gv.0);
                 header_value = header_value.replace(&key_search, gv.1);
@@ -212,10 +210,8 @@ impl TestRunner {
         let data = body::to_bytes(resp.into_body()).await?;
         let data_compare = body::to_bytes(resp_compare.into_body()).await?;
         let ignored_json_fields = match &td.response {
-            Some(r) => {
-                r.ignore.to_owned()
-            },
-            None => Vec::new()
+            Some(r) => r.ignore.to_owned(),
+            None => Vec::new(),
         };
 
         match serde_json::from_slice(data.as_ref()) {
@@ -282,7 +278,6 @@ impl TestRunner {
         expected: Value,
         ignore: Vec<String>,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-
         let mut modified_actual = actual.clone();
         let mut modified_expected = expected.clone();
 
@@ -295,7 +290,11 @@ impl TestRunner {
         let r = modified_actual == modified_expected;
 
         if !r {
-            trace!("data doesn't match: req({}) compare({})", modified_actual, modified_expected);
+            trace!(
+                "data doesn't match: req({}) compare({})",
+                modified_actual,
+                modified_expected
+            );
 
             let result = assert_json_diff::assert_json_matches_no_panic(
                 &modified_actual,
