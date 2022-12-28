@@ -16,6 +16,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use test_definition::TestDefinition;
+use test_definition::TestVariable;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser, Debug)]
@@ -59,36 +60,28 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
     Ok(config)
 }
 
-fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -> Option<String> {
-    let original_data_opt = fs::read_to_string(file);
+fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVariable> {
+    let mut global_variables = HashMap::new();
+    global_variables.insert("TODAY".to_string(), format!("{}", Local::now().format("%Y-%m-%d")));
 
-    let mut built_in_globals = HashMap::new();
-
-    built_in_globals.insert("#TODAY#", format!("{}", Local::now().format("%Y-%m-%d")));
-
-    match original_data_opt {
-        Ok(original_data) => {
-            if let Some(config) = config_opt {
-                if let Some(globals) = config.globals.as_ref() {
-                    let mut modified_data = original_data;
-                    for (key, value) in globals {
-                        let key_pattern = format!("#{}#", key);
-                        modified_data = modified_data.replace(&key_pattern, value);
-                    }
-
-                    for (key, value) in built_in_globals {
-                        modified_data = modified_data.replace(key, value.as_str());
-                    }
-                    return Some(modified_data);
-                }
+    if let Some(config) = config_opt {
+        if let Some(globals) = config.globals {
+            for (key, value) in globals.into_iter() {
+                global_variables.insert(key, value.clone());
             }
-            Some(original_data)
-        }
-        Err(err) => {
-            println!("error loading file: {}", err);
-            None
         }
     }
+
+    global_variables
+        .into_iter()
+        .map(|i| TestVariable {
+            name: i.0.to_string(),
+            value: serde_yaml::Value::String(i.1),
+            data_type: test_definition::VariableTypes::String,
+            modifier: None,
+            format: None,
+        })
+        .collect()
 }
 
 #[tokio::main]
@@ -140,12 +133,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
+    let global_variables = generate_global_variables(config);
+
     let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
     let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
-        .map(|f| get_file_with_modifications(f, config.clone()))
+        .map(|f| fs::read_to_string(f))
         .filter_map(|f| match f {
-            Some(file_data) => {
+            Ok(file_data) => {
                 let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
                     serde_yaml::from_str(&file_data);
                 match result {
@@ -156,10 +151,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     }
                 }
             }
-            None => None,
+            Err(err) => {
+                println!("error loading file: {}", err);
+                None
+            },
         })
         .filter_map(|f| {
-            let result = TestDefinition::new(f);
+            let result = TestDefinition::new(f, global_variables.clone());
             match result {
                 Ok(td) => {
                     if !td.validate() {
@@ -250,11 +248,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let total_count = tests_to_run_with_dependencies.len();
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
+        // let json_string = serde_json::to_string(&td)?;
+        // println!("json: {}", json_string);
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         for iteration in 0..boxed_td.iterate {
             let passed = runner
-                .run(boxed_td.as_ref(), i + 1, total_count, iteration + 1)
+                .run(boxed_td.as_ref(), i, total_count, iteration)
                 .await;
 
             if !continue_on_failure && !passed {

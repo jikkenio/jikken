@@ -294,9 +294,6 @@ pub struct TestVariable {
     pub value: serde_yaml::Value,
     pub modifier: Option<Modifier>,
     pub format: Option<String>,
-
-    #[serde(skip_serializing, skip_deserializing)]
-    index: Cell<u32>,
 }
 
 impl TestVariable {
@@ -308,15 +305,14 @@ impl TestVariable {
             value: variable.value.clone(),
             modifier: variable.modifier.clone(),
             format: variable.format.clone(),
-            index: Cell::from(0),
         })
     }
 
-    pub fn generate_value(&self, update: bool) -> String {
+    pub fn generate_value(&self, iteration: u32, global_variables: Vec<TestVariable>) -> String {
         let result = match self.data_type {
-            VariableTypes::Int => self.generate_int_value(update),
-            VariableTypes::String => self.generate_string_value(update),
-            VariableTypes::Date => self.generate_date_value(update),
+            VariableTypes::Int => self.generate_int_value(iteration),
+            VariableTypes::String => self.generate_string_value(iteration, global_variables),
+            VariableTypes::Date => self.generate_date_value(iteration, global_variables),
             VariableTypes::Datetime => String::from(""),
         };
 
@@ -325,7 +321,7 @@ impl TestVariable {
         return result;
     }
 
-    fn generate_int_value(&self, update: bool) -> String {
+    fn generate_int_value(&self, iteration: u32) -> String {
         match &self.value {
             serde_yaml::Value::Number(v) => {
                 trace!("number expression: {:?}", v);
@@ -333,20 +329,11 @@ impl TestVariable {
             }
             serde_yaml::Value::Sequence(seq) => {
                 trace!("sequence expression: {:?}", seq);
-                if update && seq.len() < (self.index.get() + 1) as usize {
-                    self.index.set(0);
-                }
-
-                let test = &seq[self.index.get() as usize];
+                let test = &seq[iteration as usize];
                 let test_string = match test {
                     serde_yaml::Value::Number(st) => st.as_i64().unwrap_or(0),
                     _ => 0,
                 };
-
-                if update {
-                    self.index.set(self.index.get() + 1);
-                }
-
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
@@ -359,34 +346,58 @@ impl TestVariable {
         }
     }
 
-    fn generate_string_value(&self, update: bool) -> String {
+    fn generate_string_value(&self, iteration: u32, global_variables: Vec<TestVariable>) -> String {
         match &self.value {
             serde_yaml::Value::String(v) => {
-                trace!("number expression: {:?}", v);
+                trace!("string expression: {:?}", v);
+
+                if v.contains("$") {
+                    let mut modified_value = v.clone();
+                    for variable in global_variables.iter() {
+                        let var_pattern = format!("${}$", variable.name.trim());
+                        if !modified_value.contains(&var_pattern) {
+                            continue;
+                        }
+
+                        if let serde_yaml::Value::String(s) = &variable.value {
+                            modified_value = modified_value.replace(&var_pattern, &s);
+                        }
+                    }
+
+                    return format!("{}", modified_value);
+                }
+
                 return format!("{}", v);
             }
             serde_yaml::Value::Sequence(seq) => {
                 trace!("sequence expression: {:?}", seq);
-
-                if update && seq.len() < (self.index.get() + 1) as usize {
-                    self.index.set(0);
-                }
-
-                let test = &seq[self.index.get() as usize];
+                let test = &seq[iteration as usize];
                 let test_string = match test {
                     serde_yaml::Value::String(st) => st.to_string(),
                     _ => "".to_string(),
                 };
 
-                if update {
-                    self.index.set(self.index.get() + 1);
+                if test_string.contains("$") {
+                    let mut modified_value = test_string;
+                    for variable in global_variables.iter() {
+                        let var_pattern = format!("${}$", variable.name.trim());
+                        if !modified_value.contains(&var_pattern) {
+                            continue;
+                        }
+
+                        if let serde_yaml::Value::String(s) = &variable.value {
+                            modified_value = modified_value.replace(&var_pattern, &s);
+                        }
+                    }
+
+                    return format!("{}", modified_value);
                 }
 
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
                 trace!("map expression: {:?}", map);
-                return String::from("no");
+                return String::from("");
             }
             _ => {
                 return String::from("");
@@ -394,14 +405,32 @@ impl TestVariable {
         }
     }
 
-    fn generate_date_value(&self, update: bool) -> String {
+    fn generate_date_value(&self, iteration: u32, global_variables: Vec<TestVariable>) -> String {
         // TODO: Add proper error handling
         match &self.value {
             serde_yaml::Value::String(v) => {
                 trace!("string expression: {:?}", v);
                 let mut result_date;
 
-                let parse_attempt = NaiveDate::parse_from_str(&v, "%Y-%m-%d");
+                let modified_value = if v.contains("$") {
+                    let mut mv = v.clone();
+                    for variable in global_variables.iter() {
+                        let var_pattern = format!("${}$", variable.name.trim());
+                        if !mv.contains(&var_pattern) {
+                            continue;
+                        }
+
+                        if let serde_yaml::Value::String(s) = variable.value.clone() {
+                            mv = mv.replace(&var_pattern, &s);
+                        }
+                    }
+
+                    format!("{}", mv)
+                } else {
+                    v.to_string()
+                };
+
+                let parse_attempt = NaiveDate::parse_from_str(&modified_value, "%Y-%m-%d");
                 if let Ok(p) = parse_attempt {
                     result_date = Local
                         .from_local_datetime(&p.and_hms_opt(0, 0, 0).unwrap())
@@ -455,22 +484,32 @@ impl TestVariable {
             }
             serde_yaml::Value::Sequence(seq) => {
                 trace!("sequence expression: {:?}", seq);
-                if update && seq.len() < (self.index.get() + 1) as usize {
-                    self.index.set(0);
-                }
-
-                let test = &seq[self.index.get() as usize];
+                let test = &seq[iteration as usize];
 
                 let test_string: &str = match test {
                     serde_yaml::Value::String(st) => st,
                     _ => "",
                 };
 
-                let parse_attempt = NaiveDate::parse_from_str(test_string, "%Y-%m-%d");
+                let modified_string = if test_string.contains("$") {
+                    let mut modified_value: String = test_string.to_string();
+                    for variable in global_variables.iter() {
+                        let var_pattern = format!("${}$", variable.name.trim());
+                        if !modified_value.contains(&var_pattern) {
+                            continue;
+                        }
 
-                if update {
-                    self.index.set(self.index.get() + 1);
-                }
+                        if let serde_yaml::Value::String(s) = &variable.value {
+                            modified_value = modified_value.replace(&var_pattern, &s);
+                        }
+                    }
+
+                    format!("{}", modified_value)
+                } else {
+                    test_string.to_string()
+                };
+
+                let parse_attempt = NaiveDate::parse_from_str(&modified_string, "%Y-%m-%d");
 
                 match parse_attempt {
                     Ok(p) => {
@@ -491,7 +530,7 @@ impl TestVariable {
             }
             serde_yaml::Value::Mapping(map) => {
                 trace!("map expression: {:?}", map);
-                return String::from("no");
+                return String::from("");
             }
             _ => {
                 return String::from("");
@@ -511,12 +550,16 @@ pub struct TestDefinition {
     pub compare: Option<CompareDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<TestVariable>,
+    pub global_variables: Vec<TestVariable>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
 // TODO: Validation should be type driven for compile time correctness
 impl TestDefinition {
-    pub fn new(test: UnvalidatedTest) -> Result<TestDefinition, ValidationError> {
+    pub fn new(
+        test: UnvalidatedTest,
+        global_variables: Vec<TestVariable>,
+    ) -> Result<TestDefinition, ValidationError> {
         let new_tags = if let Some(tags) = test.tags.as_ref() {
             tags.to_lowercase()
                 .split_whitespace()
@@ -538,6 +581,7 @@ impl TestDefinition {
             compare: CompareDescriptor::new_opt(test.compare)?,
             response: ResponseDescriptor::new_opt(test.response)?,
             variables: TestDefinition::validate_variables_opt(test.variables)?,
+            global_variables: global_variables,
         };
 
         td.update_variable_matching();
@@ -570,7 +614,7 @@ impl TestDefinition {
 
     fn update_variable_matching(&self) {
         trace!("updating variable matching");
-        for variable in self.variables.iter() {
+        for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name.trim());
             trace!("pattern: {}", var_pattern);
 
@@ -629,7 +673,7 @@ impl TestDefinition {
         }
     }
 
-    pub fn get_request_url(&self) -> String {
+    pub fn get_request_url(&self, iteration: u32) -> String {
         // TODO: inject variable replacement
         let joined: Vec<_> = self
             .request
@@ -637,7 +681,7 @@ impl TestDefinition {
             .iter()
             .map(|param| {
                 if param.matches_variable.get() {
-                    let p = self.get_processed_param(param, true);
+                    let p = self.get_processed_param(param, iteration);
                     format!("{}={}", p.0, p.1)
                 } else {
                     format!("{}={}", param.param, param.value)
@@ -645,10 +689,29 @@ impl TestDefinition {
             })
             .collect();
 
-        format!("{}?{}", self.request.url, joined.join("&"))
+        let modified_url = if self.request.url.contains("$") {
+            let mut replaced_url = self.request.url.clone();
+
+            for variable in self.variables.iter().chain(self.global_variables.iter()) {
+                let var_pattern = format!("${}$", variable.name);
+
+                if !replaced_url.contains(var_pattern.as_str()) {
+                    continue;
+                }
+
+                let replacement = variable.generate_value(iteration, self.global_variables.clone());
+                replaced_url = replaced_url.replace(var_pattern.as_str(), replacement.as_str())
+            }
+
+            replaced_url
+        } else {
+            self.request.url.clone()
+        };
+
+        format!("{}?{}", modified_url, joined.join("&"))
     }
 
-    pub fn get_compare_url(&self) -> String {
+    pub fn get_compare_url(&self, iteration: u32) -> String {
         match self.compare.as_ref() {
             Some(compare) => {
                 let ignore_lookup: HashSet<String> =
@@ -662,7 +725,7 @@ impl TestDefinition {
                         .iter()
                         .map(|param| {
                             if param.matches_variable.get() {
-                                let p = self.get_processed_param(param, false);
+                                let p = self.get_processed_param(param, iteration);
                                 format!("{}={}", p.0, p.1)
                             } else {
                                 format!("{}={}", param.param, param.value)
@@ -678,7 +741,7 @@ impl TestDefinition {
                         .chain(compare.add_params.iter())
                         .map(|p| {
                             if p.matches_variable.get() {
-                                let param = self.get_processed_param(p, false);
+                                let param = self.get_processed_param(p, iteration);
                                 format!("{}={}", param.0, param.1)
                             } else {
                                 format!("{}={}", p.param, p.value)
@@ -687,22 +750,42 @@ impl TestDefinition {
                         .collect();
                 }
 
-                format!("{}?{}", self.compare.clone().unwrap().url, joined.join("&"))
+                let modified_url = if compare.url.contains("$") {
+                    let mut replaced_url = compare.url.clone();
+
+                    for variable in self.variables.iter().chain(self.global_variables.iter()) {
+                        let var_pattern = format!("${}$", variable.name);
+
+                        if !replaced_url.contains(var_pattern.as_str()) {
+                            continue;
+                        }
+
+                        let replacement = variable.generate_value(iteration, self.global_variables.clone());
+                        replaced_url =
+                            replaced_url.replace(var_pattern.as_str(), replacement.as_str())
+                    }
+
+                    replaced_url
+                } else {
+                    compare.url.clone()
+                };
+
+                format!("{}?{}", modified_url, joined.join("&"))
             }
             None => String::from(""),
         }
     }
 
-    fn get_processed_param(&self, parameter: &HttpParameter, update: bool) -> (String, String) {
+    fn get_processed_param(&self, parameter: &HttpParameter, iteration: u32) -> (String, String) {
         // println!("processing param: {}", parameter.param);
-        for variable in self.variables.iter() {
+        for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name);
 
             if !parameter.value.contains(var_pattern.as_str()) {
                 continue;
             }
 
-            let replacement = variable.generate_value(update);
+            let replacement = variable.generate_value(iteration, self.global_variables.clone());
             return (
                 parameter.param.clone(),
                 parameter
@@ -714,15 +797,15 @@ impl TestDefinition {
         (String::from(""), String::from(""))
     }
 
-    fn get_processed_header(&self, header: &HttpHeader, update: bool) -> (String, String) {
-        for variable in self.variables.iter() {
+    fn get_processed_header(&self, header: &HttpHeader, iteration: u32) -> (String, String) {
+        for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name);
 
             if !header.value.contains(var_pattern.as_str()) {
                 continue;
             }
 
-            let replacement = variable.generate_value(update);
+            let replacement = variable.generate_value(iteration, self.global_variables.clone());
             return (
                 header.header.clone(),
                 header
@@ -734,18 +817,22 @@ impl TestDefinition {
         (String::from(""), String::from(""))
     }
 
-    pub fn get_request_headers(&self) -> Vec<(String, String)> {
-        // TODO: inject variable replacement
+    pub fn get_request_headers(&self, iteration: u32) -> Vec<(String, String)> {
         self.request
             .headers
             .iter()
-            .map(|kvp| (kvp.header.clone(), kvp.value.clone()))
+            .map(|h| {
+                if h.matches_variable.get() {
+                    let header = self.get_processed_header(h, iteration);
+                    (header.0, header.1)
+                } else {
+                    (h.header.clone(), h.value.clone())
+                }
+            })
             .collect()
     }
 
-    pub fn get_compare_headers(&self) -> Vec<(String, String)> {
-        // TODO: inject variable replacement
-
+    pub fn get_compare_headers(&self, iteration: u32) -> Vec<(String, String)> {
         match self.compare.as_ref() {
             Some(compare) => {
                 let ignore_lookup: HashSet<String> =
@@ -759,7 +846,7 @@ impl TestDefinition {
                         .iter()
                         .map(|h| {
                             if h.matches_variable.get() {
-                                let header = self.get_processed_header(h, false);
+                                let header = self.get_processed_header(h, iteration);
                                 (header.0, header.1)
                             } else {
                                 (h.header.clone(), h.value.clone())
@@ -775,7 +862,7 @@ impl TestDefinition {
                         .chain(compare.add_headers.iter())
                         .map(|h| {
                             if h.matches_variable.get() {
-                                let header = self.get_processed_header(h, false);
+                                let header = self.get_processed_header(h, iteration);
                                 (header.0, header.1)
                             } else {
                                 (h.header.clone(), h.value.clone())

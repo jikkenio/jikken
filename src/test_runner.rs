@@ -39,19 +39,19 @@ impl TestRunner {
     ) -> bool {
         print!(
             "Running Test ({}\\{}) `{}` Iteration({}\\{})...",
-            count,
+            count + 1,
             total,
             td.name.clone().unwrap_or(format!("Test {}", count)),
-            iteration,
+            iteration + 1,
             td.iterate
         );
         io::stdout().flush().unwrap();
 
         self.run += 1;
         let result = if td.compare.is_some() {
-            self.validate_td_comparison_mode(td).await
+            self.validate_td_comparison_mode(td, iteration).await
         } else {
-            self.validate_td(td).await
+            self.validate_td(td, iteration).await
         };
 
         match result {
@@ -73,14 +73,15 @@ impl TestRunner {
     async fn validate_td(
         &mut self,
         td: &TestDefinition,
+        iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.get_request_url();
+        let uri = &td.get_request_url(iteration);
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         let mut req_builder = Request::builder().uri(uri);
         req_builder = req_builder.method(&td.request.method.as_method());
 
-        for header in td.get_request_headers() {
+        for header in td.get_request_headers(iteration) {
             let mut header_value: String = header.1;
 
             for gv in self.global_variables.iter() {
@@ -155,9 +156,10 @@ impl TestRunner {
     async fn validate_td_comparison_mode(
         &mut self,
         td: &TestDefinition,
+        iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri_compare = td.get_compare_url();
-        let uri = &td.get_request_url();
+        let uri_compare = td.get_compare_url(iteration);
+        let uri = &td.get_request_url(iteration);
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         trace!("Url: {}", uri);
@@ -166,7 +168,7 @@ impl TestRunner {
         let mut req_builder = Request::builder().uri(uri);
         req_builder = req_builder.method(&td.request.method.as_method());
 
-        for header in td.get_request_headers() {
+        for header in td.get_request_headers(iteration) {
             let mut header_value: String = header.1;
 
             for gv in self.global_variables.iter() {
@@ -181,7 +183,7 @@ impl TestRunner {
         req_comparison_builder =
             req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
 
-        for header in td.get_compare_headers() {
+        for header in td.get_compare_headers(iteration) {
             let mut header_value: String = header.1;
 
             for gv in self.global_variables.iter() {
