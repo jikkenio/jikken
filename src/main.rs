@@ -12,6 +12,7 @@ use clap::Parser;
 use log::{error, info, trace, Level, LevelFilter};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::env;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
@@ -60,15 +61,79 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
     Ok(config)
 }
 
+fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config> {
+    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
+        if let Ok(b) = cof.parse::<bool>() {
+            Some(b)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
+        Some(key)
+    } else {
+        None
+    };
+
+    let mut result_settings = config::Settings{
+        continue_on_failure: None,
+        api_key: None,
+    };
+
+    if let Some(c) = config {
+        if let Some(settings) = c.settings {
+            result_settings.continue_on_failure = if envvar_cof.is_some() {
+                envvar_cof
+            } else {
+                settings.continue_on_failure
+            };
+
+            result_settings.api_key = if envvar_apikey.is_some() {
+                envvar_apikey
+            } else {
+                settings.api_key
+            };
+        } else {
+            result_settings.continue_on_failure = envvar_cof;
+            result_settings.api_key = envvar_apikey;
+        }
+
+        return Some(config::Config {
+            settings: Some(result_settings),
+            globals: c.globals,
+        });
+    }
+    
+    Some(config::Config {
+        settings: Some(config::Settings {
+            continue_on_failure: envvar_cof,
+            api_key: envvar_apikey,
+        }),
+        globals: None,
+    })
+}
+
 fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVariable> {
     let mut global_variables = HashMap::new();
-    global_variables.insert("TODAY".to_string(), format!("{}", Local::now().format("%Y-%m-%d")));
+    global_variables.insert(
+        "TODAY".to_string(),
+        format!("{}", Local::now().format("%Y-%m-%d")),
+    );
 
     if let Some(config) = config_opt {
         if let Some(globals) = config.globals {
             for (key, value) in globals.into_iter() {
                 global_variables.insert(key, value.clone());
             }
+        }
+    }
+
+    for (key, value) in env::vars() {
+        if key.starts_with("JIKKEN_GLOBAL_") {
+            global_variables.insert(key[14..].to_string(), value);
         }
     }
 
@@ -95,7 +160,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let log_level = if args.verbose {
         Level::Trace
     } else {
-        Level::Error
+        Level::Info
     };
 
     let my_logger = logger::SimpleLogger { level: log_level };
@@ -119,13 +184,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
     }
-
+    config = apply_config_envvars(config);
     let files = get_files();
-    info!("Jikken found {} tests.", files.len());
-
     let mut continue_on_failure = false;
 
-    if let Some(ref c) = config {
+    info!("Jikken found {} tests.", files.len());
+    
+    if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
             if let Some(cof) = settings.continue_on_failure {
                 continue_on_failure = cof;
@@ -134,7 +199,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     let global_variables = generate_global_variables(config);
-
     let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
     let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
@@ -154,7 +218,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Err(err) => {
                 println!("error loading file: {}", err);
                 None
-            },
+            }
         })
         .filter_map(|f| {
             let result = TestDefinition::new(f, global_variables.clone());
