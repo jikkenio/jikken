@@ -3,30 +3,18 @@ name = "jk"
 version = "0.1.0"
 edition = "2021"
 
-[target.x86_64-pc-windows-mscv]
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-[target.x86_64-pc-windows-gnu]
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "linker=clang", "-C", "link-arg=-fuse-ld=lld"]
-
-[target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
-
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
-
 [dependencies]
-clap = { version = "3.1.18", features = ["derive"] }
-hyper = { version = "0.14.19", features = ["full"] }
-hyper-tls = { version = "0.5.0" }
-tokio = { version = "1", features = ["full"] }
-walkdir = { version = "2" }
-toml = { version = "0.5.9" }
+hyper = { version = "0.14", features = ["full"] }
+hyper-tls = { version = "0.5" }
+tokio = { version = "1.23", features = ["full"] }
+walkdir = { version = "2.3" }
+toml = { version = "0.5" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
 indicatif = {version = "*", features = ["rayon"]}
-exitcode = {version = "1.1.2"}
+exitcode = {version = "1.1"}
+chrono = {version = "0.4"}
+log = {version = "0.4", features = ["std"]}
+clap = { version = "4.0", features = ["derive"] }
+assert-json-diff = { version = "2.0.2" }

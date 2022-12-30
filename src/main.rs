@@ -1,11 +1,37 @@
 mod config;
-mod test_descriptor;
+mod errors;
+mod json_extractor;
+mod json_filter;
+mod logger;
+mod test_definition;
+mod test_file;
 mod test_runner;
 
+use chrono::Local;
+use clap::Parser;
+use log::{error, info, trace, Level, LevelFilter};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::env;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use test_definition::TestDefinition;
+use test_definition::TestVariable;
 use walkdir::{DirEntry, WalkDir};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long = "tag", name = "tag")]
+    tags: Vec<String>,
+
+    #[arg(long, default_value_t = false)]
+    tags_or: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    verbose: bool,
+}
 
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &DirEntry) -> bool {
@@ -35,36 +61,116 @@ fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
     Ok(config)
 }
 
-fn get_file_with_modifications(file: &str, config_opt: Option<config::Config>) -> Option<String> {
-    let original_data_opt = fs::read_to_string(file);
-
-    match original_data_opt {
-        Ok(original_data) => {
-            if let Some(config) = config_opt {
-                if let Some(globals) = config.globals.as_ref() {
-                    let mut modified_data = original_data;
-                    for (key, value) in globals {
-                        let key_pattern = format!("#{}#", key);
-                        modified_data = modified_data.replace(&key_pattern, value);
-                    }
-                    return Some(modified_data);
-                }
-            }
-            Some(original_data)
-        }
-        Err(err) => {
-            println!("error loading file: {}", err);
+fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config> {
+    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
+        if let Ok(b) = cof.parse::<bool>() {
+            Some(b)
+        } else {
             None
         }
+    } else {
+        None
+    };
+
+    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
+        Some(key)
+    } else {
+        None
+    };
+
+    let mut result_settings = config::Settings{
+        continue_on_failure: None,
+        api_key: None,
+    };
+
+    if let Some(c) = config {
+        if let Some(settings) = c.settings {
+            result_settings.continue_on_failure = if envvar_cof.is_some() {
+                envvar_cof
+            } else {
+                settings.continue_on_failure
+            };
+
+            result_settings.api_key = if envvar_apikey.is_some() {
+                envvar_apikey
+            } else {
+                settings.api_key
+            };
+        } else {
+            result_settings.continue_on_failure = envvar_cof;
+            result_settings.api_key = envvar_apikey;
+        }
+
+        return Some(config::Config {
+            settings: Some(result_settings),
+            globals: c.globals,
+        });
     }
+    
+    Some(config::Config {
+        settings: Some(config::Settings {
+            continue_on_failure: envvar_cof,
+            api_key: envvar_apikey,
+        }),
+        globals: None,
+    })
+}
+
+fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVariable> {
+    let mut global_variables = HashMap::new();
+    global_variables.insert(
+        "TODAY".to_string(),
+        format!("{}", Local::now().format("%Y-%m-%d")),
+    );
+
+    if let Some(config) = config_opt {
+        if let Some(globals) = config.globals {
+            for (key, value) in globals.into_iter() {
+                global_variables.insert(key, value.clone());
+            }
+        }
+    }
+
+    for (key, value) in env::vars() {
+        if key.starts_with("JIKKEN_GLOBAL_") {
+            global_variables.insert(key[14..].to_string(), value);
+        }
+    }
+
+    global_variables
+        .into_iter()
+        .map(|i| TestVariable {
+            name: i.0.to_string(),
+            value: serde_yaml::Value::String(i.1),
+            data_type: test_definition::VariableTypes::String,
+            modifier: None,
+            format: None,
+        })
+        .collect()
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let args = Args::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
+
+    let log_level = if args.verbose {
+        Level::Trace
+    } else {
+        Level::Info
+    };
+
+    let my_logger = logger::SimpleLogger { level: log_level };
+
+    if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
+        error!("Error creating logger: {}", e);
+        panic!("unable to create logger");
+    }
+
+    log::set_max_level(LevelFilter::Trace);
 
     if Path::new(".jikken").exists() {
         let config_raw = get_config(".jikken");
@@ -73,18 +179,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 config = Some(c);
             }
             Err(e) => {
-                println!("invalid configuration file: {}", e);
+                error!("invalid configuration file: {}", e);
                 std::process::exit(exitcode::CONFIG);
             }
         }
     }
-
+    config = apply_config_envvars(config);
     let files = get_files();
-    println!("Jikken found {} tests.", files.len());
-
     let mut continue_on_failure = false;
 
-    if let Some(ref c) = config {
+    info!("Jikken found {} tests.", files.len());
+    
+    if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
             if let Some(cof) = settings.continue_on_failure {
                 continue_on_failure = cof;
@@ -92,25 +198,132 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    for (i, file) in files.iter().enumerate() {
-        let file_opt = get_file_with_modifications(file, config.clone());
-        if let Some(f) = file_opt {
-            let td_opt: Result<test_descriptor::TestDescriptor, _> = serde_yaml::from_str(&f);
-            if let Ok(td) = td_opt {
-                if !td.validate() {
-                    println!("Invalid Test Definition File: {}", file);
-                    continue;
+    let global_variables = generate_global_variables(config);
+    let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
+    let mut tests_to_run: Vec<TestDefinition> = files
+        .iter()
+        .map(|f| fs::read_to_string(f))
+        .filter_map(|f| match f {
+            Ok(file_data) => {
+                let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
+                    serde_yaml::from_str(&file_data);
+                match result {
+                    Ok(file) => Some(file),
+                    Err(e) => {
+                        trace!("unable to parse file data: {}", e);
+                        None
+                    }
                 }
-
-                let passed = runner.run(td, i + 1).await?;
-                if !continue_on_failure && !passed {
-                    std::process::exit(1);
-                }
-            } else {
-                println!("serde_yaml failed"); // TODO: Add meaningful output
             }
-        } else {
-            println!("file failed to load"); // TODO: Add meaningful output
+            Err(err) => {
+                println!("error loading file: {}", err);
+                None
+            }
+        })
+        .filter_map(|f| {
+            let result = TestDefinition::new(f, global_variables.clone());
+            match result {
+                Ok(td) => {
+                    if !td.validate() {
+                        error!(
+                            "test failed validation: {}",
+                            td.name.unwrap_or("unnamed test".to_string())
+                        );
+                        None
+                    } else {
+                        if args.tags.len() > 0 {
+                            let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
+                            if args.tags_or {
+                                for t in args.tags.iter() {
+                                    if td_tags.contains(t) {
+                                        return Some(td);
+                                    }
+                                }
+
+                                tests_to_ignore.push(td.clone());
+
+                                trace!(
+                                    "test `{}` doesn't match any tags: {}",
+                                    td.name.unwrap_or("".to_string()),
+                                    args.tags.join(", ")
+                                );
+
+                                return None;
+                            } else {
+                                for t in args.tags.iter() {
+                                    if !td_tags.contains(t) {
+                                        tests_to_ignore.push(td.clone());
+
+                                        trace!(
+                                            "test `{}` is missing tag: {}",
+                                            td.name.unwrap_or("".to_string()),
+                                            t
+                                        );
+                                        return None;
+                                    }
+                                }
+                            }
+                        }
+
+                        Some(td)
+                    }
+                }
+                Err(e) => {
+                    trace!("test definition creation failed: {}", e);
+                    None
+                }
+            }
+        })
+        .collect();
+
+    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
+        .clone()
+        .into_iter()
+        .chain(tests_to_ignore.into_iter())
+        .map(|td| (td.id.clone(), td))
+        .collect();
+
+    tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+
+    let mut duplicate_filter: HashSet<String> = HashSet::new();
+
+    let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+
+    for td in tests_to_run.into_iter() {
+        match &td.requires {
+            Some(req) => {
+                if tests_by_id.contains_key(req) {
+                    if !duplicate_filter.contains(req) {
+                        duplicate_filter.insert(req.clone());
+                        tests_to_run_with_dependencies
+                            .push(tests_by_id.get(req).unwrap().to_owned());
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if !duplicate_filter.contains(&td.id) {
+            duplicate_filter.insert(td.id.clone());
+            tests_to_run_with_dependencies.push(td);
+        }
+    }
+
+    let total_count = tests_to_run_with_dependencies.len();
+
+    for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
+        // let json_string = serde_json::to_string(&td)?;
+        // println!("json: {}", json_string);
+        let boxed_td: Box<TestDefinition> = Box::from(td);
+
+        for iteration in 0..boxed_td.iterate {
+            let passed = runner
+                .run(boxed_td.as_ref(), i, total_count, iteration)
+                .await;
+
+            if !continue_on_failure && !passed {
+                std::process::exit(1);
+            }
         }
     }
 

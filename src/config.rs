@@ -11,4 +11,5 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: Option<bool>,
+    pub api_key: Option<String>,
 }
