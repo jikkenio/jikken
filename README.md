@@ -1,3 +1,5 @@
+[![Crates.io](https://img.shields.io/crates/v/jikken)](https://crates.io/crates/jikken)
+
 jikken (jk)
 -----------
 Jikken is a powerful REST API testing toolkit that is source control friendly. This project is currently in early beta.
@@ -29,15 +31,20 @@ $ brew tap jikkenio/jikken
 $ brew install jikken
 ```
 
-If you are a Rust developer you can install directly from the repo using Cargo.
+If you are a Rust developer you can install from crates.io using cargo.
+
+```
+$ cargo install jikken
+```
+or directly from the repository using cargo's git flag
 
 ```
 $ cargo install --git http://www.github.com/jikkenio/jikken
 ```
 
-Support for chocolatey, scoop, and crates.io are planned (hopefully soon). If you have a favorite package manager or platform that you'd like to see us support, feel free to open [an issue](https://github.com/jikkenio/jikken/issues/new/choose).
+Support for chocolatey and scoop are planned (hopefully soon). If you have a favorite package manager or platform that you'd like to see us support, feel free to open [an issue](https://github.com/jikkenio/jikken/issues/new/choose).
 
-If you would like to install from source, cargo is your best bet. All you need to do is git clone the repo and then cargo install from the repo directory.
+If you would like to manually install from source, cargo is still your best bet. All you need to do is git clone the repo and then cargo install from the repo directory.
 
 ```
 $ git clone https://github.com/jikkenio/jikken.git
