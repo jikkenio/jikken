@@ -1,7 +1,25 @@
 [package]
-name = "jk"
+name = "jikken"
 version = "0.1.0"
 edition = "2021"
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = """
+jikken is a cli tool for automated API testing. it recursively
+searches directories for JKT files (Jikken Test Definitions)
+which will execute jobs for testing APIs.
+it has first class support on Windows, macOS, and Linux.
+"""
+documentation = "https://github.com/jikkenio/jikken"
+homepage = "https://github.com/jikkenio/jikken"
+repository = "https://github.com/jikkenio/jikken"
+keywords = ["test", "testing", "api", "tool"]
+categories = ["command-line-utilities", "development-tools"]
+license = "MIT"
+
+[[bin]]
+name = "jk"
+path = "src/main.rs"
+bench = false
 
 [dependencies]
 hyper = { version = "0.14", features = ["full"] }
@@ -12,7 +30,7 @@ toml = { version = "0.5" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
-indicatif = {version = "*", features = ["rayon"]}
+indicatif = {version = "0.17", features = ["rayon"]}
 exitcode = {version = "1.1"}
 chrono = {version = "0.4"}
 log = {version = "0.4", features = ["std"]}
