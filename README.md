@@ -1,3 +1,4 @@
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/jikkenio/jikken)](https://github.com/jikkenio/jikken/releases/tag/v0.1.0)
 [![Crates.io](https://img.shields.io/crates/v/jikken)](https://crates.io/crates/jikken)
 
 jikken (jk)
