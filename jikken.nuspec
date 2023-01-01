@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Do not remove this test for UTF-8: if “Ω” doesn’t appear as greek uppercase omega letter enclosed in quotation marks, you should use an editor that supports UTF-8, not this one. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>jikken</id>
+    <version>0.1.0</version>
+    <packageSourceUrl>https://github.com/jikkenio/jikken</packageSourceUrl>
+    <owners>Louis Russo</owners>
+    <title>jikken (jk)</title>
+    <authors>Louis Russo</authors>
+    <projectUrl>https://github.com/jikkenio/jikken</projectUrl>
+    <licenseUrl>https://github.com/jikkenio/jikken/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/jikkenio/jikken</projectSourceUrl>
+    <docsUrl>https://github.com/jikkenio/jikken</docsUrl>
+    <tags>jikken tools testing api developer</tags>
+    <summary>a powerful cli tool for automated API testing</summary>
+    <description>jikken is a cli tool for automated API testing. it recursively searches directories for JKT files (Jikken Test Definitions) which will execute jobs for testing APIs. It has first class support on Windows, macOS, and Linux.</description>
+  </metadata>
+  <files>
+    <file src="target\release\jk.exe" target="jk.exe" />
+  </files>
+</package>
