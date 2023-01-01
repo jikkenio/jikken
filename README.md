@@ -104,6 +104,7 @@ Jikken executes tests which are defined in a yaml/json format. It searches for f
 
 ```yaml
 name: 
+id: 
 tags: 
 requires: 
 iterate: 
@@ -156,7 +157,84 @@ variables:
       operation: 
       value: 
       unit: 
+    format:
 ```
+
+Test Definition Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| name | `User Login` | [Optional] An optional name used for providing a useful label when test executions pass/fail. If this value is not provided the tool will simply refer to the test as the number in the execution. |
+| id | `7431857f-7e00-40b7-ac2c-077d230dff1c` | [Optional] An optional identifier for tracking a test across many runs. This should be a unique string which can be used to map this test across changes over time. If you adjust things like parameters, variables, filtering, but still want this test to be "the same" as it was prior to the file changes then this is a good way to track them. GUIDs/UUIDs are good ideas for this field but any string that is unique from other tests is valid. If this field is not present, a hash of the test file's contents will serve as the uniqueness identifier so any change will treat this test as a new one vs the old version. |
+| tags | `regression smoke login` | [Optional] An optional list of terms used for organizing test runs. Currently tags are provided as a white space delimited string. |
+| requires | `7431857f-7e00-40b7-ac2c-077d230dff1c` | [Optional] An optional requires string should provide a value that matches the *id* of another test. This will enforce an order of execution where the required tests are executed prior to their dependents. This is useful for variable extraction where a value from one call is passed along into a future call. Currently this only supports a single value. In the future we plan to support more robust dependency graphing of test execution, but we're testing out a few possible designs before choosing a path forward. |
+| iterate | `5` | [Optional] An optional value provided which indicates the number of times this test should be repeated per run. When variables are defined for the test, based on the generative nature of those variables, each iteration will pass in different values. This can be useful if you have a set of varying parameters or data you want to send to the same URIs to test, you don't need to define separate files for each run. |
+| request | | The request structure defines the API endpoint to call. The details of this structure are defined in a separate table. |
+| compare | | [Optional] The optional request to make when comparing two different endpoints. This is very useful when you want to validate two different environments or versions of an API. You can point the normal request at the new code in a QA/Staging environment and point the comparison endpoint at the existing production API. Then you can compare the results to see if there are any regressions between the new code results and the existing production deployment results. The details of this structure are defined in a separate table. |
+| response | | [Optional] The optional response to validate the request against. If you don't provide either a `compare` or a `response` then the test isn't effectively validating/checking anything. The details of this structure are defined in a separate table. |
+| variables | | [Optional] The optional list of locally defined variables. These variables allow you to embed generated values into your requests for testing purposes. These variables currently support embedding into `Request.Url`, `Request.Headers`, `Request.Params`, `Compare.Url`, `Compare.Headers`, `Compare.AddHeaders`, `Compare.Params`, and `Compare.AddParams`. We plan to expand the scope of what these variables can do as well as where they can be injected. The details of this structure are defined in a separate table. | 
+
+Request Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| method | `Post` | [Optional] The Http Verb to use for the request. Supported values are: `Get`, `Post`, `Put`, and `Patch`. If this field is not provided it defaults to `Get`. |
+| url | `http://api.myurl.com` | The Url to call with the defined request. This field supports injecting both global and local variables. | 
+| params | | [Optional] The optional list of query parameters to attach to the url request. The details of this structure are defined in a separate table. |
+| headers | | [Optional] The optional list of http headers to send with the http request. The details of this structure are defined in a separate table. | 
+| body | `{ "test": "response" }` | [Optional] The optional JSON body sent with the request. Currently this only supports a JSON literal as defined in the test file. In the future we will be adding support for loading this value from a file. This field also does not currently support variable embeddings but that is on our roadmap. |
+
+Compare Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| method | `Post` | [Optional] The Http Verb to use for the request. Supported values are: `Get`, `Post`, `Put`, and `Patch`. If this field is not provided it defaults to `Get`. |
+| url | `http://api.myurl.com` | The Url to call with the defined request. This field supports injecting both global and local variables. | 
+| params | | [Optional] The optional list of query parameters to attach to the url request. For the compare structure, if this field is missing the default behavior is to send the same query parameters as defined in the base `request.params` test definition. This simplifies the common case of testing old/new versions without defining parameters twice. If this field *is* provided then the request parameters are NOT sent to the compare url. The details of this structure are defined in a separate table. |
+| addParams | | [Optional] The optional list of additional query parameters to attach to the url request. If the comparison address wants all of the original `request.params` with some additional ones, this structure allows you to include extra parameters. This field uses the same structure as the normal `params` object. The details of this structure are defined in a separate table. |
+| ignoreParams | `- foo` | [Optional] The optional list of query parameters to not send. This field allows you to provide parameters from the base `request.params` object that you do not wish to include in the compare request. |
+| headers | | [Optional] The optional list of http headers to send with the http request. For the compare structure, if this field is missing the default behavior is to send the same http headers as defined in the base `request.headers` test definition. This simplifies the common case of testing old/new versions without defining headers twice. If this field *is* provided then the request headers are NOT sent to the compare url. The details of this structure are defined in a separate table. | 
+| addHeaders | [Optional] The optional list of additional http headers to send with the http request. If the comparison address wants all of the original `request.headers` with some additional ones, this structure allows you to include extra http headers. This field uses the same structure as the normal `headers` object. The details of this structure are defined in a separate table. |
+| ignoreHeaders | `- Authorization` | [Optional] The optional list of http headers to not send. This field allows you to provide headers from the base `request.headers` object that you do not wish to include in the compare request. |
+| body | `{ "test": "response" }` | [Optional] The optional JSON body sent with the request. Currently this only supports a JSON literal as defined in the test file. In the future we will be adding support for loading this value from a file. This field also does not currently support variable embeddings but that is on our roadmap. |
+
+Response Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| status | `200` | [Optional] The response status code expected when running the test. We recommend defining this in most cases as it will be a great indicator of unforseen problems such as authorization issues, gateway/proxy issues, etc. |
+| headers | | [Optional] The expected http headers to validate against the received response. **NOTE** this is simply a placeholder, the tool does not currently validate header responses. |
+| body | `{ "test": "response" }` | [Optional] The optional JSON body to compare the received response with. Currently this only supports a JSON literal as defined in the test file. In the future we will be adding support for loading this value from a file. This field also does not currently support variable embeddings but that is on our roadmap. |
+| ignore | `- data.users.lastLogin` | [Optional] The optional list of json fields to ignore when doing body comparisons. This can be useful when there are runtime dependent fields in the response JSON. An example, if an API has a timestamp which indicates the most recent time when an activity occurred. While running the test with known good data, it's possible this timestamp will not match as it can frequently change even when the additional data should not change. This allows you to prune out sections of JSON in the received response prior to comparing the data between the `request` and `compare` url responses. It also can help when comparing between the `request` response data and the defined `response.body` structure. This notation supports traversing both arrays and objects, so if a segment is an array it will prune the field from ALL objects in the array. |
+| extract | | [Optional] The optional list of variable extraction terms. This field allows you to extract fields from a JSON response and store them into a variable which can then be injected into subsequent tests. The details of this structure are defined in a separate table. |
+
+Variables Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| name | `foo` | The name of the variable. This is used for referencing the places you want to inject it. Variable names need to be unique or they will overwrite eachother. If a global variable is defined with a given name and a local variable has the same name, the local variable will overwrite the global. |
+| dataType | `Int` | The data type of the variable. Current defined values are: `Int`, `String`, `Date`, and `Datetime`. **NOTE** `Datetime` is a placeholder and is not currently supported but will be added in the near future. The data type is used when handling value generation and modifier operations. Our plan for the future is to remove the requirement of this field and to allow mix-mode types for sequence values (arrays). For now you can use `String` to cover mixed data types when using sequence values (arrays). | 
+| value | `[1, 5, 23143]` | The value to store in the variable when embedding it. This supports single values or JSON Sequences (arrays) as defined by a comma delimited list surrounded by `[]`. When a sequence is present, each iteration will grab the next value in the sequence. In this example the first iteration would inject the value `1`, the second iteration would inject the values `5`, and the third iteration would inject `23143`. If you iterated a fourth time it would wrap around and repeat the values. This allows you to do have varying length sequences for different variables and cycle combinations between them as you iterate. |
+| modifier | | [Optional] The modifier object allows you to define simple operations against the variable value. This is useful when leveraging extracted variables or globals. This structure currently is only supported for `Date` types but we plan to expand things to other scenarios. |
+| modifier.operation | `subtract` | The modifier operation indicates the operation to perform. Currently this supports `add` and `subtract`. |
+| modifier.value | `3` | The modifier value indicates the amount to modify the variable's value. Currently this only supports unsigned integers (positive whole numbers only).  |
+| modifier.unit | `days `| The modifier unit indicates the unit of value to modify the variable by. This currently supports `days`, `weeks`, and `months`. What this allows is a test to starts with the value for `$TODAY$` and then the ability to add/subtract a provided number of days, weeks, or months with the starting date. We plan to expand this capability with a number of operations for other data types. |
+| format | `%Y-%m-%d` | [Optional] The format field is used to define a string formatter pattern when generating the values. **NOTE** This field is a placeholder, but is not currently used. We are looking at options of different ways we want to support formating various data types. |
+
+Params Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| param | `foo` | The query field name. |
+| value | `bar` | The query parameter value. |
+
+With this provided example the request would turn into `<url>?foo=bar`.
+
+Headers Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| header | `Authorization` | The http header key. |
+| value | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c` | The http header value. In this example a dummy JWT is embedded. |
+
+Response Extract Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| name | `authToken` | The name of the variable to store the extracted field into. |
+| field | `token` | The json path defined for the response structure to grab the value. In this case the expected response structure is an object with a first level field called `token`. This path does support nested path traversal similar to the `response.ignore` definitions. So you could define things such as `data.user.token` if the structure had nested objects that contained the field you wish to extract. |
 
 ### Config File Format
 
