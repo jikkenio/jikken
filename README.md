@@ -228,7 +228,7 @@ Headers Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | header | `Authorization` | The http header key. |
-| value | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c` | The http header value. In this example a dummy JWT is embedded. |
+| value | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` | The http header value. |
 
 Response Extract Structure
 | Field | Example | Description |
