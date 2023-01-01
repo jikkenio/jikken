@@ -18,6 +18,7 @@
     <description>jikken is a cli tool for automated API testing. it recursively searches directories for JKT files (Jikken Test Definitions) which will execute jobs for testing APIs. It has first class support on Windows, macOS, and Linux.</description>
   </metadata>
   <files>
-    <file src="target\release\jk.exe" target="jk.exe" />
+    <file src=".choco\**" target=".choco" />
+    <file src="target\release" target="jk.exe" />
   </files>
 </package>
