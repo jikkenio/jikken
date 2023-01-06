@@ -1,3 +1,13 @@
+Next (Version determined when release is cut)
+=====
+
+Bugfixes:
+* Fix label when printing tests by number. They now print starting at 1 instead of 0.
+
+Features:
+* Improved test execution with invalid urls. Now properly prints out helpful error and fails the test.
+* Consolidated two modes of test runs into a single code path. This simplifies expanding test_runner functionality in the future.
+
 0.1.0
 =====
 Initial release of the Jikken CLI tool.

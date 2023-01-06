@@ -338,7 +338,7 @@ impl TestVariable {
             }
             serde_yaml::Value::Mapping(map) => {
                 trace!("map expression: {:?}", map);
-                return String::from("no");
+                return String::from("");
             }
             _ => {
                 return String::from("");
