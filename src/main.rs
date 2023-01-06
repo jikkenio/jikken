@@ -78,7 +78,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         None
     };
 
-    let mut result_settings = config::Settings{
+    let mut result_settings = config::Settings {
         continue_on_failure: None,
         api_key: None,
     };
@@ -106,7 +106,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
             globals: c.globals,
         });
     }
-    
+
     Some(config::Config {
         settings: Some(config::Settings {
             continue_on_failure: envvar_cof,
@@ -189,7 +189,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut continue_on_failure = false;
 
     info!("Jikken found {} tests.", files.len());
-    
+
     if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
             if let Some(cof) = settings.continue_on_failure {
