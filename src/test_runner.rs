@@ -41,7 +41,7 @@ impl TestRunner {
             "Running Test ({}\\{}) `{}` Iteration({}\\{})...",
             count + 1,
             total,
-            td.name.clone().unwrap_or(format!("Test {}", count)),
+            td.name.clone().unwrap_or(format!("Test {}", count + 1)),
             iteration + 1,
             td.iterate
         );
