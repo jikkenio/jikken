@@ -31,6 +31,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    dry_run: bool,
 }
 
 // TODO: Add ignore and filter out hidden etc
@@ -312,15 +315,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let total_count = tests_to_run_with_dependencies.len();
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
-        // let json_string = serde_json::to_string(&td)?;
-        // println!("json: {}", json_string);
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         for iteration in 0..boxed_td.iterate {
-            let passed = runner
+            let passed = if args.dry_run {
+                runner
+                .dry_run(boxed_td.as_ref(), i, total_count, iteration)
+                .await
+            } else {
+                runner
                 .run(boxed_td.as_ref(), i, total_count, iteration)
-                .await;
-
+                .await
+            };
+                
             if !continue_on_failure && !passed {
                 std::process::exit(1);
             }

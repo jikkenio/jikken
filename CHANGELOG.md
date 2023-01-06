@@ -7,6 +7,7 @@ Bugfixes:
 Features:
 * Improved test execution with invalid urls. Now properly prints out helpful error and fails the test.
 * Consolidated two modes of test runs into a single code path. This simplifies expanding test_runner functionality in the future.
+* Added dry-run mode. This is a new CLI argument (-d) which prints a description of the steps that will happen without actually calling the apis.
 
 0.1.0
 =====
