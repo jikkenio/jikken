@@ -135,7 +135,7 @@ Jikken found 8 tests
 
 ### Test Definition Format
 
-Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [https://github.com/jikkenio/jikken/tree/main/example_tests](here).
+Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [here](example_tests).
 
 ```yaml
 name: 
