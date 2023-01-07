@@ -323,7 +323,7 @@ impl TestRunner {
         if let Some(r) = &td.response {
             // compare to response definition
             if let Some(td_response_status) = r.status {
-                println!("validate Request status with defined status: {}", td_response_status);
+                println!("validate request_status with defined_status: {}", td_response_status);
             }
 
             for v in &r.extract {
@@ -331,9 +331,9 @@ impl TestRunner {
             }
 
             if r.ignore.len() > 0 {
-                println!("prune out fields from response_body");
+                println!("prune fields from response_body");
                 for i in r.ignore.iter() {
-                    println!("filter out: {}", i);
+                    println!("filter: {}", i);
                 }
             }
 
@@ -397,9 +397,9 @@ impl TestRunner {
 
             if let Some(r) = &td.response {
                 if r.ignore.len() > 0 {
-                    println!("prune out fields from compare_response_body");
+                    println!("prune fields from compare_response_body");
                     for i in r.ignore.iter() {
-                        println!("filter out: {}", i);
+                        println!("filter: {}", i);
                     }
                     println!("validate filtered response_body matches filtered compare_response_body");
                 } else {
