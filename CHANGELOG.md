@@ -1,3 +1,17 @@
+Next (Version determined when release is cut)
+=====
+
+0.2.0
+=====
+
+Bugfixes:
+* Fix label when printing tests by number. They now print starting at 1 instead of 0.
+
+Features:
+* Improved test execution with invalid urls. Now properly prints out helpful error and fails the test.
+* Consolidated two modes of test runs into a single code path. This simplifies expanding test_runner functionality in the future.
+* Added dry-run mode. This is a new CLI argument (-d) which prints a description of the steps that will happen without actually calling the apis.
+
 0.1.0
 =====
 Initial release of the Jikken CLI tool.
