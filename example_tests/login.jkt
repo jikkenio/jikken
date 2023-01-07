@@ -1,0 +1,13 @@
+id: auth
+request:
+  method: Post
+  url: https://api.jikken.io/v1/test_login
+  body: {
+    "username": "testuser",
+    "password": "password"
+  }
+response:
+  status: 200
+  extract:
+    - name: token
+      field: auth.token

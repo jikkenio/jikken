@@ -16,6 +16,7 @@ Release history can be viewed in the [CHANGELOG](CHANGELOG.md).
 * [Installation](#installation)
 * [User Guide](#user-guide)
 * [Test Definition Format](#test-definition-format)
+  * [Test Examples](example_tests)
 * [Config File Format](#config-file-format)
 * [Environment Variables](#environment-variables)
 
@@ -77,6 +78,40 @@ Running Test (2\2) `My API Test` Iteration(1\2)...PASSED!
 Running Test (2\2) `My API Test` Iteration(2\2)...PASSED!
 ```
 
+If you are working on developing new tests, or if you'd like to see what will run without actually running it, Jikken supports a `dry-run` argument. This will print out a report of steps that would occur under a normal run.
+
+```
+$ jk
+Jikken found 3 tests.
+Dry Run Test (1\3) `Test 1` Iteration(1\1)
+request: POST https://api.jikken.io/v1/test_login
+request_headers:
+-- Content-Type: application/json
+request_body: { "username":"testuser", "password":"password" }
+validate request_status with defined status: 200
+attempt to extract value from response: token = valueOf(auth.token)
+Dry Run Test (2\3) `Check Status` Iteration(1\1)
+request: GET https://api.jikken.io/v1/test_status
+request_headers:
+-- Authorization: $token$
+validate request_status with defined status: 200
+Dry Run Test (3\3) `Compare StatusV2 and StatusV1` Iteration(1\1)
+request: GET https://api.jikken.io/v2/test_status
+request_headers:
+-- Authorization: $token$
+validate request_status with defined status: 200
+prune fields from response_body
+filter: user.lastActivity
+comparison mode
+compare_request: GET https://api.jikken.io/v1/test_status
+compare_headers:
+-- Authorization: $token$
+validate request_status_code matches compare_request_status_code
+prune fields from compare_response_body
+filter: user.lastActivity
+validate filtered response_body matches filtered compare_response_body
+```
+
 Tests also support having tags. You can leverage tags and tag combinations to pinpoint execution of desired tests. For example if you tag specific tests for "regression" then you can invoke the tool to only run regression tests.
 
 ```
@@ -100,7 +135,7 @@ Jikken found 8 tests
 
 ### Test Definition Format
 
-Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken.
+Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [here](example_tests).
 
 ```yaml
 name: 

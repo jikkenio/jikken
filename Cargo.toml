@@ -1,8 +1,8 @@
 [package]
 name = "jikken"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-authors = ["Andrew Gallant <jamslam@gmail.com>"]
+authors = ["Louis Russo <louis@jikken.io>"]
 description = """
 jikken is a cli tool for automated API testing. it recursively
 searches directories for JKT files (Jikken Test Definitions)
@@ -30,9 +30,10 @@ toml = { version = "0.5" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
-indicatif = {version = "0.17", features = ["rayon"]}
-exitcode = {version = "1.1"}
-chrono = {version = "0.4"}
-log = {version = "0.4", features = ["std"]}
+indicatif = {version = "0.17", features = ["rayon"] }
+exitcode = {version = "1.1" }
+chrono = {version = "0.4" }
+log = {version = "0.4", features = ["std"] }
 clap = { version = "4.0", features = ["derive"] }
-assert-json-diff = { version = "2.0.2" }
+assert-json-diff = { version = "2.0" }
+url = { version = "2.3" }

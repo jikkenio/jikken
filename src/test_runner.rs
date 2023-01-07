@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
+use url::Url;
 
 pub struct TestRunner {
     run: u16,
@@ -41,18 +42,14 @@ impl TestRunner {
             "Running Test ({}\\{}) `{}` Iteration({}\\{})...",
             count + 1,
             total,
-            td.name.clone().unwrap_or(format!("Test {}", count)),
+            td.name.clone().unwrap_or(format!("Test {}", count + 1)),
             iteration + 1,
             td.iterate
         );
         io::stdout().flush().unwrap();
 
         self.run += 1;
-        let result = if td.compare.is_some() {
-            self.validate_td_comparison_mode(td, iteration).await
-        } else {
-            self.validate_td(td, iteration).await
-        };
+        let result = self.validate_td(td, iteration).await;
 
         match result {
             Ok(_) => {
@@ -69,101 +66,49 @@ impl TestRunner {
         }
     }
 
-    // TODO: Possibly refactor/combine logic to avoid duplication with comparison mode
-    async fn validate_td(
+    pub async fn dry_run(
         &mut self,
         td: &TestDefinition,
+        count: usize,
+        total: usize,
         iteration: u32,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri = &td.get_request_url(iteration);
-        let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    ) -> bool {
+        println!(
+            "Dry Run Test ({}\\{}) `{}` Iteration({}\\{})",
+            count + 1,
+            total,
+            td.name.clone().unwrap_or(format!("Test {}", count + 1)),
+            iteration + 1,
+            td.iterate
+        );
 
-        let mut req_builder = Request::builder().uri(uri);
-        req_builder = req_builder.method(&td.request.method.as_method());
+        self.run += 1;
+        let result = self.validate_dry_run(td, iteration);
 
-        for header in td.get_request_headers(iteration) {
-            let mut header_value: String = header.1;
-
-            for gv in self.global_variables.iter() {
-                let key_search = format!("${}$", gv.0);
-                header_value = header_value.replace(&key_search, gv.1);
+        match result {
+            Ok(_) => {
+                return true;
             }
-
-            req_builder = req_builder.header(header.0, header_value);
-        }
-
-        let req_body = match &td.request.body {
-            Some(b) => {
-                req_builder = req_builder
-                    .header("Content-Type", HeaderValue::from_static("application/json"));
-                Body::from(b.to_string())
-            }
-            None => Body::empty(),
-        };
-
-        let req = req_builder.body(req_body).unwrap();
-        let resp = client.request(req).await?;
-
-        let ignored_json_fields = match &td.response {
-            Some(r) => r.ignore.to_owned(),
-            None => Vec::new(),
-        };
-
-        if let Some(r) = &td.response {
-            let (parts, body) = resp.into_parts();
-
-            let bytes = body::to_bytes(body).await?;
-            match serde_json::from_slice(bytes.as_ref()) {
-                Ok(l) => {
-                    let rv: Value = l;
-                    for v in &r.extract {
-                        match extract_json(&v.field, 0, rv.clone()) {
-                            Ok(result) => {
-                                let converted_result = match result {
-                                    serde_json::Value::Bool(b) => b.to_string(),
-                                    serde_json::Value::Number(n) => n.to_string(),
-                                    serde_json::Value::String(s) => s.to_string(),
-                                    _ => "".to_string(),
-                                };
-                                self.global_variables
-                                    .insert(v.name.clone(), converted_result);
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    if let Some(b) = &r.body {
-                        TestRunner::validate_body(rv, b.clone(), ignored_json_fields)?;
-                    }
-                }
-                Err(e) => {
-                    error!("{}", e);
-                    return Err(Box::from(TestFailure {
-                        reason: "response is not valid JSON".to_string(),
-                    }));
-                }
-            }
-
-            if let Some(code) = r.status {
-                TestRunner::validate_status_code(parts.status, code)?;
+            Err(e) => {
+                println!("{}", e);
+                return false;
             }
         }
-
-        Ok(true)
     }
 
-    // TODO: Possibly refactor/combine logic to avoid so much duplication
-    async fn validate_td_comparison_mode(
-        &mut self,
-        td: &TestDefinition,
-        iteration: u32,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let uri_compare = td.get_compare_url(iteration);
-        let uri = &td.get_request_url(iteration);
+    async fn validate_td(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
+        // construct request block
+        let uri = &td.get_request_url(iteration);
         trace!("Url: {}", uri);
-        trace!("Compare_Url: {}", uri_compare);
+
+        match Url::parse(uri) {
+            Ok(_) => {}
+            Err(error) => {
+                return Err(Box::from(format!("invalid request url: {}", error)));
+            }
+        }
 
         let mut req_builder = Request::builder().uri(uri);
         req_builder = req_builder.method(&td.request.method.as_method());
@@ -179,11 +124,176 @@ impl TestRunner {
             req_builder = req_builder.header(&header.0, header_value);
         }
 
-        let mut req_comparison_builder = Request::builder().uri(uri_compare);
-        req_comparison_builder =
-            req_comparison_builder.method(&td.compare.clone().unwrap().method.as_method());
+        let req_body = match &td.request.body {
+            Some(b) => {
+                req_builder = req_builder
+                    .header("Content-Type", HeaderValue::from_static("application/json"));
+                Body::from(b.to_string())
+            }
+            None => Body::empty(),
+        };
 
-        for header in td.get_compare_headers(iteration) {
+        let req_opt = req_builder.body(req_body);
+        let mut req_compare_opt: Option<_> = None;
+
+        if let Some(td_compare) = &td.compare {
+            // construct compare block
+            let uri_compare = &td.get_compare_url(iteration);
+            trace!("Compare_Url: {}", uri_compare);
+
+            match Url::parse(uri_compare) {
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(Box::from(format!("invalid compare url: {}", error)));
+                }
+            }
+
+            let mut req_comparison_builder = Request::builder().uri(uri_compare);
+            req_comparison_builder = req_comparison_builder.method(&td_compare.method.as_method());
+
+            for header in td.get_compare_headers(iteration) {
+                let mut header_value: String = header.1;
+
+                for gv in self.global_variables.iter() {
+                    let key_search = format!("${}$", gv.0);
+                    header_value = header_value.replace(&key_search, gv.1);
+                }
+
+                req_comparison_builder = req_comparison_builder.header(&header.0, header_value);
+            }
+
+            let req_compare_body = match &td_compare.body {
+                Some(b) => {
+                    req_comparison_builder = req_comparison_builder
+                        .header("Content-Type", HeaderValue::from_static("application/json"));
+                    Body::from(b.to_string())
+                }
+                None => Body::empty(),
+            };
+
+            req_compare_opt = Some(req_comparison_builder.body(req_compare_body));
+        }
+
+        match req_opt {
+            Ok(req) => {
+                let resp = client.request(req).await?;
+                let response_status = resp.status();
+                let (_, body) = resp.into_parts();
+                let response_bytes = body::to_bytes(body).await?;
+
+                if let Some(r) = &td.response {
+                    // compare to response definition
+                    if let Some(td_response_status) = r.status {
+                        TestRunner::validate_status_code(response_status, td_response_status)?;
+                    }
+
+                    match serde_json::from_slice(response_bytes.as_ref()) {
+                        Ok(l) => {
+                            let rv: Value = l;
+                            for v in &r.extract {
+                                match extract_json(&v.field, 0, rv.clone()) {
+                                    Ok(result) => {
+                                        let converted_result = match result {
+                                            serde_json::Value::Bool(b) => b.to_string(),
+                                            serde_json::Value::Number(n) => n.to_string(),
+                                            serde_json::Value::String(s) => s.to_string(),
+                                            _ => "".to_string(),
+                                        };
+                                        self.global_variables
+                                            .insert(v.name.clone(), converted_result);
+                                    }
+                                    Err(error) => {
+                                        println!("no json result found: {}", error);
+                                    }
+                                }
+                            }
+
+                            if let Some(b) = &r.body {
+                                TestRunner::validate_body(rv, b.clone(), r.ignore.clone())?;
+                            }
+                        }
+                        Err(e) => {
+                            error!("{}", e);
+                            return Err(Box::from(TestFailure {
+                                reason: "response is not valid JSON".to_string(),
+                            }));
+                        }
+                    }
+                }
+
+                if let Some(req_compare_result) = req_compare_opt {
+                    match req_compare_result {
+                        Ok(req_compare) => {
+                            // compare to comparison response
+                            let resp_compare = client.request(req_compare).await?;
+                            TestRunner::validate_status_codes(
+                                response_status,
+                                resp_compare.status(),
+                            )?;
+
+                            let data_compare = body::to_bytes(resp_compare.into_body()).await?;
+                            let ignored_json_fields = match &td.response {
+                                Some(r) => r.ignore.to_owned(),
+                                None => Vec::new(),
+                            };
+
+                            match serde_json::from_slice(response_bytes.as_ref()) {
+                                Ok(data_json) => {
+                                    match serde_json::from_slice(data_compare.as_ref()) {
+                                        Ok(data_compare_json) => {
+                                            TestRunner::validate_body(
+                                                data_json,
+                                                data_compare_json,
+                                                ignored_json_fields,
+                                            )?;
+                                        }
+                                        Err(e) => {
+                                            error!("{}", e);
+                                            return Err(Box::from(TestFailure {
+                                                reason: "comparison response is not valid JSON"
+                                                    .to_string(),
+                                            }));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("{}", e);
+                                    return Err(Box::from(TestFailure {
+                                        reason: "response is not valid JSON".to_string(),
+                                    }));
+                                }
+                            };
+                        }
+                        Err(error) => {
+                            return Err(Box::from(format!("bad compare result: {}", error)));
+                        }
+                    }
+                }
+            }
+            Err(error) => {
+                return Err(Box::from(format!("bad request result: {}", error)));
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn validate_dry_run(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        // construct request block
+        let uri = &td.get_request_url(iteration);
+        trace!("Url: {}", uri);
+
+        match Url::parse(uri) {
+            Ok(_) => {}
+            Err(error) => {
+                return Err(Box::from(format!("invalid request url: {}", error)));
+            }
+        }
+
+        let request_method = &td.request.method.as_method().to_string();
+        let mut request_headers = HashMap::new();
+
+        for header in td.get_request_headers(iteration) {
             let mut header_value: String = header.1;
 
             for gv in self.global_variables.iter() {
@@ -191,50 +301,114 @@ impl TestRunner {
                 header_value = header_value.replace(&key_search, gv.1);
             }
 
-            req_comparison_builder = req_comparison_builder.header(&header.0, header_value);
+            request_headers.insert(header.0, header_value);
         }
 
-        // TODO: support bodies for comparison request
-        let req = req_builder.body(Body::empty()).unwrap();
-        let req_comparison = req_comparison_builder.body(Body::empty()).unwrap();
+        let req_body = match &td.request.body {
+            Some(b) => {
+                request_headers.insert("Content-Type".to_string(), "application/json".to_string());
+                Body::from(b.to_string())
+            }
+            None => Body::empty(),
+        };
 
-        let resp = client.request(req).await?;
-        let resp_compare = client.request(req_comparison).await?;
+        println!("request: {} {}", request_method, uri);
+        println!("request_headers: ");
+        for (key, value) in request_headers.iter() {
+            println!("-- {}: {}", key, value);
+        }
 
-        TestRunner::validate_status_codes(resp.status(), resp_compare.status())?;
+        println!("request_body: {:?}", req_body);
 
-        if let Some(td_response) = &td.response {
-            if let Some(td_response_status) = td_response.status {
-                TestRunner::validate_status_code(resp.status(), td_response_status)?;
+        if let Some(r) = &td.response {
+            // compare to response definition
+            if let Some(td_response_status) = r.status {
+                println!("validate request_status with defined_status: {}", td_response_status);
+            }
+
+            for v in &r.extract {
+                println!("attempt to extract value from response: {} = valueOf({})", v.name, v.field);
+            }
+
+            if r.ignore.len() > 0 {
+                println!("prune fields from response_body");
+                for i in r.ignore.iter() {
+                    println!("filter: {}", i);
+                }
+            }
+
+            if let Some(b) = &r.body
+            {   
+                if r.ignore.len() > 0 {
+                    println!("validate filtered response_body matches defined body: {}", b);
+                } else {
+                    println!("validate response_body matches defined body: {}", b);
+                }
             }
         }
 
-        let data = body::to_bytes(resp.into_body()).await?;
-        let data_compare = body::to_bytes(resp_compare.into_body()).await?;
-        let ignored_json_fields = match &td.response {
-            Some(r) => r.ignore.to_owned(),
-            None => Vec::new(),
-        };
+        if let Some(td_compare) = &td.compare {
+            // construct compare block
+            let uri_compare = &td.get_compare_url(iteration);
+            trace!("Compare_Url: {}", uri_compare);
 
-        match serde_json::from_slice(data.as_ref()) {
-            Ok(data_json) => match serde_json::from_slice(data_compare.as_ref()) {
-                Ok(data_compare_json) => {
-                    TestRunner::validate_body(data_json, data_compare_json, ignored_json_fields)?;
+            match Url::parse(uri_compare) {
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(Box::from(format!("invalid compare url: {}", error)));
                 }
-                Err(e) => {
-                    error!("{}", e);
-                    return Err(Box::from(TestFailure {
-                        reason: "comparison response is not valid JSON".to_string(),
-                    }));
-                }
-            },
-            Err(e) => {
-                error!("{}", e);
-                return Err(Box::from(TestFailure {
-                    reason: "response is not valid JSON".to_string(),
-                }));
             }
-        };
+
+            let request_compare_method = &td_compare.method.as_method().to_string();
+            let mut request_compare_headers = HashMap::new();
+
+            for header in td.get_compare_headers(iteration) {
+                let mut header_value: String = header.1;
+
+                for gv in self.global_variables.iter() {
+                    let key_search = format!("${}$", gv.0);
+                    header_value = header_value.replace(&key_search, gv.1);
+                }
+
+                request_compare_headers.insert(header.0, header_value);
+            }
+
+            let req_compare_body = match &td_compare.body {
+                Some(b) => {
+                    request_compare_headers.insert("Content-Type".to_string(), "application/json".to_string());
+                    Body::from(b.to_string())
+                }
+                None => Body::empty(),
+            };
+
+            println!("comparison mode");
+            println!("compare_request: {} {}", request_compare_method, uri_compare);
+            println!("compare_headers: ");
+            
+
+            for (key, value) in request_compare_headers.iter() {
+                println!("-- {}: {}", key, value);
+            }
+
+            println!("compare_body: {:?}", req_compare_body);
+
+            // compare to comparison response
+            println!("validate request_status_code matches compare_request_status_code");
+
+            if let Some(r) = &td.response {
+                if r.ignore.len() > 0 {
+                    println!("prune fields from compare_response_body");
+                    for i in r.ignore.iter() {
+                        println!("filter: {}", i);
+                    }
+                    println!("validate filtered response_body matches filtered compare_response_body");
+                } else {
+                    println!("validate response_body matches compare_response_body");
+                }
+            } else {
+                println!("validate response_body matches compare_response_body");
+            }   
+        }
 
         Ok(true)
     }

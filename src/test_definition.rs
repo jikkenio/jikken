@@ -338,7 +338,7 @@ impl TestVariable {
             }
             serde_yaml::Value::Mapping(map) => {
                 trace!("map expression: {:?}", map);
-                return String::from("no");
+                return String::from("");
             }
             _ => {
                 return String::from("");
@@ -708,7 +708,11 @@ impl TestDefinition {
             self.request.url.clone()
         };
 
-        format!("{}?{}", modified_url, joined.join("&"))
+        if joined.len() > 0 {
+            format!("{}?{}", modified_url, joined.join("&"))
+        } else {
+            modified_url
+        }
     }
 
     pub fn get_compare_url(&self, iteration: u32) -> String {
@@ -771,7 +775,11 @@ impl TestDefinition {
                     compare.url.clone()
                 };
 
-                format!("{}?{}", modified_url, joined.join("&"))
+                if joined.len() > 0 {
+                    format!("{}?{}", modified_url, joined.join("&"))
+                } else {
+                    modified_url
+                }
             }
             None => String::from(""),
         }
