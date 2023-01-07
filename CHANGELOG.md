@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+0.2.0
+=====
+
 Bugfixes:
 * Fix label when printing tests by number. They now print starting at 1 instead of 0.
 
