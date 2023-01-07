@@ -16,7 +16,7 @@ Release history can be viewed in the [CHANGELOG](CHANGELOG.md).
 * [Installation](#installation)
 * [User Guide](#user-guide)
 * [Test Definition Format](#test-definition-format)
-* * [Test Examples](https://github.com/jikkenio/jikken/tree/main/example_tests)
+  * [Test Examples](https://github.com/jikkenio/jikken/tree/main/example_tests)
 * [Config File Format](#config-file-format)
 * [Environment Variables](#environment-variables)
 
@@ -135,7 +135,7 @@ Jikken found 8 tests
 
 ### Test Definition Format
 
-Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken.
+Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [https://github.com/jikkenio/jikken/tree/main/example_tests](here).
 
 ```yaml
 name: 
