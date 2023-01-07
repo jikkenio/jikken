@@ -1,8 +1,8 @@
 [package]
 name = "jikken"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-authors = ["Andrew Gallant <jamslam@gmail.com>"]
+authors = ["Louis Russo <louis@jikken.io>"]
 description = """
 jikken is a cli tool for automated API testing. it recursively
 searches directories for JKT files (Jikken Test Definitions)
