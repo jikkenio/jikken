@@ -16,7 +16,7 @@ Release history can be viewed in the [CHANGELOG](CHANGELOG.md).
 * [Installation](#installation)
 * [User Guide](#user-guide)
 * [Test Definition Format](#test-definition-format)
-  * [Test Examples](https://github.com/jikkenio/jikken/tree/main/example_tests)
+  * [Test Examples](example_tests)
 * [Config File Format](#config-file-format)
 * [Environment Variables](#environment-variables)
 
