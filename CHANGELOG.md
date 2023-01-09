@@ -1,6 +1,10 @@
 Next (Version determined when release is cut)
 =====
 
+Features:
+* Minor adjustments to Example Tests
+
+
 0.2.0
 =====
 
