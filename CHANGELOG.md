@@ -3,6 +3,7 @@ Next (Version determined when release is cut)
 
 Features:
 * Minor adjustments to Example Tests
+* Clean-up dry-run console output
 
 
 0.2.0
