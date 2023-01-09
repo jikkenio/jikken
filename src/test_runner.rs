@@ -96,7 +96,11 @@ impl TestRunner {
         }
     }
 
-    async fn validate_td(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_td(
+        &mut self,
+        td: &TestDefinition,
+        iteration: u32,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
 
         // construct request block
@@ -278,7 +282,11 @@ impl TestRunner {
         Ok(true)
     }
 
-    fn validate_dry_run(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn validate_dry_run(
+        &mut self,
+        td: &TestDefinition,
+        iteration: u32,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         // construct request block
         let uri = &td.get_request_url(iteration);
         trace!("Url: {}", uri);
@@ -307,27 +315,41 @@ impl TestRunner {
         let req_body = match &td.request.body {
             Some(b) => {
                 request_headers.insert("Content-Type".to_string(), "application/json".to_string());
-                Body::from(b.to_string())
+                match serde_json::to_string(b) {
+                    Ok(body) => Some(body),
+                    Err(_) => None,
+                }
             }
-            None => Body::empty(),
+            None => None,
         };
 
         println!("request: {} {}", request_method, uri);
-        println!("request_headers: ");
-        for (key, value) in request_headers.iter() {
-            println!("-- {}: {}", key, value);
+
+        if request_headers.len() > 0 {
+            println!("request_headers: ");
+            for (key, value) in request_headers.iter() {
+                println!("-- {}: {}", key, value);
+            }
         }
 
-        println!("request_body: {:?}", req_body);
+        if let Some(body) = req_body {
+            println!("request_body: {}", body);
+        }
 
         if let Some(r) = &td.response {
             // compare to response definition
             if let Some(td_response_status) = r.status {
-                println!("validate request_status with defined_status: {}", td_response_status);
+                println!(
+                    "validate request_status with defined_status: {}",
+                    td_response_status
+                );
             }
 
             for v in &r.extract {
-                println!("attempt to extract value from response: {} = valueOf({})", v.name, v.field);
+                println!(
+                    "attempt to extract value from response: {} = valueOf({})",
+                    v.name, v.field
+                );
             }
 
             if r.ignore.len() > 0 {
@@ -337,10 +359,12 @@ impl TestRunner {
                 }
             }
 
-            if let Some(b) = &r.body
-            {   
+            if let Some(b) = &r.body {
                 if r.ignore.len() > 0 {
-                    println!("validate filtered response_body matches defined body: {}", b);
+                    println!(
+                        "validate filtered response_body matches defined body: {}",
+                        b
+                    );
                 } else {
                     println!("validate response_body matches defined body: {}", b);
                 }
@@ -375,22 +399,32 @@ impl TestRunner {
 
             let req_compare_body = match &td_compare.body {
                 Some(b) => {
-                    request_compare_headers.insert("Content-Type".to_string(), "application/json".to_string());
-                    Body::from(b.to_string())
+                    request_compare_headers
+                        .insert("Content-Type".to_string(), "application/json".to_string());
+                    match serde_json::to_string(b) {
+                        Ok(body) => Some(body),
+                        Err(_) => None,
+                    }
                 }
-                None => Body::empty(),
+                None => None,
             };
 
             println!("comparison mode");
-            println!("compare_request: {} {}", request_compare_method, uri_compare);
-            println!("compare_headers: ");
-            
+            println!(
+                "compare_request: {} {}",
+                request_compare_method, uri_compare
+            );
 
-            for (key, value) in request_compare_headers.iter() {
-                println!("-- {}: {}", key, value);
+            if request_compare_headers.len() > 0 {
+                println!("compare_headers: ");
+                for (key, value) in request_compare_headers.iter() {
+                    println!("-- {}: {}", key, value);
+                }
             }
 
-            println!("compare_body: {:?}", req_compare_body);
+            if let Some(body) = req_compare_body {
+                println!("compare_body: {}", body);
+            }
 
             // compare to comparison response
             println!("validate request_status_code matches compare_request_status_code");
@@ -401,13 +435,15 @@ impl TestRunner {
                     for i in r.ignore.iter() {
                         println!("filter: {}", i);
                     }
-                    println!("validate filtered response_body matches filtered compare_response_body");
+                    println!(
+                        "validate filtered response_body matches filtered compare_response_body"
+                    );
                 } else {
                     println!("validate response_body matches compare_response_body");
                 }
             } else {
                 println!("validate response_body matches compare_response_body");
-            }   
+            }
         }
 
         Ok(true)

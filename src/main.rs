@@ -320,14 +320,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         for iteration in 0..boxed_td.iterate {
             let passed = if args.dry_run {
                 runner
-                .dry_run(boxed_td.as_ref(), i, total_count, iteration)
-                .await
+                    .dry_run(boxed_td.as_ref(), i, total_count, iteration)
+                    .await
             } else {
                 runner
-                .run(boxed_td.as_ref(), i, total_count, iteration)
-                .await
+                    .run(boxed_td.as_ref(), i, total_count, iteration)
+                    .await
             };
-                
+
             if !continue_on_failure && !passed {
                 std::process::exit(1);
             }
