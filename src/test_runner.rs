@@ -128,7 +128,7 @@ impl TestRunner {
             req_builder = req_builder.header(&header.0, header_value);
         }
 
-        let req_body = match &td.request.body {
+        let req_body = match td.get_request_body(iteration) {
             Some(b) => {
                 req_builder = req_builder
                     .header("Content-Type", HeaderValue::from_static("application/json"));
@@ -312,10 +312,10 @@ impl TestRunner {
             request_headers.insert(header.0, header_value);
         }
 
-        let req_body = match &td.request.body {
+        let req_body = match td.get_request_body(iteration) {
             Some(b) => {
                 request_headers.insert("Content-Type".to_string(), "application/json".to_string());
-                match serde_json::to_string(b) {
+                match serde_json::to_string(&b) {
                     Ok(body) => Some(body),
                     Err(_) => None,
                 }
