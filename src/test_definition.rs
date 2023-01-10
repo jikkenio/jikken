@@ -53,6 +53,8 @@ pub struct RequestDescriptor {
     pub params: Vec<HttpParameter>,
     pub headers: Vec<HttpHeader>,
     pub body: Option<serde_json::Value>,
+
+    body_matches_variable: Cell<bool>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -88,6 +90,7 @@ impl RequestDescriptor {
             params: validated_params,
             headers: validated_headers,
             body: request.body,
+            body_matches_variable: Cell::from(false),
         })
     }
 
@@ -614,6 +617,8 @@ impl TestDefinition {
 
     fn update_variable_matching(&self) {
         trace!("updating variable matching");
+        let mut body_str: Option<String> = None;
+
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name.trim());
             trace!("pattern: {}", var_pattern);
@@ -629,6 +634,27 @@ impl TestDefinition {
                 if param.value.contains(var_pattern.as_str()) {
                     param.matches_variable.set(true);
                     trace!("setting match true: {}", param.param);
+                }
+            }
+
+            if body_str.is_none() && !self.request.body.is_none() {
+                body_str = match &self.request.body {
+                    Some(v) => {
+                        match serde_json::to_string(&v) {
+                            Ok(s) => Some(s),
+                            Err(_) => None,
+                        }
+                    },
+                    None => None
+                };
+            }
+
+            if !self.request.body_matches_variable.get() {
+                if let Some(body) = &body_str {
+                    if body.contains(var_pattern.as_str()) {
+                        self.request.body_matches_variable.set(true);
+                        trace!("request body match true: {}", var_pattern.as_str());
+                    }
                 }
             }
 
@@ -883,6 +909,38 @@ impl TestDefinition {
                 results
             }
             None => Vec::new(),
+        }
+    }
+
+    pub fn get_request_body(&self, iteration: u32) -> Option<serde_json::Value> {
+        if !self.request.body_matches_variable.get() || self.request.body.is_none() {
+            return self.request.body.clone();
+        }
+
+        let mut body_str = match &self.request.body {
+            Some(v) => {
+                match serde_json::to_string(&v) {
+                    Ok(s) => s,
+                    Err(_) => "".to_string(),
+                }
+            },
+            None => "".to_string()
+        };
+
+        for variable in self.variables.iter().chain(self.global_variables.iter()) {
+            let var_pattern = format!("${}$", variable.name);
+
+            if !body_str.contains(var_pattern.as_str()) {
+                continue;
+            }
+
+            let replacement = variable.generate_value(iteration, self.global_variables.clone());
+            body_str = body_str.replace(var_pattern.as_str(), replacement.as_str());
+        }
+
+        match serde_json::from_str(body_str.as_str()) {
+            Ok(result) => Some(result),
+            Err(_) => None,
         }
     }
 
