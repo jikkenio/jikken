@@ -26,6 +26,7 @@ use std::io::Cursor;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
 use walkdir::{DirEntry, WalkDir};
+use remove_dir_all::remove_dir_all;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -217,6 +218,9 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     self_update::Move::from_source(&bin_path)
         .replace_using_temp(&tmp_file)
         .to_dest(&::std::env::current_exe()?)?;
+
+    drop(tmp_tarball);
+    _ = remove_dir_all(tmp_dir);
 
     Ok(())
 }
