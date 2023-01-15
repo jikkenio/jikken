@@ -205,7 +205,10 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
         .extract_into(&tmp_dir.path())?;
 
     let tmp_file = tmp_dir.path().join("replacement_tmp");
-    let bin_path = tmp_dir.path().join("jk");
+    let bin_path = match env::consts::OS {
+        "windows" => tmp_dir.path().join("jk.exe"),
+        _ => tmp_dir.path().join("jk")
+    };
     self_update::Move::from_source(&bin_path)
         .replace_using_temp(&tmp_file)
         .to_dest(&::std::env::current_exe()?)?;
