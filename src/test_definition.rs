@@ -639,13 +639,11 @@ impl TestDefinition {
 
             if body_str.is_none() && !self.request.body.is_none() {
                 body_str = match &self.request.body {
-                    Some(v) => {
-                        match serde_json::to_string(&v) {
-                            Ok(s) => Some(s),
-                            Err(_) => None,
-                        }
+                    Some(v) => match serde_json::to_string(&v) {
+                        Ok(s) => Some(s),
+                        Err(_) => None,
                     },
-                    None => None
+                    None => None,
                 };
             }
 
@@ -918,13 +916,11 @@ impl TestDefinition {
         }
 
         let mut body_str = match &self.request.body {
-            Some(v) => {
-                match serde_json::to_string(&v) {
-                    Ok(s) => s,
-                    Err(_) => "".to_string(),
-                }
+            Some(v) => match serde_json::to_string(&v) {
+                Ok(s) => s,
+                Err(_) => "".to_string(),
             },
-            None => "".to_string()
+            None => "".to_string(),
         };
 
         for variable in self.variables.iter().chain(self.global_variables.iter()) {

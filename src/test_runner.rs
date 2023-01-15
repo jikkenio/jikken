@@ -39,7 +39,7 @@ impl TestRunner {
         iteration: u32,
     ) -> bool {
         print!(
-            "Running Test ({}\\{}) `{}` Iteration({}\\{})...",
+            "Running Test ({}\\{}) `{}` Iteration ({}\\{})...",
             count + 1,
             total,
             td.name.clone().unwrap_or(format!("Test {}", count + 1)),
@@ -53,12 +53,12 @@ impl TestRunner {
 
         match result {
             Ok(_) => {
-                println!("\x1b[32mPASSED!\x1b[0m");
+                println!("\x1b[32mPASSED\x1b[0m");
                 self.passed += 1;
                 return true;
             }
             Err(e) => {
-                println!("\x1b[31mFAILED!\x1b[0m");
+                println!("\x1b[31mFAILED\x1b[0m");
                 println!("{}", e);
                 self.failed += 1;
                 return false;
