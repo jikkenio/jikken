@@ -196,13 +196,18 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     if let Err(error) = save_file_reuslts {
         println!("error saving downloaded file: {}", error);
+        return Ok(());
     }
     
-    self_update::Extract::from_source(&tmp_tarball_path)
-        .archive(self_update::ArchiveKind::Tar(Some(
-            self_update::Compression::Gz,
-        )))
+    if env::consts::OS == "windows" {
+        self_update::Extract::from_source(&tmp_tarball_path)
+        .archive(self_update::ArchiveKind::Zip)
         .extract_into(&tmp_dir.path())?;
+    } else {
+        self_update::Extract::from_source(&tmp_tarball_path)
+        .archive(self_update::ArchiveKind::Tar(Some(self_update::Compression::Gz)))
+        .extract_into(&tmp_dir.path())?;
+    }
 
     let tmp_file = tmp_dir.path().join("replacement_tmp");
     let bin_path = match env::consts::OS {
@@ -331,7 +336,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(lv) = latest_version_opt {
             match update(&lv.url).await {
                 Ok(_) => {
-                    info!("Update completed");
+                    info!("update completed");
+                    std::process::exit(0);
                 },
                 Err(error) => {
                     error!("Jikken encountered an error when trying to update itself: {}", error);
