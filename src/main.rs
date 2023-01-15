@@ -258,22 +258,22 @@ async fn check_for_updates() -> Option<ReleaseResponse> {
                                     }
                                 }
                                 Err(error) => {
-                                    println!("unable to deserialize response: {}", error)
+                                    trace!("unable to deserialize response: {}", error)
                                 }
                             }
                         }
                         Err(error) => {
-                            println!("unable to read response from update server: {}", error)
+                            trace!("unable to read response from update server: {}", error)
                         }
                     }
                 }
                 Err(error) => {
-                    println!("unable to contact update server: {}", error)
+                    trace!("unable to contact update server: {}", error)
                 }
             }
         }
         Err(error) => {
-            println!("unable to contact update server: {}", error)
+            trace!("unable to contact update server: {}", error)
         }
     }
 
