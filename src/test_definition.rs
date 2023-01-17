@@ -1,7 +1,7 @@
 use crate::errors::ValidationError;
 use crate::test_file::{
     UnvalidatedCompareRequest, UnvalidatedRequest, UnvalidatedResponse, UnvalidatedTest,
-    UnvalidatedVariable,
+    UnvalidatedVariable, UnvalidatedCleanup, UnvalidatedStage, UnvalidatedRequestResponse,
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
@@ -300,7 +300,7 @@ pub struct TestVariable {
 }
 
 impl TestVariable {
-    pub fn new(variable: &UnvalidatedVariable) -> Result<TestVariable, ValidationError> {
+    pub fn new(variable: UnvalidatedVariable) -> Result<TestVariable, ValidationError> {
         // TODO: Add validation errors
         Ok(TestVariable {
             name: variable.name.clone(),
@@ -309,6 +309,30 @@ impl TestVariable {
             modifier: variable.modifier.clone(),
             format: variable.format.clone(),
         })
+    }
+
+    pub fn validate_variables_opt(
+        variables: Option<Vec<UnvalidatedVariable>>,
+    ) -> Result<Vec<TestVariable>, ValidationError> {
+        match variables {
+            None => Ok(Vec::new()),
+            Some(vars) => {
+                let count = vars.len();
+                let results = vars
+                    .into_iter()
+                    .map(|v| TestVariable::new(v))
+                    .filter_map(|v| match v {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    })
+                    .collect::<Vec<TestVariable>>();
+                if results.len() != count {
+                    Err(ValidationError)
+                } else {
+                    Ok(results)
+                }
+            }
+        }
     }
 
     pub fn generate_value(&self, iteration: u32, global_variables: Vec<TestVariable>) -> String {
@@ -543,6 +567,92 @@ impl TestVariable {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StageDescriptor {
+    pub request: RequestDescriptor,
+    pub compare: Option<CompareDescriptor>,
+    pub response: Option<ResponseDescriptor>,
+    pub variables: Vec<TestVariable>,
+}
+
+impl StageDescriptor {
+    pub fn new(stage: UnvalidatedStage) -> Result<StageDescriptor, ValidationError> {
+        Ok(StageDescriptor {
+            request: RequestDescriptor::new(stage.request)?,
+            compare: CompareDescriptor::new_opt(stage.compare)?,
+            response: ResponseDescriptor::new_opt(stage.response)?,
+            variables: TestVariable::validate_variables_opt(stage.variables)?,
+        })
+    }
+
+    pub fn validate_stages_opt(stages_opt: Option<Vec<UnvalidatedStage>>) -> Result<Vec<StageDescriptor>, ValidationError> {
+        match stages_opt {
+            None => Ok(Vec::new()),
+            Some(stages) => {
+                let count = stages.len();
+                let results = stages
+                    .into_iter()
+                    .map(|s| StageDescriptor::new(s))
+                    .filter_map(|v| match v {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    })
+                    .collect::<Vec<StageDescriptor>>();
+                if results.len() != count {
+                    Err(ValidationError)
+                } else {
+                    Ok(results)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequestResponseDescriptor {
+    pub request: RequestDescriptor,
+    pub response: Option<ResponseDescriptor>,
+}
+
+impl RequestResponseDescriptor {
+    pub fn new_opt(reqresp_opt: Option<UnvalidatedRequestResponse>) -> Result<Option<RequestResponseDescriptor>, ValidationError> {
+        match reqresp_opt {
+            Some(reqresp) => {
+                Ok(Some(RequestResponseDescriptor { 
+                    request: RequestDescriptor::new(reqresp.request)?,
+                    response: ResponseDescriptor::new_opt(reqresp.response)?, 
+                }))
+            },
+            None => Ok(None),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CleanupDescriptor {
+    pub onsuccess: Option<RequestResponseDescriptor>,
+    pub onfailure: Option<RequestResponseDescriptor>,
+    pub request: RequestDescriptor,
+    pub response: Option<ResponseDescriptor>,
+}
+
+impl CleanupDescriptor {
+    pub fn new_opt(cleanup_opt: Option<UnvalidatedCleanup>) -> Result<Option<CleanupDescriptor>, ValidationError> {
+        match cleanup_opt {
+            Some(cleanup) => {
+                Ok(Some(CleanupDescriptor { 
+                    onsuccess: RequestResponseDescriptor::new_opt(cleanup.onsuccess)?,
+                    onfailure: RequestResponseDescriptor::new_opt(cleanup.onfailure)?,
+                    request: RequestDescriptor::new(cleanup.request)?,
+                    response: ResponseDescriptor::new_opt(cleanup.response)?,
+                }))
+            },
+            None => Ok(None),
+        }
+        
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestDefinition {
     pub name: Option<String>,
     pub id: String,
@@ -554,6 +664,9 @@ pub struct TestDefinition {
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<TestVariable>,
     pub global_variables: Vec<TestVariable>,
+    pub stages: Vec<StageDescriptor>,
+    pub setup: Option<RequestResponseDescriptor>,
+    pub cleanup: Option<CleanupDescriptor>,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -583,36 +696,15 @@ impl TestDefinition {
             request: RequestDescriptor::new(test.request)?,
             compare: CompareDescriptor::new_opt(test.compare)?,
             response: ResponseDescriptor::new_opt(test.response)?,
-            variables: TestDefinition::validate_variables_opt(test.variables)?,
+            variables: TestVariable::validate_variables_opt(test.variables)?,
             global_variables: global_variables,
+            stages: StageDescriptor::validate_stages_opt(test.stages)?,
+            setup: RequestResponseDescriptor::new_opt(test.setup)?,
+            cleanup: CleanupDescriptor::new_opt(test.cleanup)?,
         };
 
         td.update_variable_matching();
         Ok(td)
-    }
-
-    fn validate_variables_opt(
-        variables: Option<Vec<UnvalidatedVariable>>,
-    ) -> Result<Vec<TestVariable>, ValidationError> {
-        match variables {
-            None => Ok(Vec::new()),
-            Some(vars) => {
-                let count = vars.len();
-                let results = vars
-                    .iter()
-                    .map(|v| TestVariable::new(v))
-                    .filter_map(|v| match v {
-                        Ok(x) => Some(x),
-                        Err(_) => None,
-                    })
-                    .collect::<Vec<TestVariable>>();
-                if results.len() != count {
-                    Err(ValidationError)
-                } else {
-                    Ok(results)
-                }
-            }
-        }
     }
 
     fn update_variable_matching(&self) {

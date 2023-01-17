@@ -6,6 +6,9 @@ Features:
 * Clean-up dry-run console output
 * Added support for variable injection into request body definitions
 * Added checking for latest version and a self-update command
+* Added support for staged test definitions
+* Added support for test setup
+* Added support for test cleanup
 
 
 0.2.0
