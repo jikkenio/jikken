@@ -5,6 +5,7 @@ Features:
 * Minor adjustments to Example Tests
 * Clean-up dry-run console output
 * Added support for variable injection into request body definitions
+* Added checking for latest version and a self-update command
 
 
 0.2.0
