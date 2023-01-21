@@ -109,7 +109,6 @@ pub struct UnvalidatedCleanup {
     pub onsuccess: Option<UnvalidatedRequestResponse>,
     pub onfailure: Option<UnvalidatedRequestResponse>,
     pub request: UnvalidatedRequest,
-    pub response: Option<UnvalidatedResponse>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -119,7 +118,7 @@ pub struct UnvalidatedTest {
     pub requires: Option<String>,
     pub tags: Option<String>,
     pub iterate: Option<u32>,
-    pub request: UnvalidatedRequest,
+    pub request: Option<UnvalidatedRequest>,
     pub compare: Option<UnvalidatedCompareRequest>,
     pub response: Option<UnvalidatedResponse>,
     pub variables: Option<Vec<UnvalidatedVariable>>,
