@@ -10,7 +10,6 @@ Features:
 * Added support for test setup
 * Added support for test cleanup
 
-
 0.2.0
 =====
 
