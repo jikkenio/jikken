@@ -1,7 +1,7 @@
 use crate::errors::ValidationError;
 use crate::test_file::{
-    UnvalidatedCompareRequest, UnvalidatedRequest, UnvalidatedResponse, UnvalidatedTest,
-    UnvalidatedVariable, UnvalidatedCleanup, UnvalidatedStage, UnvalidatedRequestResponse,
+    UnvalidatedCleanup, UnvalidatedCompareRequest, UnvalidatedRequest, UnvalidatedRequestResponse,
+    UnvalidatedResponse, UnvalidatedStage, UnvalidatedTest, UnvalidatedVariable,
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
@@ -9,7 +9,6 @@ use log::trace;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
-use std::iter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum HttpVerb {
@@ -588,12 +587,17 @@ impl StageDescriptor {
         })
     }
 
-    pub fn validate_stages_opt(request_opt: Option<UnvalidatedRequest>, compare_opt:Option<UnvalidatedCompareRequest>, response_opt: Option<UnvalidatedResponse>, stages_opt: Option<Vec<UnvalidatedStage>>) -> Result<Vec<StageDescriptor>, ValidationError> {
+    pub fn validate_stages_opt(
+        request_opt: Option<UnvalidatedRequest>,
+        compare_opt: Option<UnvalidatedCompareRequest>,
+        response_opt: Option<UnvalidatedResponse>,
+        stages_opt: Option<Vec<UnvalidatedStage>>,
+    ) -> Result<Vec<StageDescriptor>, ValidationError> {
         let mut results = Vec::new();
         let mut count = 0;
 
         if let Some(request) = request_opt {
-            results.push(StageDescriptor{
+            results.push(StageDescriptor {
                 request: RequestDescriptor::new(request)?,
                 compare: CompareDescriptor::new_opt(compare_opt)?,
                 response: ResponseDescriptor::new_opt(response_opt)?,
@@ -606,14 +610,16 @@ impl StageDescriptor {
             None => Ok(results),
             Some(stages) => {
                 count += stages.len();
-                results.append(&mut stages
-                    .into_iter()
-                    .map(|s| StageDescriptor::new(s))
-                    .filter_map(|v| match v {
-                        Ok(x) => Some(x),
-                        Err(_) => None,
-                    })
-                    .collect::<Vec<StageDescriptor>>());
+                results.append(
+                    &mut stages
+                        .into_iter()
+                        .map(|s| StageDescriptor::new(s))
+                        .filter_map(|v| match v {
+                            Ok(x) => Some(x),
+                            Err(_) => None,
+                        })
+                        .collect::<Vec<StageDescriptor>>(),
+                );
                 if results.len() != count {
                     Err(ValidationError)
                 } else {
@@ -631,14 +637,14 @@ pub struct RequestResponseDescriptor {
 }
 
 impl RequestResponseDescriptor {
-    pub fn new_opt(reqresp_opt: Option<UnvalidatedRequestResponse>) -> Result<Option<RequestResponseDescriptor>, ValidationError> {
+    pub fn new_opt(
+        reqresp_opt: Option<UnvalidatedRequestResponse>,
+    ) -> Result<Option<RequestResponseDescriptor>, ValidationError> {
         match reqresp_opt {
-            Some(reqresp) => {
-                Ok(Some(RequestResponseDescriptor { 
-                    request: RequestDescriptor::new(reqresp.request)?,
-                    response: ResponseDescriptor::new_opt(reqresp.response)?, 
-                }))
-            },
+            Some(reqresp) => Ok(Some(RequestResponseDescriptor {
+                request: RequestDescriptor::new(reqresp.request)?,
+                response: ResponseDescriptor::new_opt(reqresp.response)?,
+            })),
             None => Ok(None),
         }
     }
@@ -656,18 +662,17 @@ pub struct CleanupDescriptor {
 }
 
 impl CleanupDescriptor {
-    pub fn new_opt(cleanup_opt: Option<UnvalidatedCleanup>) -> Result<Option<CleanupDescriptor>, ValidationError> {
+    pub fn new_opt(
+        cleanup_opt: Option<UnvalidatedCleanup>,
+    ) -> Result<Option<CleanupDescriptor>, ValidationError> {
         match cleanup_opt {
-            Some(cleanup) => {
-                Ok(Some(CleanupDescriptor { 
-                    onsuccess: RequestResponseDescriptor::new_opt(cleanup.onsuccess)?,
-                    onfailure: RequestResponseDescriptor::new_opt(cleanup.onfailure)?,
-                    request: RequestDescriptor::new(cleanup.request)?,
-                }))
-            },
+            Some(cleanup) => Ok(Some(CleanupDescriptor {
+                onsuccess: RequestResponseDescriptor::new_opt(cleanup.onsuccess)?,
+                onfailure: RequestResponseDescriptor::new_opt(cleanup.onfailure)?,
+                request: RequestDescriptor::new(cleanup.request)?,
+            })),
             None => Ok(None),
         }
-        
     }
 
     pub fn validate(&self) -> bool {
@@ -715,7 +720,12 @@ impl TestDefinition {
             iterate: test.iterate.unwrap_or(1),
             variables: TestVariable::validate_variables_opt(test.variables)?,
             global_variables: global_variables,
-            stages: StageDescriptor::validate_stages_opt(test.request, test.compare, test.response, test.stages)?,
+            stages: StageDescriptor::validate_stages_opt(
+                test.request,
+                test.compare,
+                test.response,
+                test.stages,
+            )?,
             setup: RequestResponseDescriptor::new_opt(test.setup)?,
             cleanup: CleanupDescriptor::new_opt(test.cleanup)?,
         };
@@ -731,7 +741,7 @@ impl TestDefinition {
 
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name.trim());
-            
+
             if let Some(setup) = self.setup.as_ref() {
                 for header in setup.request.headers.iter() {
                     if header.value.contains(var_pattern.as_str()) {
@@ -812,9 +822,12 @@ impl TestDefinition {
             }
         }
 
-
         for stage in self.stages.iter() {
-            for variable in stage.variables.iter().chain(self.variables.iter().chain(self.global_variables.iter())) {
+            for variable in stage
+                .variables
+                .iter()
+                .chain(self.variables.iter().chain(self.global_variables.iter()))
+            {
                 let var_pattern = format!("${}$", variable.name.trim());
                 trace!("pattern: {}", var_pattern);
                 for header in stage.request.headers.iter() {
@@ -888,7 +901,7 @@ impl TestDefinition {
                             None => None,
                         };
                     }
-    
+
                     if !compare.body_matches_variable.get() {
                         if let Some(body) = &compare_body_str {
                             if body.contains(var_pattern.as_str()) {
@@ -911,17 +924,24 @@ impl TestDefinition {
         }
     }
 
-    fn get_url(&self, iteration:u32, url: &str, params: &Vec<HttpParameter>, variables: &Vec<TestVariable>) -> String {
-        let joined: Vec<_> = params.iter()
-        .map(|param| {
-            if param.matches_variable.get() {
-                let p = self.get_processed_param(param, iteration);
-                format!("{}={}", p.0, p.1)
-            } else {
-                format!("{}={}", param.param, param.value)
-            }
-        })
-        .collect();
+    fn get_url(
+        &self,
+        iteration: u32,
+        url: &str,
+        params: &Vec<HttpParameter>,
+        variables: &Vec<TestVariable>,
+    ) -> String {
+        let joined: Vec<_> = params
+            .iter()
+            .map(|param| {
+                if param.matches_variable.get() {
+                    let p = self.get_processed_param(param, iteration);
+                    format!("{}={}", p.0, p.1)
+                } else {
+                    format!("{}={}", param.param, param.value)
+                }
+            })
+            .collect();
 
         let modified_url = if url.contains("$") {
             let mut replaced_url = url.to_string();
@@ -934,7 +954,9 @@ impl TestDefinition {
                 }
 
                 let replacement = variable.generate_value(iteration, self.global_variables.clone());
-                replaced_url = replaced_url.replace(var_pattern.as_str(), replacement.as_str()).clone()
+                replaced_url = replaced_url
+                    .replace(var_pattern.as_str(), replacement.as_str())
+                    .clone()
             }
 
             replaced_url
@@ -949,28 +971,38 @@ impl TestDefinition {
         }
     }
 
-
     pub fn get_setup_request_url(&self, iteration: u32) -> String {
         match self.setup.as_ref() {
-            Some(setup) => {
-                self.get_url(iteration, &setup.request.url, &setup.request.params, &self.variables)
-            },
+            Some(setup) => self.get_url(
+                iteration,
+                &setup.request.url,
+                &setup.request.params,
+                &self.variables,
+            ),
             None => String::from(""),
         }
     }
 
     pub fn get_cleanup_request_url(&self, iteration: u32) -> String {
         match self.cleanup.as_ref() {
-            Some(cleanup) => {
-                self.get_url(iteration, &cleanup.request.url, &cleanup.request.params, &self.variables)
-            },
+            Some(cleanup) => self.get_url(
+                iteration,
+                &cleanup.request.url,
+                &cleanup.request.params,
+                &self.variables,
+            ),
             None => String::from(""),
         }
     }
 
     pub fn get_stage_request_url(&self, stage_index: usize, iteration: u32) -> String {
         let stage = self.stages.get(stage_index).unwrap();
-        self.get_url(iteration, &stage.request.url, &stage.request.params, &[&stage.variables[..], &self.variables[..]].concat())
+        self.get_url(
+            iteration,
+            &stage.request.url,
+            &stage.request.params,
+            &[&stage.variables[..], &self.variables[..]].concat(),
+        )
     }
 
     pub fn get_stage_compare_url(&self, stage_index: usize, iteration: u32) -> String {
@@ -982,8 +1014,13 @@ impl TestDefinition {
                 } else {
                     &stage.request.params
                 };
-                self.get_url(iteration, &compare.url, params, &[&stage.variables[..], &self.variables[..]].concat())
-            },
+                self.get_url(
+                    iteration,
+                    &compare.url,
+                    params,
+                    &[&stage.variables[..], &self.variables[..]].concat(),
+                )
+            }
             None => String::from(""),
         }
     }
@@ -1031,8 +1068,7 @@ impl TestDefinition {
 
     pub fn get_setup_request_headers(&self, iteration: u32) -> Vec<(String, String)> {
         match self.setup.as_ref() {
-            Some(setup) => {
-                setup
+            Some(setup) => setup
                 .request
                 .headers
                 .iter()
@@ -1044,16 +1080,14 @@ impl TestDefinition {
                         (h.header.clone(), h.value.clone())
                     }
                 })
-                .collect()
-            },
+                .collect(),
             None => Vec::new(),
         }
     }
 
     pub fn get_cleanup_request_headers(&self, iteration: u32) -> Vec<(String, String)> {
         match self.cleanup.as_ref() {
-            Some(cleanup) => {
-                cleanup
+            Some(cleanup) => cleanup
                 .request
                 .headers
                 .iter()
@@ -1065,14 +1099,19 @@ impl TestDefinition {
                         (h.header.clone(), h.value.clone())
                     }
                 })
-                .collect()
-            },
+                .collect(),
             None => Vec::new(),
         }
     }
 
-    pub fn get_stage_request_headers(&self, stage_index: usize, iteration: u32) -> Vec<(String, String)> {
-        self.stages.get(stage_index).unwrap()
+    pub fn get_stage_request_headers(
+        &self,
+        stage_index: usize,
+        iteration: u32,
+    ) -> Vec<(String, String)> {
+        self.stages
+            .get(stage_index)
+            .unwrap()
             .request
             .headers
             .iter()
@@ -1087,7 +1126,11 @@ impl TestDefinition {
             .collect()
     }
 
-    pub fn get_stage_compare_headers(&self, stage_index: usize, iteration: u32) -> Vec<(String, String)> {
+    pub fn get_stage_compare_headers(
+        &self,
+        stage_index: usize,
+        iteration: u32,
+    ) -> Vec<(String, String)> {
         let stage = self.stages.get(stage_index).unwrap();
         match stage.compare.as_ref() {
             Some(compare) => {
@@ -1133,7 +1176,13 @@ impl TestDefinition {
         }
     }
 
-    fn get_body(&self, iteration: u32, matches: bool, body: &Option<serde_json::Value>, variables: &Vec<TestVariable>) -> Option<serde_json::Value> {
+    fn get_body(
+        &self,
+        iteration: u32,
+        matches: bool,
+        body: &Option<serde_json::Value>,
+        variables: &Vec<TestVariable>,
+    ) -> Option<serde_json::Value> {
         if !matches || body.is_none() {
             return body.clone();
         }
@@ -1165,35 +1214,57 @@ impl TestDefinition {
 
     pub fn get_setup_request_body(&self, iteration: u32) -> Option<serde_json::Value> {
         match self.setup.as_ref() {
-            Some(setup) => {
-                self.get_body(iteration, setup.request.body_matches_variable.get(), &setup.request.body, &self.variables)
-            },
+            Some(setup) => self.get_body(
+                iteration,
+                setup.request.body_matches_variable.get(),
+                &setup.request.body,
+                &self.variables,
+            ),
             None => None,
-        }   
+        }
     }
 
     pub fn get_cleanup_request_body(&self, iteration: u32) -> Option<serde_json::Value> {
         match self.cleanup.as_ref() {
-            Some(cleanup) => {
-                self.get_body(iteration, cleanup.request.body_matches_variable.get(), &cleanup.request.body, &self.variables)
-            },
+            Some(cleanup) => self.get_body(
+                iteration,
+                cleanup.request.body_matches_variable.get(),
+                &cleanup.request.body,
+                &self.variables,
+            ),
             None => None,
-        }   
+        }
     }
 
-    pub fn get_stage_request_body(&self, stage_index: usize, iteration: u32) -> Option<serde_json::Value> {
+    pub fn get_stage_request_body(
+        &self,
+        stage_index: usize,
+        iteration: u32,
+    ) -> Option<serde_json::Value> {
         let stage = self.stages.get(stage_index).unwrap();
-        self.get_body(iteration, stage.request.body_matches_variable.get(), &stage.request.body, &[&stage.variables[..], &self.variables[..]].concat())
+        self.get_body(
+            iteration,
+            stage.request.body_matches_variable.get(),
+            &stage.request.body,
+            &[&stage.variables[..], &self.variables[..]].concat(),
+        )
     }
 
-    pub fn get_stage_compare_body(&self, stage_index: usize, iteration: u32) -> Option<serde_json::Value> {
+    pub fn get_stage_compare_body(
+        &self,
+        stage_index: usize,
+        iteration: u32,
+    ) -> Option<serde_json::Value> {
         let stage = self.stages.get(stage_index).unwrap();
-        
+
         match stage.compare.as_ref() {
-            Some(compare) => {
-                self.get_body(iteration, compare.body_matches_variable.get(), &compare.body, &[&stage.variables[..], &self.variables[..]].concat())
-        },
-        None => None
+            Some(compare) => self.get_body(
+                iteration,
+                compare.body_matches_variable.get(),
+                &compare.body,
+                &[&stage.variables[..], &self.variables[..]].concat(),
+            ),
+            None => None,
         }
     }
 
@@ -1207,14 +1278,14 @@ impl TestDefinition {
         if let Some(cleanup) = &self.cleanup {
             valid_td &= cleanup.validate();
         }
-        
+
         for stage in self.stages.iter() {
             valid_td &= stage.request.validate();
 
             if let Some(compare) = &stage.compare {
                 valid_td &= compare.validate();
             }
-            
+
             if let Some(resp) = &stage.response {
                 valid_td &= resp.validate();
             }

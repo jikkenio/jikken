@@ -1,7 +1,7 @@
 use crate::errors::TestFailure;
 use crate::json_extractor::extract_json;
 use crate::json_filter::filter_json;
-use crate::test_definition::{TestDefinition, StageDescriptor};
+use crate::test_definition::{StageDescriptor, TestDefinition};
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
@@ -109,7 +109,7 @@ impl TestRunner {
             let setup_url = td.get_setup_request_url(iteration);
             let setup_headers = td.get_setup_request_headers(iteration);
             let setup_body = td.get_setup_request_body(iteration);
-            println!("setup: {} {}", setup_method, setup_url);  
+            println!("setup: {} {}", setup_method, setup_url);
             if setup_headers.len() > 0 {
                 println!("setup_headers: ");
                 for (key, value) in setup_headers.iter() {
@@ -129,21 +129,21 @@ impl TestRunner {
                         setup_response_status
                     );
                 }
-    
+
                 for v in &r.extract {
                     println!(
                         "attempt to extract value from response: {} = valueOf({})",
                         v.name, v.field
                     );
                 }
-    
+
                 if r.ignore.len() > 0 {
                     println!("prune fields from setup_response_body");
                     for i in r.ignore.iter() {
                         println!("filter: {}", i);
                     }
                 }
-    
+
                 if let Some(b) = &r.body {
                     if r.ignore.len() > 0 {
                         println!(
@@ -156,13 +156,13 @@ impl TestRunner {
                 }
             }
         }
-        
+
         for (stage_index, stage) in td.stages.iter().enumerate() {
             let stage_method = stage.request.method.as_method();
             let stage_url = td.get_stage_request_url(stage_index, iteration);
             let stage_headers = td.get_stage_request_headers(stage_index, iteration);
             let stage_body = td.get_stage_request_body(stage_index, iteration);
-            println!("stage {}: {} {}", stage_index + 1, stage_method, stage_url);  
+            println!("stage {}: {} {}", stage_index + 1, stage_method, stage_url);
             if stage_headers.len() > 0 {
                 println!("headers: ");
                 for (key, value) in stage_headers.iter() {
@@ -182,21 +182,21 @@ impl TestRunner {
                         stage_response_status
                     );
                 }
-    
+
                 for v in &r.extract {
                     println!(
                         "attempt to extract value from response: {} = valueOf({})",
                         v.name, v.field
                     );
                 }
-    
+
                 if r.ignore.len() > 0 {
                     println!("prune fields from response_body");
                     for i in r.ignore.iter() {
                         println!("filter: {}", i);
                     }
                 }
-    
+
                 if let Some(b) = &r.body {
                     if r.ignore.len() > 0 {
                         println!(
@@ -209,32 +209,31 @@ impl TestRunner {
                 }
             }
 
-
             if let Some(stage_compare) = &stage.compare {
                 // construct compare block
                 let compare_url = &td.get_stage_compare_url(stage_index, iteration);
-    
+
                 match Url::parse(compare_url) {
                     Ok(_) => {}
                     Err(error) => {
                         return Err(Box::from(format!("invalid stage compare url: {}", error)));
                     }
                 }
-    
+
                 let stage_compare_method = &stage_compare.method.as_method().to_string();
                 let mut stage_compare_headers = HashMap::new();
-    
+
                 for header in td.get_stage_compare_headers(stage_index, iteration) {
                     let mut header_value: String = header.1;
-    
+
                     for gv in self.global_variables.iter() {
                         let key_search = format!("${}$", gv.0);
                         header_value = header_value.replace(&key_search, gv.1);
                     }
-    
+
                     stage_compare_headers.insert(header.0, header_value);
                 }
-    
+
                 let stage_compare_body = match &stage_compare.body {
                     Some(b) => {
                         stage_compare_headers
@@ -246,27 +245,24 @@ impl TestRunner {
                     }
                     None => None,
                 };
-    
+
                 println!("comparison mode");
-                println!(
-                    "compare_request: {} {}",
-                    stage_compare_method, compare_url
-                );
-    
+                println!("compare_request: {} {}", stage_compare_method, compare_url);
+
                 if stage_compare_headers.len() > 0 {
                     println!("compare_headers: ");
                     for (key, value) in stage_compare_headers.iter() {
                         println!("-- {}: {}", key, value);
                     }
                 }
-    
+
                 if let Some(body) = stage_compare_body {
                     println!("compare_body: {}", body);
                 }
-    
+
                 // compare to comparison response
                 println!("validate request_status_code matches compare_request_status_code");
-    
+
                 if let Some(r) = &stage.response {
                     if r.ignore.len() > 0 {
                         println!("prune fields from compare_response_body");
@@ -290,7 +286,7 @@ impl TestRunner {
             let cleanup_url = td.get_setup_request_url(iteration);
             let cleanup_headers = td.get_setup_request_headers(iteration);
             let cleanup_body = td.get_setup_request_body(iteration);
-            println!("cleanup: {} {}", cleanup_method, cleanup_url);  
+            println!("cleanup: {} {}", cleanup_method, cleanup_url);
             if cleanup_headers.len() > 0 {
                 println!("cleanup_headers: ");
                 for (key, value) in cleanup_headers.iter() {
@@ -397,19 +393,32 @@ impl TestRunner {
         result &= self.validate_setup(td, iteration).await?;
 
         for (stage_index, stage) in td.stages.iter().enumerate() {
-            result &= self.validate_stage(td, stage, stage_index, iteration).await?
+            result &= self
+                .validate_stage(td, stage, stage_index, iteration)
+                .await?
         }
-                
+
         Ok(result)
     }
 
-    async fn validate_setup(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_setup(
+        &mut self,
+        td: &TestDefinition,
+        iteration: u32,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if let Some(setup) = &td.setup {
             let req_method = setup.request.method.as_method();
             let req_url = &td.get_setup_request_url(iteration);
             let req_headers = td.get_setup_request_headers(iteration);
             let req_body = td.get_setup_request_body(iteration);
-            let req_response = TestRunner::process_request(req_method, req_url, req_headers, req_body, &self.global_variables).await?;
+            let req_response = TestRunner::process_request(
+                req_method,
+                req_url,
+                req_headers,
+                req_body,
+                &self.global_variables,
+            )
+            .await?;
 
             let response_status = req_response.status();
             let (_, body) = req_response.into_parts();
@@ -420,7 +429,7 @@ impl TestRunner {
                 if let Some(setup_response_status) = r.status {
                     TestRunner::validate_status_code(response_status, setup_response_status)?;
                 }
-    
+
                 match serde_json::from_slice(response_bytes.as_ref()) {
                     Ok(l) => {
                         let rv: Value = l;
@@ -441,7 +450,7 @@ impl TestRunner {
                                 }
                             }
                         }
-    
+
                         if let Some(b) = &r.body {
                             TestRunner::validate_body(rv, b.clone(), r.ignore.clone())?;
                         }
@@ -459,35 +468,68 @@ impl TestRunner {
         Ok(true)
     }
 
-    async fn run_cleanup(&mut self, td: &TestDefinition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn run_cleanup(
+        &mut self,
+        td: &TestDefinition,
+        iteration: u32,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if let Some(cleanup) = &td.cleanup {
             let req_method = cleanup.request.method.as_method();
             let req_url = &td.get_cleanup_request_url(iteration);
             let req_headers = td.get_cleanup_request_headers(iteration);
             let req_body = td.get_cleanup_request_body(iteration);
-            _ = TestRunner::process_request(req_method, req_url, req_headers, req_body, &self.global_variables).await?;
+            _ = TestRunner::process_request(
+                req_method,
+                req_url,
+                req_headers,
+                req_body,
+                &self.global_variables,
+            )
+            .await?;
         }
 
         Ok(true)
     }
 
-    async fn validate_stage(&mut self, td: &TestDefinition, stage: &StageDescriptor, stage_index: usize, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    async fn validate_stage(
+        &mut self,
+        td: &TestDefinition,
+        stage: &StageDescriptor,
+        stage_index: usize,
+        iteration: u32,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let req_method = stage.request.method.as_method();
         let req_uri = &td.get_stage_request_url(stage_index, iteration);
-        let req_headers = td.get_stage_request_headers(stage_index,  iteration);
+        let req_headers = td.get_stage_request_headers(stage_index, iteration);
         let req_body = td.get_stage_request_body(stage_index, iteration);
-        let req_response = TestRunner::process_request(req_method, req_uri, req_headers, req_body, &self.global_variables).await?;
+        let req_response = TestRunner::process_request(
+            req_method,
+            req_uri,
+            req_headers,
+            req_body,
+            &self.global_variables,
+        )
+        .await?;
 
         let mut compare_response_opt = None;
 
         if let Some(compare) = &stage.compare {
             let compare_method = compare.method.as_method();
             let compare_uri = &td.get_stage_compare_url(stage_index, iteration);
-            let compare_headers = td.get_stage_compare_headers(stage_index,  iteration);
+            let compare_headers = td.get_stage_compare_headers(stage_index, iteration);
             let compare_body = td.get_stage_compare_body(stage_index, iteration);
-            compare_response_opt = Some(TestRunner::process_request(compare_method, compare_uri, compare_headers, compare_body, &self.global_variables).await?);
+            compare_response_opt = Some(
+                TestRunner::process_request(
+                    compare_method,
+                    compare_uri,
+                    compare_headers,
+                    compare_body,
+                    &self.global_variables,
+                )
+                .await?,
+            );
         }
-            
+
         let response_status = req_response.status();
         let (_, body) = req_response.into_parts();
         let response_bytes = body::to_bytes(body).await?;
@@ -534,10 +576,7 @@ impl TestRunner {
 
         if let Some(compare_resp) = compare_response_opt {
             // compare to comparison response
-            TestRunner::validate_status_codes(
-                response_status,
-                compare_resp.status(),
-            )?;
+            TestRunner::validate_status_codes(response_status, compare_resp.status())?;
 
             let compare_data = body::to_bytes(compare_resp.into_body()).await?;
             let ignored_json_fields = match &stage.response {
@@ -546,24 +585,21 @@ impl TestRunner {
             };
 
             match serde_json::from_slice(response_bytes.as_ref()) {
-                Ok(data_json) => {
-                    match serde_json::from_slice(compare_data.as_ref()) {
-                        Ok(compare_data_json) => {
-                            TestRunner::validate_body(
-                                data_json,
-                                compare_data_json,
-                                ignored_json_fields,
-                            )?;
-                        }
-                        Err(e) => {
-                            error!("{}", e);
-                            return Err(Box::from(TestFailure {
-                                reason: "comparison response is not valid JSON"
-                                    .to_string(),
-                            }));
-                        }
+                Ok(data_json) => match serde_json::from_slice(compare_data.as_ref()) {
+                    Ok(compare_data_json) => {
+                        TestRunner::validate_body(
+                            data_json,
+                            compare_data_json,
+                            ignored_json_fields,
+                        )?;
                     }
-                }
+                    Err(e) => {
+                        error!("{}", e);
+                        return Err(Box::from(TestFailure {
+                            reason: "comparison response is not valid JSON".to_string(),
+                        }));
+                    }
+                },
                 Err(e) => {
                     error!("{}", e);
                     return Err(Box::from(TestFailure {
@@ -576,7 +612,13 @@ impl TestRunner {
         Ok(true)
     }
 
-    async fn process_request(http_method: hyper::Method, uri: &str, headers: Vec<(String, String)>, body: Option<serde_json::Value>, global_variables: &HashMap<String, String>) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
+    async fn process_request(
+        http_method: hyper::Method,
+        uri: &str,
+        headers: Vec<(String, String)>,
+        body: Option<serde_json::Value>,
+        global_variables: &HashMap<String, String>,
+    ) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
         trace!("Url: {}", uri);
         match Url::parse(uri) {
@@ -612,7 +654,7 @@ impl TestRunner {
         let req_opt = req_builder.body(req_body);
         match req_opt {
             Ok(req) => Ok(client.request(req).await?),
-            Err(error) => Err(Box::from(format!("bad request result: {}", error)))
+            Err(error) => Err(Box::from(format!("bad request result: {}", error))),
         }
     }
 }
