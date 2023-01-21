@@ -12,21 +12,21 @@ use clap::Parser;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, info, trace, Level, LevelFilter};
+use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
-use tokio::io::AsyncWriteExt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
-use std::{fs, env};
+use std::io::Cursor;
 use std::io::{stdout, Write};
 use std::path::Path;
+use std::{env, fs};
 use tempfile;
-use std::io::Cursor;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
+use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
-use remove_dir_all::remove_dir_all;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,7 +47,7 @@ struct Args {
     dry_run: bool,
 
     #[arg(short, long, default_value_t = false)]
-    update: bool
+    update: bool,
 }
 
 #[derive(Deserialize)]
@@ -183,37 +183,36 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
         return Ok(());
     }
 
-    let tmp_dir = tempfile::Builder::new()
-        .tempdir_in(::std::env::current_dir()?)?;
+    let tmp_dir = tempfile::Builder::new().tempdir_in(::std::env::current_dir()?)?;
 
-    let tmp_tarball_path = tmp_dir
-        .path()
-        .join(file_name_opt.unwrap());
-    
+    let tmp_tarball_path = tmp_dir.path().join(file_name_opt.unwrap());
+
     let mut tmp_tarball = tokio::fs::File::create(&tmp_tarball_path).await?;
-    let response = reqwest::get(url).await?;    
-    let mut content =  Cursor::new(response.bytes().await?);
+    let response = reqwest::get(url).await?;
+    let mut content = Cursor::new(response.bytes().await?);
     let save_file_reuslts = tmp_tarball.write_all_buf(&mut content).await;
 
     if let Err(error) = save_file_reuslts {
         println!("error saving downloaded file: {}", error);
         return Ok(());
     }
-    
+
     if env::consts::OS == "windows" {
         self_update::Extract::from_source(&tmp_tarball_path)
-        .archive(self_update::ArchiveKind::Zip)
-        .extract_into(&tmp_dir.path())?;
+            .archive(self_update::ArchiveKind::Zip)
+            .extract_into(&tmp_dir.path())?;
     } else {
         self_update::Extract::from_source(&tmp_tarball_path)
-        .archive(self_update::ArchiveKind::Tar(Some(self_update::Compression::Gz)))
-        .extract_into(&tmp_dir.path())?;
+            .archive(self_update::ArchiveKind::Tar(Some(
+                self_update::Compression::Gz,
+            )))
+            .extract_into(&tmp_dir.path())?;
     }
 
     let tmp_file = tmp_dir.path().join("replacement_tmp");
     let bin_path = match env::consts::OS {
         "windows" => tmp_dir.path().join("jk.exe"),
-        _ => tmp_dir.path().join("jk")
+        _ => tmp_dir.path().join("jk"),
     };
     self_update::Move::from_source(&bin_path)
         .replace_using_temp(&tmp_file)
@@ -250,7 +249,11 @@ fn has_newer_version(new_version: String) -> bool {
 async fn check_for_updates() -> Option<ReleaseResponse> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let req_opt = Request::builder()
-        .uri(format!("{}?channel=stable&platform={}", UPDATE_URL, env::consts::OS))
+        .uri(format!(
+            "{}?channel=stable&platform={}",
+            UPDATE_URL,
+            env::consts::OS
+        ))
         .body(Body::empty());
     match req_opt {
         Ok(req) => {
@@ -333,7 +336,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     if !args.update {
         if let Some(lv) = latest_version_opt {
-            info!("\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m", lv.version, VERSION);
+            info!(
+                "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
+                lv.version, VERSION
+            );
             info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
         }
     } else {
@@ -342,9 +348,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 Ok(_) => {
                     info!("update completed");
                     std::process::exit(0);
-                },
+                }
                 Err(error) => {
-                    error!("Jikken encountered an error when trying to update itself: {}", error);
+                    error!(
+                        "Jikken encountered an error when trying to update itself: {}",
+                        error
+                    );
                 }
             }
         } else {
