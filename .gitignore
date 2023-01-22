@@ -13,3 +13,4 @@ target/
 .jikken
 .idea/
 releases/
+env.list

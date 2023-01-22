@@ -1,6 +1,20 @@
 Next (Version determined when release is cut)
 =====
 
+0.3.0
+=====
+
+Features:
+* Minor adjustments to Example Tests
+* Clean-up dry-run console output
+* Added support for variable injection into request body definitions
+* Added checking for latest version and a self-update command
+* Added support for staged test definitions
+* Added support for test setup
+* Added support for test cleanup
+* Added basic example of a multistage test
+* Created Windows Installer for releases
+
 0.2.0
 =====
 
@@ -8,9 +22,9 @@ Bugfixes:
 * Fix label when printing tests by number. They now print starting at 1 instead of 0.
 
 Features:
-* Improved test execution with invalid urls. Now properly prints out helpful error and fails the test.
-* Consolidated two modes of test runs into a single code path. This simplifies expanding test_runner functionality in the future.
-* Added dry-run mode. This is a new CLI argument (-d) which prints a description of the steps that will happen without actually calling the apis.
+* Improved test execution with invalid urls. It now properly prints out helpful errors and fails the test
+* Consolidated two modes of test runs into a single code path. This simplifies expanding test_runner functionality in the future
+* Added dry-run mode. This is a new CLI argument (-d) which prints a description of the steps that will happen without actually calling the apis
 
 0.1.0
 =====

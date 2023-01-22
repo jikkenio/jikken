@@ -1,7 +1,6 @@
 name: Compare StatusV2 and StatusV1
 requires: auth
 request:
-  method: Get
   url: https://api.jikken.io/v2/test_status
   headers:
     - header: Authorization

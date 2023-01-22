@@ -1,6 +1,6 @@
 [package]
 name = "jikken"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Louis Russo <louis@jikken.io>"]
 description = """
@@ -37,3 +37,7 @@ log = {version = "0.4", features = ["std"] }
 clap = { version = "4.0", features = ["derive"] }
 assert-json-diff = { version = "2.0" }
 url = { version = "2.3" }
+self_update = { version = "0.34.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
+tempfile = { version = "3.3.0" }
+reqwest = { version = "0.11.13" }
+remove_dir_all = { version  = "0.7.0" }

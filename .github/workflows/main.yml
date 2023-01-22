@@ -1,0 +1,42 @@
+name: Github Actions Test
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  pull_request:
+    branches: [ "main" ]
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  build-linux:
+    name: linux build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    # - name: upload binary
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: Go-results-${{ matrix.go-version }}
+    #     path: TestResults-${{ matrix.go-version }}.json
+  
+  build-windows:
+    name: windows build
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+      
+  build-macosx:
+    name: macosx build
+    runs-on: macosx-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
