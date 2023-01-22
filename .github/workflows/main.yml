@@ -1,8 +1,6 @@
 name: Github Actions Test
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
-  push:
-    branches: [ "develop" ]
   pull_request:
     branches: [ "main" ]
 env:
