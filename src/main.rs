@@ -9,16 +9,27 @@ mod test_runner;
 
 use chrono::Local;
 use clap::Parser;
+use hyper::{body, Body, Client, Request};
+use hyper_tls::HttpsConnector;
 use log::{error, info, trace, Level, LevelFilter};
+use remove_dir_all::remove_dir_all;
+use self_update;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
 use std::error::Error;
-use std::fs;
+use std::io::Cursor;
+use std::io::{stdout, Write};
 use std::path::Path;
+use std::{env, fs};
+use tempfile;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
+use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
+
+const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -34,6 +45,15 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     dry_run: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    update: bool,
+}
+
+#[derive(Deserialize)]
+struct ReleaseResponse {
+    version: String,
+    url: String,
 }
 
 // TODO: Add ignore and filter out hidden etc
@@ -58,8 +78,8 @@ fn get_files() -> Vec<String> {
     results
 }
 
-fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
-    let data = fs::read_to_string(file)?;
+async fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
+    let data = tokio::fs::read_to_string(file).await?;
     let config: config::Config = toml::from_str(&data)?;
     Ok(config)
 }
@@ -152,6 +172,129 @@ fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVari
         .collect()
 }
 
+async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+    print!("Jikken is updating to the latest version...");
+    stdout().flush().unwrap();
+
+    let file_name_opt = url.split("/").last();
+
+    if file_name_opt.is_none() {
+        println!("error: invalid url");
+        return Ok(());
+    }
+
+    let tmp_dir = tempfile::Builder::new().tempdir_in(::std::env::current_dir()?)?;
+
+    let tmp_tarball_path = tmp_dir.path().join(file_name_opt.unwrap());
+
+    let mut tmp_tarball = tokio::fs::File::create(&tmp_tarball_path).await?;
+    let response = reqwest::get(url).await?;
+    let mut content = Cursor::new(response.bytes().await?);
+    let save_file_reuslts = tmp_tarball.write_all_buf(&mut content).await;
+
+    if let Err(error) = save_file_reuslts {
+        println!("error saving downloaded file: {}", error);
+        return Ok(());
+    }
+
+    if env::consts::OS == "windows" {
+        self_update::Extract::from_source(&tmp_tarball_path)
+            .archive(self_update::ArchiveKind::Zip)
+            .extract_into(&tmp_dir.path())?;
+    } else {
+        self_update::Extract::from_source(&tmp_tarball_path)
+            .archive(self_update::ArchiveKind::Tar(Some(
+                self_update::Compression::Gz,
+            )))
+            .extract_into(&tmp_dir.path())?;
+    }
+
+    let tmp_file = tmp_dir.path().join("replacement_tmp");
+    let bin_path = match env::consts::OS {
+        "windows" => tmp_dir.path().join("jk.exe"),
+        _ => tmp_dir.path().join("jk"),
+    };
+    self_update::Move::from_source(&bin_path)
+        .replace_using_temp(&tmp_file)
+        .to_dest(&::std::env::current_exe()?)?;
+
+    drop(tmp_tarball);
+    _ = remove_dir_all(tmp_dir);
+
+    Ok(())
+}
+
+fn has_newer_version(new_version: String) -> bool {
+    let new_version_segments: Vec<&str> = new_version.split(".").collect();
+    let my_version_segments: Vec<&str> = VERSION.split(".").collect();
+
+    let segment_length = std::cmp::min(new_version_segments.len(), my_version_segments.len());
+
+    for i in 0..segment_length {
+        let new_segment_opt = new_version_segments[i].parse::<u32>();
+        let my_segment_opt = my_version_segments[i].parse::<u32>();
+
+        if new_segment_opt.is_err() || my_segment_opt.is_err() {
+            return false;
+        } else {
+            if new_segment_opt.unwrap() > my_segment_opt.unwrap() {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+async fn check_for_updates() -> Option<ReleaseResponse> {
+    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let req_opt = Request::builder()
+        .uri(format!(
+            "{}?channel=stable&platform={}",
+            UPDATE_URL,
+            env::consts::OS
+        ))
+        .body(Body::empty());
+    match req_opt {
+        Ok(req) => {
+            let resp_opt = client.request(req).await;
+            match resp_opt {
+                Ok(resp) => {
+                    let (_, body) = resp.into_parts();
+                    let response_bytes_opt = body::to_bytes(body).await;
+                    match response_bytes_opt {
+                        Ok(response_bytes) => {
+                            match serde_json::from_slice::<ReleaseResponse>(
+                                &response_bytes.to_vec(),
+                            ) {
+                                Ok(r) => {
+                                    if has_newer_version(r.version.clone()) {
+                                        return Some(r);
+                                    }
+                                }
+                                Err(error) => {
+                                    trace!("unable to deserialize response: {}", error)
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            trace!("unable to read response from update server: {}", error)
+                        }
+                    }
+                }
+                Err(error) => {
+                    trace!("unable to contact update server: {}", error)
+                }
+            }
+        }
+        Err(error) => {
+            trace!("unable to contact update server: {}", error)
+        }
+    }
+
+    None
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let args = Args::parse();
@@ -176,7 +319,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     log::set_max_level(LevelFilter::Trace);
 
     if Path::new(".jikken").exists() {
-        let config_raw = get_config(".jikken");
+        let config_raw = get_config(".jikken").await;
         match config_raw {
             Ok(c) => {
                 config = Some(c);
@@ -188,10 +331,41 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
     config = apply_config_envvars(config);
+
+    let latest_version_opt = check_for_updates().await;
+
+    if !args.update {
+        if let Some(lv) = latest_version_opt {
+            info!(
+                "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
+                lv.version, VERSION
+            );
+            info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
+        }
+    } else {
+        if let Some(lv) = latest_version_opt {
+            match update(&lv.url).await {
+                Ok(_) => {
+                    info!("update completed");
+                    std::process::exit(0);
+                }
+                Err(error) => {
+                    error!(
+                        "Jikken encountered an error when trying to update itself: {}",
+                        error
+                    );
+                }
+            }
+        } else {
+            error!("Jikken was unable to find an update for this platform and release channel");
+        }
+        std::process::exit(1);
+    }
+
     let files = get_files();
     let mut continue_on_failure = false;
 
-    info!("Jikken found {} tests.", files.len());
+    info!("Jikken found {} tests", files.len());
 
     if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
@@ -205,15 +379,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
     let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
-        .map(|f| fs::read_to_string(f))
-        .filter_map(|f| match f {
+        .map(|f| (f, fs::read_to_string(f)))
+        .filter_map(|(filename, f)| match f {
             Ok(file_data) => {
                 let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
                     serde_yaml::from_str(&file_data);
                 match result {
                     Ok(file) => Some(file),
                     Err(e) => {
-                        trace!("unable to parse file data: {}", e);
+                        println!("unable to parse file ({}) data: {}", filename, e);
                         None
                     }
                 }
@@ -320,14 +494,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         for iteration in 0..boxed_td.iterate {
             let passed = if args.dry_run {
                 runner
-                .dry_run(boxed_td.as_ref(), i, total_count, iteration)
-                .await
+                    .dry_run(boxed_td.as_ref(), i, total_count, iteration)
+                    .await
             } else {
                 runner
-                .run(boxed_td.as_ref(), i, total_count, iteration)
-                .await
+                    .run(boxed_td.as_ref(), i, total_count, iteration)
+                    .await
             };
-                
+
             if !continue_on_failure && !passed {
                 std::process::exit(1);
             }

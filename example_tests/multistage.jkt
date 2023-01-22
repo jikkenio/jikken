@@ -1,0 +1,34 @@
+name: Multistage Test
+tags: multi
+setup:
+  request:
+    method: Post
+    url: https://api.jikken.io/v1/test_login
+    body: {
+      "username": "testuser",
+      "password": "password"
+    }
+  response:
+    status: 200
+    extract:
+      - name: auth
+        field: auth.token
+stages:
+  - request:
+      url: https://api.jikken.io/v1/test_status
+      headers:
+        - header: Authorization
+          value: $auth$
+    response:
+      status: 200
+  - request:
+      url: https://api.jikken.io/v2/test_status
+      headers:
+        - header: Authorization
+          value: $auth$
+    compare:
+      url: https://api.jikken.io/v1/test_status
+    response:
+      status: 200
+      ignore:
+        - user.lastActivity
