@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+0.3.0
+=====
+
 Features:
 * Minor adjustments to Example Tests
 * Clean-up dry-run console output
@@ -9,6 +12,8 @@ Features:
 * Added support for staged test definitions
 * Added support for test setup
 * Added support for test cleanup
+* Added basic example of a multistage test
+* Created Windows Installer for releases
 
 0.2.0
 =====
