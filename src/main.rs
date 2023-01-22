@@ -379,15 +379,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
     let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
-        .map(|f| fs::read_to_string(f))
-        .filter_map(|f| match f {
+        .map(|f| (f, fs::read_to_string(f)))
+        .filter_map(|(filename, f)| match f {
             Ok(file_data) => {
                 let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
                     serde_yaml::from_str(&file_data);
                 match result {
                     Ok(file) => Some(file),
                     Err(e) => {
-                        trace!("unable to parse file data: {}", e);
+                        println!("unable to parse file ({}) data: {}", filename, e);
                         None
                     }
                 }
