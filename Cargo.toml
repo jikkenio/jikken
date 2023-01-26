@@ -4,10 +4,10 @@ version = "0.3.0"
 edition = "2021"
 authors = ["Louis Russo <louis@jikken.io>"]
 description = """
-jikken is a cli tool for automated API testing. it recursively
+Jikken is a cli tool for automated API testing. It recursively
 searches directories for JKT files (Jikken Test Definitions)
-which will execute jobs for testing APIs.
-it has first class support on Windows, macOS, and Linux.
+which will execute jobs for testing APIs. It has first class
+support on Windows, macOS, and Linux. jikken.io for more info
 """
 documentation = "https://github.com/jikkenio/jikken"
 homepage = "https://github.com/jikkenio/jikken"
@@ -34,10 +34,11 @@ indicatif = {version = "0.17", features = ["rayon"] }
 exitcode = {version = "1.1" }
 chrono = {version = "0.4" }
 log = {version = "0.4", features = ["std"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.1", features = ["derive"] }
 assert-json-diff = { version = "2.0" }
 url = { version = "2.3" }
 self_update = { version = "0.34.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 tempfile = { version = "3.3.0" }
 reqwest = { version = "0.11.13" }
 remove_dir_all = { version  = "0.7.0" }
+uuid = { version = "1.2.2", features = ["v4"] }
