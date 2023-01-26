@@ -216,6 +216,14 @@ pub struct ResponseExtraction {
     pub field: String,
 }
 
+impl  ResponseExtraction {
+    pub fn new() -> ResponseExtraction {
+        ResponseExtraction { 
+            name: "".to_string(), 
+            field: "".to_string() }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
     pub status: Option<u16>,
@@ -290,6 +298,16 @@ pub struct Modifier {
     pub operation: String,
     pub value: String,
     pub unit: String,
+}
+
+impl Modifier {
+    pub fn new() -> Modifier {
+        Modifier { 
+            operation: "".to_string(), 
+            value: "".to_string(), 
+            unit: "".to_string(), 
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -56,10 +56,10 @@ $ cargo install
 
 ### User Guide
 
-Once you've installed jikken, using the tool is as simple as running the jk command in a project folder that contains tests.
+Once you've installed jikken, using the tool is as simple as running the `jk run` command in a project folder that contains tests.
 
 ```
-$ jk
+$ jk run
 Jikken found 2 tests.
 Running Test (1\2) `Test 1` Iteration(1\1)...PASSED!
 Running Test (2\2) `Test 2` Iteration(1\2)...PASSED!
@@ -71,17 +71,17 @@ Tests are defined with the Test Definition Format. The convention is they are sa
 The following output shows an example where there are two JKT files located describing tests to execute. The first test is used to authenticate with a system and receive an auth token. It then extracts and embeds that token into the subsequent tests. In this case the second test has two iterations (it runs twice calling the same endpoints, but each time it runs it passes in different variables).
 
 ```
-$ jk
+$ jk run
 Jikken found 2 tests.
 Running Test (1\2) `Fetch Auth Credentials` Iteration(1\1)...PASSED!
 Running Test (2\2) `My API Test` Iteration(1\2)...PASSED!
 Running Test (2\2) `My API Test` Iteration(2\2)...PASSED!
 ```
 
-If you are working on developing new tests, or if you'd like to see what will run without actually running it, Jikken supports a `dry-run` argument. This will print out a report of steps that would occur under a normal run.
+If you are working on developing new tests, or if you'd like to see what will run without actually running it, Jikken supports a `dryrun` command. This will print out a report of steps that would occur under a normal run.
 
 ```
-$ jk
+$ jk dryrun
 Jikken found 3 tests.
 Dry Run Test (1\3) `Test 1` Iteration(1\1)
 request: POST https://api.jikken.io/v1/test_login
@@ -115,21 +115,21 @@ validate filtered response_body matches filtered compare_response_body
 Tests also support having tags. You can leverage tags and tag combinations to pinpoint execution of desired tests. For example if you tag specific tests for "regression" then you can invoke the tool to only run regression tests.
 
 ```
-$ jk -t regression
+$ jk run -t regression
 Jikken found 5 tests.
 ```
 
 You can also provide multiple tags to control which tests run even further. Providing multiple tags by default will only execute tests that contain all of the tags provided. 
 
 ```
-$ jk -t foo -t bar
+$ jk run -t foo -t bar
 Jikken found 2 tests.
 ```
 
 If you would like to run all tests that have any of the provided tags, there is a CLI argument which makes the tags a logical or (if the test contains tag 1 or tag 2 or tag 3, etc).
 
 ```
-$ jk -t foo -t bar --tags-or
+$ jk run -t foo -t bar --tags-or
 Jikken found 8 tests
 ```
 
@@ -138,61 +138,189 @@ Jikken found 8 tests
 Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [here](example_tests).
 
 ```yaml
-name: 
+name:
 id: 
-tags: 
-requires: 
+tags:
+requires:
 iterate: 
+setup:
+  request:
+    method: 
+    url:
+    params:
+    - param:
+      value:
+    headers:
+    - header:
+      value:
+    body:
+  response:
+    status: 
+    headers:
+    - header:
+      value:
+    body:
+    ignore:
+    -
+    extract:
+    - name:
+      field:
 request:
-  method: 
-  url: 
-  params:
-      - param:
-        value:
-  headers:
-      - header: 
-        value: 
-  body:
-compare:
   method: 
   url:
   params:
-    - param:
-      value:
-  addParams:
-    - param:
-      value:
-  ignoreParams:
-    -
+  - param:
+    value:
   headers:
-    - header:
-      value:
+  - header:
+    value:
+  body:
+compare:
+  method:
+  url:
+  params:
+  - param:
+    value:
+  addParams:
+  - param:
+    value:
+  ignoreParams:
+  -
+  headers:
+  - header:
+    value:
   addHeaders:
-    - header:
-      value:
+  - header:
+    value:
   ignoreHeaders:
-    -
+  -
   body:
 response:
   status:
   headers:
-    - header:
-      value:
+  - header:
+    value:
   body:
   ignore:
-    -
+  -
   extract:
+  - name:
+    field:
+stages:
+- request:
+    method:
+    url:
+    params:
+    - param:
+      value:
+    headers:
+    - header:
+      value:
+    body:
+  compare:
+    method:
+    url:
+    params:
+    - param:
+      value:
+    addParams:
+    - param:
+      value:
+    ignoreParams:
+    -
+    headers:
+    - header:
+      value:
+    addHeaders:
+    - header:
+      value:
+    ignoreHeaders:
+    -
+    body:
+  response:
+    status:
+    headers:
+    - header:
+      value:
+    body:
+    ignore:
+    -
+    extract:
     - name:
-      field: 
-variables:
-  - name: 
-    dataType: 
-    value: 
+      field:
+  variables:
+  - name:
+    dataType:
+    value:
     modifier:
-      operation: 
-      value: 
-      unit: 
+      operation:
+      value:
+      unit:
     format:
+cleanup:
+  request:
+    method:
+    url:
+    params:
+    - param:
+      value:
+    headers:
+    - header:
+      value:
+    body:
+  onsuccess:
+    request:
+      method:
+      url:
+      params:
+      - param:
+        value:
+      headers:
+      - header:
+        value:
+      body:
+    response:
+      status:
+      headers:
+      - header:
+        value:
+      body:
+      ignore:
+      -
+      extract:
+      - name:
+        field:
+  onfailure:
+    request:
+      method:
+      url:
+      params:
+      - param:
+        value:
+      headers:
+      - header:
+        value:
+      body:
+    response:
+      status:
+      headers:
+      - header:
+        value:
+      body:
+      ignore:
+      -
+      extract:
+      - name:
+        field:
+variables:
+- name:
+  dataType:
+  value:
+  modifier:
+    operation:
+    value:
+    unit:
+  format:
 ```
 
 Test Definition Structure
