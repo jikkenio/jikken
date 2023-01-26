@@ -8,7 +8,7 @@ mod test_file;
 mod test_runner;
 
 use chrono::Local;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, info, trace, Level, LevelFilter};
@@ -25,29 +25,63 @@ use std::{env, fs};
 use tempfile;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
+use test_file::UnvalidatedTest;
 use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
+use tokio::fs::File;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(short, long = "tag", name = "tag")]
-    tags: Vec<String>,
-
-    #[arg(long, default_value_t = false)]
-    tags_or: bool,
-
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+    
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+}
 
-    #[arg(short, long, default_value_t = false)]
-    dry_run: bool,
+#[derive(Subcommand)]
+enum Commands {
+    /// execute tests
+    Run {
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
 
-    #[arg(short, long, default_value_t = false)]
-    update: bool,
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+    
+    /// process tests without calling api endpoints
+    #[command(name = "dryrun")]
+    DryRun {
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+    
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+    /// jikken updates itself if a newer version exists
+    Update,
+    /// create a new test
+    New {
+        /// generates a test template with all options
+        #[arg(short, long = "full", name = "full")]
+        full: bool,
+
+        /// generates a multi-stage test template
+        #[arg(short = 'm', long = "multistage", name = "multistage")]
+        multistage: bool,
+
+        /// output to console instead of saving to a file
+        #[arg(short = 'o')]
+        output: bool,
+
+        /// the file name to create
+        name: Option<String>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -297,13 +331,24 @@ async fn check_for_updates() -> Option<ReleaseResponse> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let args = Args::parse();
+    let cli = Cli::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
 
-    let log_level = if args.verbose {
+    let mut cli_tags = &Vec::new();
+    let mut cli_tags_or = false;
+
+    match &cli.command {
+        Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => {
+            cli_tags = tags;
+            cli_tags_or = *tags_or;
+        },
+        _ => {}
+    };
+
+    let log_level = if cli.verbose {
         Level::Trace
     } else {
         Level::Info
@@ -334,32 +379,86 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let latest_version_opt = check_for_updates().await;
 
-    if !args.update {
-        if let Some(lv) = latest_version_opt {
-            info!(
-                "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
-                lv.version, VERSION
-            );
-            info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
-        }
-    } else {
-        if let Some(lv) = latest_version_opt {
-            match update(&lv.url).await {
-                Ok(_) => {
-                    info!("update completed");
-                    std::process::exit(0);
+    match cli.command {
+        Commands::Update => {
+            if let Some(lv) = latest_version_opt {
+                match update(&lv.url).await {
+                    Ok(_) => {
+                        info!("update completed");
+                        std::process::exit(0);
+                    }
+                    Err(error) => {
+                        error!(
+                            "Jikken encountered an error when trying to update itself: {}",
+                            error
+                        );
+                    }
                 }
-                Err(error) => {
-                    error!(
-                        "Jikken encountered an error when trying to update itself: {}",
-                        error
-                    );
+            } else {
+                error!("Jikken was unable to find an update for this platform and release channel");
+            }
+            std::process::exit(0);
+        },
+        _ => {
+            if let Some(lv) = latest_version_opt {
+                info!(
+                    "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
+                    lv.version, VERSION
+                );
+                info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
+            }
+        }
+    }
+
+    match &cli.command {
+        Commands::New { full, multistage, output, name } => {
+            let template = if *full {
+                 serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
+            } else if *multistage {
+                serde_yaml::to_string(&UnvalidatedTest::template_staged()?)?
+            } else {
+                serde_yaml::to_string(&UnvalidatedTest::template()?)?
+            };
+            let template = template.replace("''", "");
+            let mut result = "".to_string();
+            
+            for line in template.lines() {
+                if !line.contains("null") {
+                    result = format!("{}{}\n", result, line)
                 }
             }
-        } else {
-            error!("Jikken was unable to find an update for this platform and release channel");
-        }
-        std::process::exit(1);
+
+            if *output {
+                println!("{}", result);
+            } else {
+                match name {
+                    Some(n) => {
+                        let filename = if !n.ends_with(".jkt") {
+                            format!("{}.jkt", n)
+                        } else {
+                            n.clone()
+                        };
+
+                        if std::path::Path::new(&filename).exists() {
+                            println!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
+                            std::process::exit(1);    
+                        }
+                        
+                        let mut file = File::create(&filename).await?;
+                        file.write_all(result.as_bytes()).await?;
+                        println!("Successfully created test (`{}`).", filename);
+                        std::process::exit(0);
+                    },
+                    None => {
+                        println!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            std::process::exit(0);
+        },
+        _ => {}
     }
 
     let files = get_files();
@@ -408,10 +507,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         );
                         None
                     } else {
-                        if args.tags.len() > 0 {
+                        if cli_tags.len() > 0 {
                             let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                            if args.tags_or {
-                                for t in args.tags.iter() {
+                            if cli_tags_or {
+                                for t in cli_tags.iter() {
                                     if td_tags.contains(t) {
                                         return Some(td);
                                     }
@@ -422,12 +521,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                 trace!(
                                     "test `{}` doesn't match any tags: {}",
                                     td.name.unwrap_or("".to_string()),
-                                    args.tags.join(", ")
+                                    cli_tags.join(", ")
                                 );
 
                                 return None;
                             } else {
-                                for t in args.tags.iter() {
+                                for t in cli_tags.iter() {
                                     if !td_tags.contains(t) {
                                         tests_to_ignore.push(td.clone());
 
@@ -491,8 +590,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
+        let dry_run = match cli.command {
+            Commands::DryRun {tags: _, tags_or: _} => true,
+            _ => false,
+        };
+
         for iteration in 0..boxed_td.iterate {
-            let passed = if args.dry_run {
+            let passed = if dry_run {
                 runner
                     .dry_run(boxed_td.as_ref(), i, total_count, iteration)
                     .await

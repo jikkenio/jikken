@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+Features:
+* Update Jikken CLI to have command driven execution. Instead of `jk` automatically running tests there are now various commands `jk run`, `jk dryrun` etc.
+
 0.3.0
 =====
 
