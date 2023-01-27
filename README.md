@@ -323,7 +323,7 @@ variables:
   format:
 ```
 
-Test Definition Structure
+#### Test Definition Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | name | `User Login` | [Optional] An optional name used for providing a useful label when test executions pass/fail. If this value is not provided the tool will simply refer to the test as the number in the execution. |
@@ -339,7 +339,7 @@ Test Definition Structure
 | cleanup | | [Optional] The optional cleanup definition allows you to trigger some API calls each time this test runs, even if it fails partway through. This should allow you to invoke cleanup calls. The details of this structure are defined in a separate table. |
 | variables | | [Optional] The optional list of locally defined variables. These variables allow you to embed generated values into your requests for testing purposes. These variables currently support embedding into `Request.Url`, `Request.Headers`, `Request.Params`, `Compare.Url`, `Compare.Headers`, `Compare.AddHeaders`, `Compare.Params`, and `Compare.AddParams`. We plan to expand the scope of what these variables can do as well as where they can be injected. The details of this structure are defined in a separate table. | 
 
-Request Structure
+#### Request Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | method | `Post` | [Optional] The Http Verb to use for the request. Supported values are: `Get`, `Post`, `Put`, and `Patch`. If this field is not provided it defaults to `Get`. |
@@ -348,7 +348,7 @@ Request Structure
 | headers | | [Optional] The optional list of http headers to send with the http request. The details of this structure are defined in a separate table. | 
 | body | `{ "test": "response" }` | [Optional] The optional JSON body sent with the request. Currently this only supports a JSON literal as defined in the test file. In the future we will be adding support for loading this value from a file. This field also does not currently support variable embeddings but that is on our roadmap. |
 
-Compare Structure
+#### Compare Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | method | `Post` | [Optional] The Http Verb to use for the request. Supported values are: `Get`, `Post`, `Put`, and `Patch`. If this field is not provided it defaults to `Get`. |
@@ -357,11 +357,11 @@ Compare Structure
 | addParams | | [Optional] The optional list of additional query parameters to attach to the url request. If the comparison address wants all of the original `request.params` with some additional ones, this structure allows you to include extra parameters. This field uses the same structure as the normal `params` object. The details of this structure are defined in a separate table. |
 | ignoreParams | `- foo` | [Optional] The optional list of query parameters to not send. This field allows you to provide parameters from the base `request.params` object that you do not wish to include in the compare request. |
 | headers | | [Optional] The optional list of http headers to send with the http request. For the compare structure, if this field is missing the default behavior is to send the same http headers as defined in the base `request.headers` test definition. This simplifies the common case of testing old/new versions without defining headers twice. If this field *is* provided then the request headers are NOT sent to the compare url. The details of this structure are defined in a separate table. | 
-| addHeaders | [Optional] The optional list of additional http headers to send with the http request. If the comparison address wants all of the original `request.headers` with some additional ones, this structure allows you to include extra http headers. This field uses the same structure as the normal `headers` object. The details of this structure are defined in a separate table. |
+| addHeaders | | [Optional] The optional list of additional http headers to send with the http request. If the comparison address wants all of the original `request.headers` with some additional ones, this structure allows you to include extra http headers. This field uses the same structure as the normal `headers` object. The details of this structure are defined in a separate table. |
 | ignoreHeaders | `- Authorization` | [Optional] The optional list of http headers to not send. This field allows you to provide headers from the base `request.headers` object that you do not wish to include in the compare request. |
 | body | `{ "test": "response" }` | [Optional] The optional JSON body sent with the request. Currently this only supports a JSON literal as defined in the test file. In the future we will be adding support for loading this value from a file. This field also does not currently support variable embeddings but that is on our roadmap. |
 
-Response Structure
+#### Response Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | status | `200` | [Optional] The response status code expected when running the test. We recommend defining this in most cases as it will be a great indicator of unforseen problems such as authorization issues, gateway/proxy issues, etc. |
@@ -370,7 +370,7 @@ Response Structure
 | ignore | `- data.users.lastLogin` | [Optional] The optional list of json fields to ignore when doing body comparisons. This can be useful when there are runtime dependent fields in the response JSON. An example, if an API has a timestamp which indicates the most recent time when an activity occurred. While running the test with known good data, it's possible this timestamp will not match as it can frequently change even when the additional data should not change. This allows you to prune out sections of JSON in the received response prior to comparing the data between the `request` and `compare` url responses. It also can help when comparing between the `request` response data and the defined `response.body` structure. This notation supports traversing both arrays and objects, so if a segment is an array it will prune the field from ALL objects in the array. |
 | extract | | [Optional] The optional list of variable extraction terms. This field allows you to extract fields from a JSON response and store them into a variable which can then be injected into subsequent tests. The details of this structure are defined in a separate table. |
 
-Variables Structure
+#### Variables Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | name | `foo` | The name of the variable. This is used for referencing the places you want to inject it. Variable names need to be unique or they will overwrite eachother. If a global variable is defined with a given name and a local variable has the same name, the local variable will overwrite the global. |
@@ -382,13 +382,13 @@ Variables Structure
 | modifier.unit | `days `| The modifier unit indicates the unit of value to modify the variable by. This currently supports `days`, `weeks`, and `months`. What this allows is a test to starts with the value for `$TODAY$` and then the ability to add/subtract a provided number of days, weeks, or months with the starting date. We plan to expand this capability with a number of operations for other data types. |
 | format | `%Y-%m-%d` | [Optional] The format field is used to define a string formatter pattern when generating the values. **NOTE** This field is a placeholder, but is not currently used. We are looking at options of different ways we want to support formating various data types. |
 
-Setup Structure
+#### Setup Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | request | | | The request to make prior to all other stages. The details can be seen in the Request Structure table. |
 | response | | [Optional] The optional response to validate the setup request. If setup fails then the test stages will not be executed. The details can be seen in the Response Structure table. |
 
-Stage Structure
+#### Stage Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | request | | | The request to make in this test stage. The details can be seen in the Request Structure table. |
@@ -396,14 +396,14 @@ Stage Structure
 | response | | [Optional] The optional response to validate the request in this test stage. The details can be seen in the Response Structure table. |
 | variables | | [Optional] The optional list of variable definitions to use for this stage. The details can be seen in the Variables Structure table. | 
 
-Cleanup Structure
+#### Cleanup Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | onsuccess | | | [Optional] The request to make only when the test has succeeded. The details can be seen in the Request Structure table. |
 | onfailure | | | [Optional] The request to make only when the test has failed. The details can be seen in the Request Structure table. |
 | request | | [Optional] The request to run every time this test executes. This runs both if the test passes or if it fails. If you define an onsuccess/onfailure as well, this request will trigger AFTER the onsuccess/onfailure requests fire. The details can be seen in the Request Structure table. |
 
-Params Structure
+#### Params Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | param | `foo` | The query field name. |
@@ -411,13 +411,13 @@ Params Structure
 
 With this provided example the request would turn into `<url>?foo=bar`.
 
-Headers Structure
+#### Headers Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | header | `Authorization` | The http header key. |
 | value | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` | The http header value. |
 
-Response Extract Structure
+#### Response Extract Structure
 | Field | Example | Description |
 | ----- | ------- | ----------- |
 | name | `authToken` | The name of the variable to store the extracted field into. |
