@@ -135,7 +135,7 @@ Jikken found 8 tests
 
 ### Test Definition Format
 
-Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [here](example_tests).
+Jikken executes tests which are defined in a yaml/json format. It searches for files that end in `.jkt` to execute them as tests. Below is an example of the overall structure with all possible fields. The vast majority of tests should only require a tiny subset of these fields. This format is subject to change/improve over time as we add more capabilities to jikken. You can find some example tests [here](example_tests). The "complete" structure as shown here appears very large and complex. This is just an appearance due to the full flexibility of the definitions. The vast majority of tests are very small and require a tiny fraction of the fields displayed here.
 
 ```yaml
 name:
@@ -331,9 +331,12 @@ Test Definition Structure
 | tags | `regression smoke login` | [Optional] An optional list of terms used for organizing test runs. Currently tags are provided as a white space delimited string. |
 | requires | `7431857f-7e00-40b7-ac2c-077d230dff1c` | [Optional] An optional requires string should provide a value that matches the *id* of another test. This will enforce an order of execution where the required tests are executed prior to their dependents. This is useful for variable extraction where a value from one call is passed along into a future call. Currently this only supports a single value. In the future we plan to support more robust dependency graphing of test execution, but we're testing out a few possible designs before choosing a path forward. |
 | iterate | `5` | [Optional] An optional value provided which indicates the number of times this test should be repeated per run. When variables are defined for the test, based on the generative nature of those variables, each iteration will pass in different values. This can be useful if you have a set of varying parameters or data you want to send to the same URIs to test, you don't need to define separate files for each run. |
-| request | | The request structure defines the API endpoint to call. The details of this structure are defined in a separate table. |
+| setup | | [Optional] The setup structure defines a special stage that occurs prior to all other requests/stages. If the setup stage fails then the stages and request definitions will not execute. The details of this structure are defined in a separate table. |
+| request | | [Optional] The request structure defines the API endpoint to call. The details of this structure are defined in a separate table. |
 | compare | | [Optional] The optional request to make when comparing two different endpoints. This is very useful when you want to validate two different environments or versions of an API. You can point the normal request at the new code in a QA/Staging environment and point the comparison endpoint at the existing production API. Then you can compare the results to see if there are any regressions between the new code results and the existing production deployment results. The details of this structure are defined in a separate table. |
 | response | | [Optional] The optional response to validate the request against. If you don't provide either a `compare` or a `response` then the test isn't effectively validating/checking anything. The details of this structure are defined in a separate table. |
+| stages | | [Optional] The optional stages array allows you to define multiple steps to perform for the test. Each stage can extract data from responses which feed into future requests. The details of this s tructure are defined in a separate table. |
+| cleanup | | [Optional] The optional cleanup definition allows you to trigger some API calls each time this test runs, even if it fails partway through. This should allow you to invoke cleanup calls. The details of this structure are defined in a separate table. |
 | variables | | [Optional] The optional list of locally defined variables. These variables allow you to embed generated values into your requests for testing purposes. These variables currently support embedding into `Request.Url`, `Request.Headers`, `Request.Params`, `Compare.Url`, `Compare.Headers`, `Compare.AddHeaders`, `Compare.Params`, and `Compare.AddParams`. We plan to expand the scope of what these variables can do as well as where they can be injected. The details of this structure are defined in a separate table. | 
 
 Request Structure
@@ -378,6 +381,27 @@ Variables Structure
 | modifier.value | `3` | The modifier value indicates the amount to modify the variable's value. Currently this only supports unsigned integers (positive whole numbers only).  |
 | modifier.unit | `days `| The modifier unit indicates the unit of value to modify the variable by. This currently supports `days`, `weeks`, and `months`. What this allows is a test to starts with the value for `$TODAY$` and then the ability to add/subtract a provided number of days, weeks, or months with the starting date. We plan to expand this capability with a number of operations for other data types. |
 | format | `%Y-%m-%d` | [Optional] The format field is used to define a string formatter pattern when generating the values. **NOTE** This field is a placeholder, but is not currently used. We are looking at options of different ways we want to support formating various data types. |
+
+Setup Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| request | | | The request to make prior to all other stages. The details can be seen in the Request Structure table. |
+| response | | [Optional] The optional response to validate the setup request. If setup fails then the test stages will not be executed. The details can be seen in the Response Structure table. |
+
+Stage Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| request | | | The request to make in this test stage. The details can be seen in the Request Structure table. |
+| compare | | [Optional] The optional comparison request to make in this test stage. The details can be seen in the Compare Structure table. | 
+| response | | [Optional] The optional response to validate the request in this test stage. The details can be seen in the Response Structure table. |
+| variables | | [Optional] The optional list of variable definitions to use for this stage. The details can be seen in the Variables Structure table. | 
+
+Cleanup Structure
+| Field | Example | Description |
+| ----- | ------- | ----------- |
+| onsuccess | | | [Optional] The request to make only when the test has succeeded. The details can be seen in the Request Structure table. |
+| onfailure | | | [Optional] The request to make only when the test has failed. The details can be seen in the Request Structure table. |
+| request | | [Optional] The request to run every time this test executes. This runs both if the test passes or if it fails. If you define an onsuccess/onfailure as well, this request will trigger AFTER the onsuccess/onfailure requests fire. The details can be seen in the Request Structure table. |
 
 Params Structure
 | Field | Example | Description |
