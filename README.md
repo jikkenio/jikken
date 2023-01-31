@@ -432,7 +432,7 @@ The Jikken CLI tool looks for a `.jikken` file in the folder it is being execute
 ```toml
 [settings]
 continueOnFailure=true
-environment=qa
+environment="qa"
 apiKey="52adb38c-a0e4-438d-bff3-aa83a1a9a8ba"
 
 [globals]
