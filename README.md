@@ -432,6 +432,8 @@ The Jikken CLI tool looks for a `.jikken` file in the folder it is being execute
 ```toml
 [settings]
 continueOnFailure=true
+environment=qa
+apiKey="52adb38c-a0e4-438d-bff3-aa83a1a9a8ba"
 
 [globals]
 newUrl="https://localhost:5001"
@@ -441,6 +443,8 @@ oldUrl="https://localhost:5002"
 | Setting | Default | Description |
 | ------- | ------- | ----------- |
 | continueOnFailure | false | When running jikken, by default, it will stop execution as soon as it encounters it's first test failure. The `continueOnFailure` setting allows you to execute all tests regardless of prior test execution. It is possible some test failures may cause other tests to fail, but for independent tests it can be useful to get a full picture of the pass/fail state for everything. |
+| environment | | Jikken provides multiple ways to provide an environment label. This setting provides a label at the configuration file level, which will apply it to all tests which do not themselves have an env associated. This value will be overridden by the environment variable if it is provided. |
+| apiKey | | The apiKey setting is used to provide a key for reporting test runs and status with the jikken.io webapp. This key is associated with your account and can be obtained from inside the webapp. |
 
 Globals are a way to define global variables which are used across all of your tests. This is useful for things such as base urls for API endpoints, environment variables, or auth credentials.
 It is important to note that currently variables (both global and locally defined in JKT files) are case sensitive. The variables can be whatever case you prefer as long as it matches the case of the variable definitions in the test files.
@@ -451,7 +455,9 @@ Jikken supports environment variables as overrides to the `.jikken` configuratio
 
 | EnvVar | Value | Description |
 | ------ | ----- | ----------- |
-| JIKKEN_CONTINUE_ON_FAILURE | true | this environment variable will override the setting `continueOnFailure` as defined in the `.jikken` file. |
+| JIKKEN_CONTINUE_ON_FAILURE | true | this environment variable will override the setting `continueOnFailure` as defined in the `.jikken` configuration file. |
+| JIKKEN_ENVIRONMENT | <string> | this environment variable will override the setting `environment` as defined in the `.jikken` configuration file. |
+| JIKKEN_API_KEY | <string> | this environment variable will override the setting `apiKey` as defined in the `.jikken` configuration file. |
 
 Jikken also supports global variable definition as Environment Variables. These may overwrite values which are in the `.jikken` file or simply define new ones that are not contained the file. The pattern for these definitions are a prefix of `JIKKEN_GLOBAL_`. An example of defining these in the same way as the above `.jikken` definition would be:
 
