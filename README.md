@@ -140,6 +140,7 @@ Jikken executes tests which are defined in a yaml/json format. It searches for f
 ```yaml
 name:
 id: 
+env: 
 tags:
 requires:
 iterate: 
@@ -328,6 +329,7 @@ variables:
 | ----- | ------- | ----------- |
 | name | `User Login` | [Optional] An optional name used for providing a useful label when test executions pass/fail. If this value is not provided the tool will simply refer to the test as the number in the execution. |
 | id | `7431857f-7e00-40b7-ac2c-077d230dff1c` | [Optional] An optional identifier for tracking a test across many runs. This should be a unique string which can be used to map this test across changes over time. If you adjust things like parameters, variables, filtering, but still want this test to be "the same" as it was prior to the file changes then this is a good way to track them. GUIDs/UUIDs are good ideas for this field but any string that is unique from other tests is valid. If this field is not present, a hash of the test file's contents will serve as the uniqueness identifier so any change will treat this test as a new one vs the old version. |
+| env | `prod` | [Optional] An optional description for associating a test run with an environment. This is means for organizing, filtering, and monitoring with the jikken.io webapp. |
 | tags | `regression smoke login` | [Optional] An optional list of terms used for organizing test runs. Currently tags are provided as a white space delimited string. |
 | requires | `7431857f-7e00-40b7-ac2c-077d230dff1c` | [Optional] An optional requires string should provide a value that matches the *id* of another test. This will enforce an order of execution where the required tests are executed prior to their dependents. This is useful for variable extraction where a value from one call is passed along into a future call. Currently this only supports a single value. In the future we plan to support more robust dependency graphing of test execution, but we're testing out a few possible designs before choosing a path forward. |
 | iterate | `5` | [Optional] An optional value provided which indicates the number of times this test should be repeated per run. When variables are defined for the test, based on the generative nature of those variables, each iteration will pass in different values. This can be useful if you have a set of varying parameters or data you want to send to the same URIs to test, you don't need to define separate files for each run. |

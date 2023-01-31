@@ -702,6 +702,7 @@ impl CleanupDescriptor {
 pub struct TestDefinition {
     pub name: Option<String>,
     pub id: String,
+    pub environment: Option<String>,
     pub requires: Option<String>,
     pub tags: Vec<String>,
     pub iterate: u32,
@@ -733,6 +734,7 @@ impl TestDefinition {
         let td = TestDefinition {
             name: test.name,
             id: test.id.unwrap_or(generated_id).to_lowercase(),
+            environment: test.env,
             requires: test.requires,
             tags: new_tags,
             iterate: test.iterate.unwrap_or(1),

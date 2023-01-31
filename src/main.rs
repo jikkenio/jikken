@@ -41,6 +41,9 @@ struct Cli {
     
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    #[arg(short, long = "env", name = "env")]
+    environment: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -135,9 +138,16 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         None
     };
 
+    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
+        Some(env)
+    } else {
+        None
+    };
+
     let mut result_settings = config::Settings {
         continue_on_failure: None,
         api_key: None,
+        environment: None,
     };
 
     if let Some(c) = config {
@@ -153,9 +163,17 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
             } else {
                 settings.api_key
             };
+
+            result_settings.environment = if envvar_env.is_some() {
+                envvar_env
+            } else {
+                settings.environment
+            };
+
         } else {
             result_settings.continue_on_failure = envvar_cof;
             result_settings.api_key = envvar_apikey;
+            result_settings.environment = envvar_env;
         }
 
         return Some(config::Config {
@@ -168,6 +186,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         settings: Some(config::Settings {
             continue_on_failure: envvar_cof,
             api_key: envvar_apikey,
+            environment: envvar_env,
         }),
         globals: None,
     })
@@ -280,53 +299,26 @@ fn has_newer_version(new_version: String) -> bool {
     false
 }
 
-async fn check_for_updates() -> Option<ReleaseResponse> {
+async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let req_opt = Request::builder()
+    let req = Request::builder()
         .uri(format!(
             "{}?channel=stable&platform={}",
             UPDATE_URL,
             env::consts::OS
         ))
-        .body(Body::empty());
-    match req_opt {
-        Ok(req) => {
-            let resp_opt = client.request(req).await;
-            match resp_opt {
-                Ok(resp) => {
-                    let (_, body) = resp.into_parts();
-                    let response_bytes_opt = body::to_bytes(body).await;
-                    match response_bytes_opt {
-                        Ok(response_bytes) => {
-                            match serde_json::from_slice::<ReleaseResponse>(
-                                &response_bytes.to_vec(),
-                            ) {
-                                Ok(r) => {
-                                    if has_newer_version(r.version.clone()) {
-                                        return Some(r);
-                                    }
-                                }
-                                Err(error) => {
-                                    trace!("unable to deserialize response: {}", error)
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            trace!("unable to read response from update server: {}", error)
-                        }
-                    }
-                }
-                Err(error) => {
-                    trace!("unable to contact update server: {}", error)
-                }
-            }
-        }
-        Err(error) => {
-            trace!("unable to contact update server: {}", error)
+        .body(Body::empty())?;
+    
+    let resp = client.request(req).await?;
+    let (_, body) = resp.into_parts();
+    let response_bytes = body::to_bytes(body).await?;
+    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes.to_vec()) {
+        if has_newer_version(r.version.clone()) {
+            return Ok(Some(r));
         }
     }
 
-    None
+    Ok(None)
 }
 
 #[tokio::main]
@@ -381,31 +373,45 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     match cli.command {
         Commands::Update => {
-            if let Some(lv) = latest_version_opt {
-                match update(&lv.url).await {
-                    Ok(_) => {
-                        info!("update completed");
-                        std::process::exit(0);
+            match latest_version_opt {
+                Ok(lv_opt) => {
+                    if let Some(lv) = lv_opt {
+                        match update(&lv.url).await {
+                            Ok(_) => {
+                                info!("update completed");
+                                std::process::exit(0);
+                            }
+                            Err(error) => {
+                                error!(
+                                    "Jikken encountered an error when trying to update itself: {}",
+                                    error
+                                );
+                            }
+                        }
                     }
-                    Err(error) => {
-                        error!(
-                            "Jikken encountered an error when trying to update itself: {}",
-                            error
-                        );
-                    }
+                },
+                Err(error) => {
+                    trace!("error checking for updates: {}", error);
                 }
-            } else {
-                error!("Jikken was unable to find an update for this platform and release channel");
             }
+
+            error!("Jikken was unable to find an update for this platform and release channel");
             std::process::exit(0);
         },
         _ => {
-            if let Some(lv) = latest_version_opt {
-                info!(
-                    "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
-                    lv.version, VERSION
-                );
-                info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
+            match latest_version_opt {
+                Ok(lv_opt) => {
+                    if let Some(lv) = lv_opt {
+                        info!(
+                            "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
+                            lv.version, VERSION
+                        );
+                        info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
+                    }
+                },
+                Err(error) => {
+                    trace!("error checking for updates: {}", error);
+                }
             }
         }
     }

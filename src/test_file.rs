@@ -273,6 +273,7 @@ impl UnvalidatedCleanup {
 pub struct UnvalidatedTest {
     pub name: Option<String>,
     pub id: Option<String>,
+    pub env: Option<String>,
     pub tags: Option<String>,
     pub requires: Option<String>,
     pub iterate: Option<u32>,
@@ -295,7 +296,8 @@ impl UnvalidatedTest {
     pub fn template() -> Result<UnvalidatedTest, Box<dyn Error + Send + Sync>> {
         Ok(UnvalidatedTest { 
             name: Some("".to_string()), 
-            id: Some(Uuid::new_v4().to_string()), 
+            id: Some(Uuid::new_v4().to_string()),
+            env: None,
             tags: None, 
             requires: None, 
             iterate: None, 
@@ -313,6 +315,7 @@ impl UnvalidatedTest {
         Ok(UnvalidatedTest { 
             name: Some("".to_string()), 
             id: Some(Uuid::new_v4().to_string()), 
+            env: None,
             tags: None, 
             requires: None, 
             iterate: None, 
@@ -330,6 +333,7 @@ impl UnvalidatedTest {
         Ok(UnvalidatedTest { 
             name: Some("".to_string()), 
             id: Some(Uuid::new_v4().to_string()), 
+            env: Some("".to_string()),
             tags: Some("".to_string()), 
             requires: Some("".to_string()), 
             iterate: Some(1), 
