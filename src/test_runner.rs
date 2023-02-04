@@ -49,8 +49,12 @@ impl TestRunner {
         io::stdout().flush().unwrap();
 
         self.run += 1;
-        let result = self.validate_td(td, iteration).await;
-        _ = self.run_cleanup(td, iteration).await;
+
+        let mut result = self.validate_setup(td, iteration).await;
+        if result.is_ok() {
+            result = self.validate_td(td, iteration).await;
+            _ = self.run_cleanup(td, iteration, result.is_ok()).await;
+        }
 
         match result {
             Ok(_) => {
@@ -106,7 +110,12 @@ impl TestRunner {
 
         if let Some(setup) = &td.setup {
             let setup_method = setup.request.method.as_method();
-            let setup_url = td.get_setup_request_url(iteration);
+            let setup_url = &td.get_url(
+                iteration,
+                &setup.request.url,
+                &setup.request.params,
+                &td.variables,
+            );
             let setup_headers = td.get_setup_request_headers(iteration);
             let setup_body = td.get_setup_request_body(iteration);
             println!("setup: {} {}", setup_method, setup_url);
@@ -148,10 +157,13 @@ impl TestRunner {
                     if r.ignore.len() > 0 {
                         println!(
                             "validate filtered setup_response_body matches defined body: {}",
-                            b
+                            b.data
                         );
                     } else {
-                        println!("validate setup_response_body matches defined body: {}", b);
+                        println!(
+                            "validate setup_response_body matches defined body: {}",
+                            b.data
+                        );
                     }
                 }
             }
@@ -159,8 +171,13 @@ impl TestRunner {
 
         for (stage_index, stage) in td.stages.iter().enumerate() {
             let stage_method = stage.request.method.as_method();
-            let stage_url = td.get_stage_request_url(stage_index, iteration);
-            let stage_headers = td.get_stage_request_headers(stage_index, iteration);
+            let stage_url = &td.get_url(
+                iteration,
+                &stage.request.url,
+                &stage.request.params,
+                &[&stage.variables[..], &td.variables[..]].concat(),
+            );
+            let stage_headers = td.get_headers(&stage.request.headers, iteration);
             let stage_body = td.get_stage_request_body(stage_index, iteration);
             println!("stage {}: {} {}", stage_index + 1, stage_method, stage_url);
             if stage_headers.len() > 0 {
@@ -201,17 +218,28 @@ impl TestRunner {
                     if r.ignore.len() > 0 {
                         println!(
                             "validate filtered response_body matches defined body: {}",
-                            b
+                            b.data
                         );
                     } else {
-                        println!("validate response_body matches defined body: {}", b);
+                        println!("validate response_body matches defined body: {}", b.data);
                     }
                 }
             }
 
             if let Some(stage_compare) = &stage.compare {
                 // construct compare block
-                let compare_url = &td.get_stage_compare_url(stage_index, iteration);
+                let params = if stage_compare.params.len() > 0 {
+                    &stage_compare.params
+                } else {
+                    &stage.request.params
+                };
+
+                let compare_url = &td.get_url(
+                    iteration,
+                    &stage_compare.url,
+                    &params,
+                    &[&stage.variables[..], &td.variables[..]].concat(),
+                );
 
                 match Url::parse(compare_url) {
                     Ok(_) => {}
@@ -283,7 +311,12 @@ impl TestRunner {
 
         if let Some(cleanup) = &td.cleanup {
             let cleanup_method = cleanup.request.method.as_method();
-            let cleanup_url = td.get_setup_request_url(iteration);
+            let cleanup_url = &td.get_url(
+                iteration,
+                &cleanup.request.url,
+                &cleanup.request.params,
+                &td.variables,
+            );
             let cleanup_headers = td.get_setup_request_headers(iteration);
             let cleanup_body = td.get_setup_request_body(iteration);
             println!("cleanup: {} {}", cleanup_method, cleanup_url);
@@ -390,12 +423,10 @@ impl TestRunner {
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let mut result = true;
 
-        result &= self.validate_setup(td, iteration).await?;
-
         for (stage_index, stage) in td.stages.iter().enumerate() {
             result &= self
                 .validate_stage(td, stage, stage_index, iteration)
-                .await?
+                .await?;
         }
 
         Ok(result)
@@ -408,7 +439,12 @@ impl TestRunner {
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if let Some(setup) = &td.setup {
             let req_method = setup.request.method.as_method();
-            let req_url = &td.get_setup_request_url(iteration);
+            let req_url = &td.get_url(
+                iteration,
+                &setup.request.url,
+                &setup.request.params,
+                &td.variables,
+            );
             let req_headers = td.get_setup_request_headers(iteration);
             let req_body = td.get_setup_request_body(iteration);
             let req_response = TestRunner::process_request(
@@ -452,7 +488,7 @@ impl TestRunner {
                         }
 
                         if let Some(b) = &r.body {
-                            TestRunner::validate_body(rv, b.clone(), r.ignore.clone())?;
+                            TestRunner::validate_body(rv, b.data.clone(), r.ignore.clone())?;
                         }
                     }
                     Err(e) => {
@@ -472,10 +508,50 @@ impl TestRunner {
         &mut self,
         td: &TestDefinition,
         iteration: u32,
+        succeeded: bool,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if let Some(cleanup) = &td.cleanup {
+            if succeeded {
+                if let Some(onsuccess) = &cleanup.onsuccess {
+                    let success_method = onsuccess.method.as_method();
+                    let success_url =
+                        &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
+                    let success_headers = td.get_headers(&onsuccess.headers, iteration);
+                    let success_body = td.get_body(iteration, onsuccess, &td.variables);
+                    _ = TestRunner::process_request(
+                        success_method,
+                        success_url,
+                        success_headers,
+                        success_body,
+                        &self.global_variables,
+                    )
+                    .await?;
+                }
+            } else {
+                if let Some(onfailure) = &cleanup.onfailure {
+                    let failure_method = onfailure.method.as_method();
+                    let failure_url =
+                        &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+                    let failure_headers = td.get_headers(&onfailure.headers, iteration);
+                    let failure_body = td.get_body(iteration, onfailure, &td.variables);
+                    _ = TestRunner::process_request(
+                        failure_method,
+                        failure_url,
+                        failure_headers,
+                        failure_body,
+                        &self.global_variables,
+                    )
+                    .await?;
+                }
+            }
+
             let req_method = cleanup.request.method.as_method();
-            let req_url = &td.get_cleanup_request_url(iteration);
+            let req_url = &td.get_url(
+                iteration,
+                &cleanup.request.url,
+                &cleanup.request.params,
+                &td.variables,
+            );
             let req_headers = td.get_cleanup_request_headers(iteration);
             let req_body = td.get_cleanup_request_body(iteration);
             _ = TestRunner::process_request(
@@ -499,8 +575,13 @@ impl TestRunner {
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let req_method = stage.request.method.as_method();
-        let req_uri = &td.get_stage_request_url(stage_index, iteration);
-        let req_headers = td.get_stage_request_headers(stage_index, iteration);
+        let req_uri = &td.get_url(
+            iteration,
+            &stage.request.url,
+            &stage.request.params,
+            &[&stage.variables[..], &td.variables[..]].concat(),
+        );
+        let req_headers = td.get_headers(&stage.request.headers, iteration);
         let req_body = td.get_stage_request_body(stage_index, iteration);
         let req_response = TestRunner::process_request(
             req_method,
@@ -514,8 +595,19 @@ impl TestRunner {
         let mut compare_response_opt = None;
 
         if let Some(compare) = &stage.compare {
+            let params = if compare.params.len() > 0 {
+                &compare.params
+            } else {
+                &stage.request.params
+            };
+
             let compare_method = compare.method.as_method();
-            let compare_uri = &td.get_stage_compare_url(stage_index, iteration);
+            let compare_uri = &td.get_url(
+                iteration,
+                &compare.url,
+                &params,
+                &[&stage.variables[..], &td.variables[..]].concat(),
+            );
             let compare_headers = td.get_stage_compare_headers(stage_index, iteration);
             let compare_body = td.get_stage_compare_body(stage_index, iteration);
             compare_response_opt = Some(
@@ -562,7 +654,7 @@ impl TestRunner {
                     }
 
                     if let Some(b) = &r.body {
-                        TestRunner::validate_body(rv, b.clone(), r.ignore.clone())?;
+                        TestRunner::validate_body(rv, b.data.clone(), r.ignore.clone())?;
                     }
                 }
                 Err(e) => {

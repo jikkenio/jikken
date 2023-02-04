@@ -12,5 +12,5 @@ pub struct Config {
 pub struct Settings {
     pub continue_on_failure: Option<bool>,
     pub api_key: Option<String>,
-    pub environment: Option<String>
+    pub environment: Option<String>,
 }
