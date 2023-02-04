@@ -1120,9 +1120,9 @@ impl TestDefinition {
 
     pub fn get_body(
         &self,
-        iteration: u32,
         request: &RequestDescriptor,
         variables: &Vec<TestVariable>,
+        iteration: u32,
     ) -> Option<serde_json::Value> {
         if let Some(body) = &request.body {
             if !body.matches_variable.get() {
@@ -1156,9 +1156,9 @@ impl TestDefinition {
 
     pub fn get_compare_body(
         &self,
-        iteration: u32,
         compare: &CompareDescriptor,
         variables: &Vec<TestVariable>,
+        iteration: u32,
     ) -> Option<serde_json::Value> {
         if let Some(body) = &compare.body {
             if !body.matches_variable.get() {
@@ -1188,50 +1188,6 @@ impl TestDefinition {
         }
 
         None
-    }
-
-    pub fn get_setup_request_body(&self, iteration: u32) -> Option<serde_json::Value> {
-        match self.setup.as_ref() {
-            Some(setup) => self.get_body(iteration, &setup.request, &self.variables),
-            None => None,
-        }
-    }
-
-    pub fn get_cleanup_request_body(&self, iteration: u32) -> Option<serde_json::Value> {
-        match self.cleanup.as_ref() {
-            Some(cleanup) => self.get_body(iteration, &cleanup.request, &self.variables),
-            None => None,
-        }
-    }
-
-    pub fn get_stage_request_body(
-        &self,
-        stage_index: usize,
-        iteration: u32,
-    ) -> Option<serde_json::Value> {
-        let stage = self.stages.get(stage_index).unwrap();
-        self.get_body(
-            iteration,
-            &stage.request,
-            &[&stage.variables[..], &self.variables[..]].concat(),
-        )
-    }
-
-    pub fn get_stage_compare_body(
-        &self,
-        stage_index: usize,
-        iteration: u32,
-    ) -> Option<serde_json::Value> {
-        let stage = self.stages.get(stage_index).unwrap();
-
-        match stage.compare.as_ref() {
-            Some(compare) => self.get_compare_body(
-                iteration,
-                compare,
-                &[&stage.variables[..], &self.variables[..]].concat(),
-            ),
-            None => None,
-        }
     }
 
     pub fn validate(&self) -> bool {
