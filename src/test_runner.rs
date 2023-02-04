@@ -5,7 +5,7 @@ use crate::test_definition::{StageDescriptor, TestDefinition};
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, trace};
+use log::{error, info, debug};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
@@ -38,7 +38,7 @@ impl TestRunner {
         total: usize,
         iteration: u32,
     ) -> bool {
-        print!(
+        info!(
             "Running Test ({}\\{}) `{}` Iteration ({}\\{})...",
             count + 1,
             total,
@@ -58,13 +58,13 @@ impl TestRunner {
 
         match result {
             Ok(_) => {
-                println!("\x1b[32mPASSED\x1b[0m");
+                info!("\x1b[32mPASSED\x1b[0m\n");
                 self.passed += 1;
                 return true;
             }
             Err(e) => {
-                println!("\x1b[31mFAILED\x1b[0m");
-                println!("{}", e);
+                info!("\x1b[31mFAILED\x1b[0m\n");
+                error!("{}", e);
                 self.failed += 1;
                 return false;
             }
@@ -78,8 +78,8 @@ impl TestRunner {
         total: usize,
         iteration: u32,
     ) -> bool {
-        println!(
-            "Dry Run Test ({}\\{}) `{}` Iteration({}\\{})",
+        info!(
+            "Dry Run Test ({}\\{}) `{}` Iteration({}\\{})\n",
             count + 1,
             total,
             td.name.clone().unwrap_or(format!("Test {}", count + 1)),
@@ -95,7 +95,7 @@ impl TestRunner {
                 return true;
             }
             Err(e) => {
-                println!("{}", e);
+                error!("{}", e);
                 return false;
             }
         }
@@ -118,50 +118,50 @@ impl TestRunner {
             );
             let setup_headers = td.get_setup_request_headers(iteration);
             let setup_body = td.get_body(&setup.request, &td.variables, iteration);
-            println!("setup: {} {}", setup_method, setup_url);
+            info!("setup: {} {}\n", setup_method, setup_url);
             if setup_headers.len() > 0 {
-                println!("setup_headers: ");
+                info!("setup_headers:\n");
                 for (key, value) in setup_headers.iter() {
-                    println!("-- {}: {}", key, value);
+                    info!("-- {}: {}\n", key, value);
                 }
             }
 
             if let Some(body) = setup_body {
-                println!("setup_body: {}", body);
+                info!("setup_body: {}\n", body);
             }
 
             if let Some(r) = &setup.response {
                 // compare to response definition
                 if let Some(setup_response_status) = r.status {
-                    println!(
-                        "validate setup_response_status with defined_status: {}",
+                    info!(
+                        "validate setup_response_status with defined_status: {}\n",
                         setup_response_status
                     );
                 }
 
                 for v in &r.extract {
-                    println!(
-                        "attempt to extract value from response: {} = valueOf({})",
+                    info!(
+                        "attempt to extract value from response: {} = valueOf({})\n",
                         v.name, v.field
                     );
                 }
 
                 if r.ignore.len() > 0 {
-                    println!("prune fields from setup_response_body");
+                    info!("prune fields from setup_response_body\n");
                     for i in r.ignore.iter() {
-                        println!("filter: {}", i);
+                        info!("filter: {}\n", i);
                     }
                 }
 
                 if let Some(b) = &r.body {
                     if r.ignore.len() > 0 {
-                        println!(
-                            "validate filtered setup_response_body matches defined body: {}",
+                        info!(
+                            "validate filtered setup_response_body matches defined body: {}\n",
                             b.data
                         );
                     } else {
-                        println!(
-                            "validate setup_response_body matches defined body: {}",
+                        info!(
+                            "validate setup_response_body matches defined body: {}\n",
                             b.data
                         );
                     }
@@ -183,49 +183,49 @@ impl TestRunner {
                 &[&stage.variables[..], &td.variables[..]].concat(),
                 iteration,
             );
-            println!("stage {}: {} {}", stage_index + 1, stage_method, stage_url);
+            info!("stage {}: {} {}\n", stage_index + 1, stage_method, stage_url);
             if stage_headers.len() > 0 {
-                println!("headers: ");
+                info!("headers:\n");
                 for (key, value) in stage_headers.iter() {
-                    println!("-- {}: {}", key, value);
+                    info!("-- {}: {}\n", key, value);
                 }
             }
 
             if let Some(body) = stage_body {
-                println!("body: {}", body);
+                info!("body: {}\n", body);
             }
 
             if let Some(r) = &stage.response {
                 // compare to response definition
                 if let Some(stage_response_status) = r.status {
-                    println!(
-                        "validate response_status with defined_status: {}",
+                    info!(
+                        "validate response_status with defined_status: {}\n",
                         stage_response_status
                     );
                 }
 
                 for v in &r.extract {
-                    println!(
-                        "attempt to extract value from response: {} = valueOf({})",
+                    info!(
+                        "attempt to extract value from response: {} = valueOf({})\n",
                         v.name, v.field
                     );
                 }
 
                 if r.ignore.len() > 0 {
-                    println!("prune fields from response_body");
+                    info!("prune fields from response_body\n");
                     for i in r.ignore.iter() {
-                        println!("filter: {}", i);
+                        info!("filter: {}\n", i);
                     }
                 }
 
                 if let Some(b) = &r.body {
                     if r.ignore.len() > 0 {
-                        println!(
-                            "validate filtered response_body matches defined body: {}",
+                        info!(
+                            "validate filtered response_body matches defined body: {}\n",
                             b.data
                         );
                     } else {
-                        println!("validate response_body matches defined body: {}", b.data);
+                        info!("validate response_body matches defined body: {}\n", b.data);
                     }
                 }
             }
@@ -278,41 +278,42 @@ impl TestRunner {
                     None => None,
                 };
 
-                println!("comparison mode");
-                println!("compare_request: {} {}", stage_compare_method, compare_url);
+                info!("comparison mode\n");
+                info!("compare_request: {} {}\n", stage_compare_method, compare_url);
 
                 if stage_compare_headers.len() > 0 {
-                    println!("compare_headers: ");
+                    info!("compare_headers:\n");
                     for (key, value) in stage_compare_headers.iter() {
-                        println!("-- {}: {}", key, value);
+                        info!("-- {}: {}\n", key, value);
                     }
                 }
 
                 if let Some(body) = stage_compare_body {
-                    println!("compare_body: {}", body);
+                    info!("compare_body: {}", body);
                 }
 
                 // compare to comparison response
-                println!("validate request_status_code matches compare_request_status_code");
+                info!("validate request_status_code matches compare_request_status_code\n");
 
                 if let Some(r) = &stage.response {
                     if r.ignore.len() > 0 {
-                        println!("prune fields from compare_response_body");
+                        info!("prune fields from compare_response_body\n");
                         for i in r.ignore.iter() {
-                            println!("filter: {}", i);
+                            info!("filter: {}\n", i);
                         }
-                        println!(
-                            "validate filtered response_body matches filtered compare_response_body"
+                        info!(
+                            "validate filtered response_body matches filtered compare_response_body\n"
                         );
                     } else {
-                        println!("validate response_body matches compare_response_body");
+                        info!("validate response_body matches compare_response_body\n");
                     }
                 } else {
-                    println!("validate response_body matches compare_response_body");
+                    info!("validate response_body matches compare_response_body\n");
                 }
             }
         }
 
+        // TODO: fix dryrun cleanup explanation
         if let Some(cleanup) = &td.cleanup {
             let cleanup_method = cleanup.request.method.as_method();
             let cleanup_url = &td.get_url(
@@ -323,16 +324,16 @@ impl TestRunner {
             );
             let cleanup_headers = td.get_setup_request_headers(iteration);
             let cleanup_body = td.get_body(&cleanup.request, &td.variables, iteration);
-            println!("cleanup: {} {}", cleanup_method, cleanup_url);
+            info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
             if cleanup_headers.len() > 0 {
-                println!("cleanup_headers: ");
+                info!("cleanup_headers:\n");
                 for (key, value) in cleanup_headers.iter() {
-                    println!("-- {}: {}", key, value);
+                    info!("-- {}: {}\n", key, value);
                 }
             }
 
             if let Some(body) = cleanup_body {
-                println!("cleanup_body: {}", body);
+                info!("cleanup_body: {}\n", body);
             }
         }
 
@@ -392,12 +393,11 @@ impl TestRunner {
         let r = modified_actual == modified_expected;
 
         if !r {
-            trace!(
-                "data doesn't match: req({}) compare({})",
-                modified_actual,
-                modified_expected
-            );
-
+            // debug!(
+            //     "data doesn't match: req({}) compare({})",
+            //     modified_actual,
+            //     modified_expected
+            // );
             let result = assert_json_diff::assert_json_matches_no_panic(
                 &modified_actual,
                 &modified_expected,
@@ -411,7 +411,7 @@ impl TestRunner {
                 }
                 Err(msg) => {
                     return Err(Box::from(TestFailure {
-                        reason: format!("response body doesn't match\n{}", msg),
+                        reason: format!("response body doesn't match{}", msg),
                     }));
                 }
             }
@@ -486,7 +486,7 @@ impl TestRunner {
                                         .insert(v.name.clone(), converted_result);
                                 }
                                 Err(error) => {
-                                    println!("no json result found: {}", error);
+                                    error!("no json result found: {}", error);
                                 }
                             }
                         }
@@ -660,7 +660,7 @@ impl TestRunner {
                                     .insert(v.name.clone(), converted_result);
                             }
                             Err(error) => {
-                                println!("no json result found: {}", error);
+                                error!("no json result found: {}", error);
                             }
                         }
                     }
@@ -724,7 +724,7 @@ impl TestRunner {
         global_variables: &HashMap<String, String>,
     ) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-        trace!("Url: {}", uri);
+        debug!("Url: {}", uri);
         match Url::parse(uri) {
             Ok(_) => {}
             Err(error) => {

@@ -2,6 +2,7 @@ use log::{Level, Log, Metadata, Record};
 
 pub struct SimpleLogger {
     pub level: Level,
+    pub disabled: bool,
 }
 
 impl Log for SimpleLogger {
@@ -10,21 +11,19 @@ impl Log for SimpleLogger {
     }
 
     fn log(&self, record: &Record) {
+        if self.disabled {
+            return;
+        }
+        
         if !self.enabled(record.metadata()) {
             return;
         }
 
         match record.level() {
             Level::Info => {
-                println!("{}", record.args());
-            }
-            Level::Error => {
-                println!("{}", record.args());
-            }
-            Level::Trace => {
-                println!("{}", record.args());
-            }
-            _ => {}
+                print!("{}", record.args());
+            },
+            _ => println!("{}", record.args())
         }
     }
 

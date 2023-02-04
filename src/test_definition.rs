@@ -5,7 +5,7 @@ use crate::test_file::{
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
-use log::trace;
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -398,7 +398,7 @@ impl TestVariable {
             VariableTypes::Datetime => String::from(""),
         };
 
-        trace!("generate_value result: {}", result);
+        debug!("generate_value result: {}", result);
 
         return result;
     }
@@ -406,11 +406,11 @@ impl TestVariable {
     fn generate_int_value(&self, iteration: u32) -> String {
         match &self.value {
             serde_yaml::Value::Number(v) => {
-                trace!("number expression: {:?}", v);
+                debug!("number expression: {:?}", v);
                 return format!("{}", v);
             }
             serde_yaml::Value::Sequence(seq) => {
-                trace!("sequence expression: {:?}", seq);
+                debug!("sequence expression: {:?}", seq);
                 let test = &seq[iteration as usize];
                 let test_string = match test {
                     serde_yaml::Value::Number(st) => st.as_i64().unwrap_or(0),
@@ -419,7 +419,7 @@ impl TestVariable {
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
-                trace!("map expression: {:?}", map);
+                debug!("map expression: {:?}", map);
                 return String::from("");
             }
             _ => {
@@ -431,7 +431,7 @@ impl TestVariable {
     fn generate_string_value(&self, iteration: u32, global_variables: Vec<TestVariable>) -> String {
         match &self.value {
             serde_yaml::Value::String(v) => {
-                trace!("string expression: {:?}", v);
+                debug!("string expression: {:?}", v);
 
                 if v.contains("$") {
                     let mut modified_value = v.clone();
@@ -452,7 +452,7 @@ impl TestVariable {
                 return format!("{}", v);
             }
             serde_yaml::Value::Sequence(seq) => {
-                trace!("sequence expression: {:?}", seq);
+                debug!("sequence expression: {:?}", seq);
                 let test = &seq[iteration as usize];
                 let test_string = match test {
                     serde_yaml::Value::String(st) => st.to_string(),
@@ -478,7 +478,7 @@ impl TestVariable {
                 return format!("{}", test_string);
             }
             serde_yaml::Value::Mapping(map) => {
-                trace!("map expression: {:?}", map);
+                debug!("map expression: {:?}", map);
                 return String::from("");
             }
             _ => {
@@ -491,7 +491,7 @@ impl TestVariable {
         // TODO: Add proper error handling
         match &self.value {
             serde_yaml::Value::String(v) => {
-                trace!("string expression: {:?}", v);
+                debug!("string expression: {:?}", v);
                 let mut result_date;
 
                 let modified_value = if v.contains("$") {
@@ -565,7 +565,7 @@ impl TestVariable {
                 return format!("{}", result_date.format("%Y-%m-%d"));
             }
             serde_yaml::Value::Sequence(seq) => {
-                trace!("sequence expression: {:?}", seq);
+                debug!("sequence expression: {:?}", seq);
                 let test = &seq[iteration as usize];
 
                 let test_string: &str = match test {
@@ -604,14 +604,14 @@ impl TestVariable {
                         );
                     }
                     Err(e) => {
-                        println!("parse_attempt failed");
-                        println!("{}", e);
+                        error!("parse_attempt failed");
+                        error!("{}", e);
                         return String::from("");
                     }
                 }
             }
             serde_yaml::Value::Mapping(map) => {
-                trace!("map expression: {:?}", map);
+                debug!("map expression: {:?}", map);
                 return String::from("");
             }
             _ => {
@@ -796,7 +796,7 @@ impl TestDefinition {
 
             if header.value.contains(var_pattern) {
                 header.matches_variable.set(true);
-                trace!("setting match true: {}", header.header);
+                debug!("setting match true: {}", header.header);
             }
         }
 
@@ -807,7 +807,7 @@ impl TestDefinition {
 
             if param.value.contains(var_pattern) {
                 param.matches_variable.set(true);
-                trace!("setting match true: {}", param.param);
+                debug!("setting match true: {}", param.param);
             }
         }
 
@@ -820,7 +820,7 @@ impl TestDefinition {
             if let Some(b) = &body_data {
                 if b.contains(var_pattern) {
                     body.matches_variable.set(true);
-                    trace!("request body match true: {}", var_pattern);
+                    debug!("request body match true: {}", var_pattern);
                 }
             }
         }
@@ -834,7 +834,7 @@ impl TestDefinition {
 
             if header.value.contains(var_pattern) {
                 header.matches_variable.set(true);
-                trace!("setting match true: {}", header.header);
+                debug!("setting match true: {}", header.header);
             }
         }
 
@@ -845,7 +845,7 @@ impl TestDefinition {
 
             if param.value.contains(var_pattern) {
                 param.matches_variable.set(true);
-                trace!("setting match true: {}", param.param);
+                debug!("setting match true: {}", param.param);
             }
         }
 
@@ -858,7 +858,7 @@ impl TestDefinition {
             if let Some(b) = &body_data {
                 if b.contains(var_pattern) {
                     body.matches_variable.set(true);
-                    trace!("compare body match true: {}", var_pattern);
+                    debug!("compare body match true: {}", var_pattern);
                 }
             }
         }
@@ -872,7 +872,7 @@ impl TestDefinition {
 
             if header.value.contains(var_pattern) {
                 header.matches_variable.set(true);
-                trace!("setting match true: {}", header.header);
+                debug!("setting match true: {}", header.header);
             }
         }
 
@@ -885,18 +885,18 @@ impl TestDefinition {
             if let Some(b) = &body_data {
                 if b.contains(var_pattern) {
                     body.matches_variable.set(true);
-                    trace!("response body match true: {}", var_pattern);
+                    debug!("response body match true: {}", var_pattern);
                 }
             }
         }
     }
 
     fn update_variable_matching(&self) {
-        trace!("updating variable matching");
+        debug!("updating variable matching");
 
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name.trim());
-            trace!("pattern: {}", var_pattern);
+            debug!("pattern: {}", var_pattern);
 
             if let Some(setup) = self.setup.as_ref() {
                 TestDefinition::update_request_variables(&setup.request, var_pattern.as_str());
@@ -926,7 +926,7 @@ impl TestDefinition {
                 .chain(self.variables.iter().chain(self.global_variables.iter()))
             {
                 let var_pattern = format!("${}$", variable.name.trim());
-                trace!("pattern: {}", var_pattern);
+                debug!("pattern: {}", var_pattern);
 
                 TestDefinition::update_request_variables(&stage.request, var_pattern.as_str());
 

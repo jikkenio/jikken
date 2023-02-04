@@ -11,7 +11,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, info, trace, Level, LevelFilter};
+use log::{error, info, debug, Level, LevelFilter};
 use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
@@ -39,16 +39,27 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
+    /// The environment flag can be used to indicate which environment{n}the tests are executing against.
+    /// This is not used unless tests{n}are reporting to the Jikken.IO platform via an API Key{n}
+    #[arg(short, long = "env", name = "env")]
+    environment: Option<String>,
+
+    /// Quiet mode suppresses all console output
+    #[arg(short, long, default_value_t = false)]
+    quiet: bool,
+
+    /// Verbose mode provides more detailed console output
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    #[arg(short, long = "env", name = "env")]
-    environment: Option<String>,
+    /// Trace mode provides significant console output
+    #[arg(long, default_value_t = false)]
+    trace: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// execute tests
+    /// Execute tests
     Run {
         #[arg(short, long = "tag", name = "tag")]
         tags: Vec<String>,
@@ -57,7 +68,7 @@ enum Commands {
         tags_or: bool,
     },
 
-    /// process tests without calling api endpoints
+    /// Process tests without calling api endpoints
     #[command(name = "dryrun")]
     DryRun {
         #[arg(short, long = "tag", name = "tag")]
@@ -66,23 +77,23 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         tags_or: bool,
     },
-    /// jikken updates itself if a newer version exists
+    /// Jikken updates itself if a newer version exists
     Update,
-    /// create a new test
+    /// Create a new test
     New {
-        /// generates a test template with all options
+        /// Generates a test template with all options
         #[arg(short, long = "full", name = "full")]
         full: bool,
 
-        /// generates a multi-stage test template
+        /// Generates a multi-stage test template
         #[arg(short = 'm', long = "multistage", name = "multistage")]
         multistage: bool,
 
-        /// output to console instead of saving to a file
+        /// Output to console instead of saving to a file
         #[arg(short = 'o')]
         output: bool,
 
-        /// the file name to create
+        /// The file name to create
         name: Option<String>,
     },
 }
@@ -225,13 +236,13 @@ fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVari
 }
 
 async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-    print!("Jikken is updating to the latest version...");
+    info!("Jikken is updating to the latest version...");
     stdout().flush().unwrap();
 
     let file_name_opt = url.split("/").last();
 
     if file_name_opt.is_none() {
-        println!("error: invalid url");
+        error!("error: invalid url");
         return Ok(());
     }
 
@@ -245,7 +256,7 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     let save_file_reuslts = tmp_tarball.write_all_buf(&mut content).await;
 
     if let Err(error) = save_file_reuslts {
-        println!("error saving downloaded file: {}", error);
+        error!("error saving downloaded file: {}", error);
         return Ok(());
     }
 
@@ -340,12 +351,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let log_level = if cli.verbose {
+        Level::Debug
+    } else if cli.trace {
         Level::Trace
     } else {
         Level::Info
     };
 
-    let my_logger = logger::SimpleLogger { level: log_level };
+    let my_logger = logger::SimpleLogger { level: log_level, disabled: cli.quiet };
 
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
         error!("Error creating logger: {}", e);
@@ -377,7 +390,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     if let Some(lv) = lv_opt {
                         match update(&lv.url).await {
                             Ok(_) => {
-                                info!("update completed");
+                                info!("update completed\n");
                                 std::process::exit(0);
                             }
                             Err(error) => {
@@ -390,7 +403,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     }
                 }
                 Err(error) => {
-                    trace!("error checking for updates: {}", error);
+                    debug!("error checking for updates: {}", error);
                 }
             }
 
@@ -401,14 +414,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Ok(lv_opt) => {
                 if let Some(lv) = lv_opt {
                     info!(
-                            "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
+                            "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m\n",
                             lv.version, VERSION
                         );
-                    info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
+                    info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m\n");
                 }
             }
             Err(error) => {
-                trace!("error checking for updates: {}", error);
+                debug!("error checking for updates: {}", error);
             }
         },
     }
@@ -432,12 +445,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
             for line in template.lines() {
                 if !line.contains("null") {
-                    result = format!("{}{}\n", result, line)
+                    result = format!("{}{}", result, line)
                 }
             }
 
             if *output {
-                println!("{}", result);
+                error!("{}", result);
             } else {
                 match name {
                     Some(n) => {
@@ -448,17 +461,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         };
 
                         if std::path::Path::new(&filename).exists() {
-                            println!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
+                            error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
                             std::process::exit(1);
                         }
 
                         let mut file = File::create(&filename).await?;
                         file.write_all(result.as_bytes()).await?;
-                        println!("Successfully created test (`{}`).", filename);
+                        info!("Successfully created test (`{}`).\n", filename);
                         std::process::exit(0);
                     }
                     None => {
-                        println!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                        error!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
                         std::process::exit(1);
                     }
                 }
@@ -472,7 +485,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let files = get_files();
     let mut continue_on_failure = false;
 
-    info!("Jikken found {} tests", files.len());
+    info!("Jikken found {} tests\n", files.len());
 
     if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
@@ -494,13 +507,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 match result {
                     Ok(file) => Some(file),
                     Err(e) => {
-                        println!("unable to parse file ({}) data: {}", filename, e);
+                        error!("unable to parse file ({}) data: {}", filename, e);
                         None
                     }
                 }
             }
             Err(err) => {
-                println!("error loading file: {}", err);
+                error!("error loading file: {}", err);
                 None
             }
         })
@@ -526,7 +539,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                                 tests_to_ignore.push(td.clone());
 
-                                trace!(
+                                debug!(
                                     "test `{}` doesn't match any tags: {}",
                                     td.name.unwrap_or("".to_string()),
                                     cli_tags.join(", ")
@@ -538,7 +551,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                     if !td_tags.contains(t) {
                                         tests_to_ignore.push(td.clone());
 
-                                        trace!(
+                                        debug!(
                                             "test `{}` is missing tag: {}",
                                             td.name.unwrap_or("".to_string()),
                                             t
@@ -553,7 +566,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     }
                 }
                 Err(e) => {
-                    trace!("test definition creation failed: {}", e);
+                    error!("test definition creation failed: {}", e);
                     None
                 }
             }
