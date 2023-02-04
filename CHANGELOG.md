@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+Bugfixes
+* Fix cleanup stage to properly handle onsuccess and onfailure definitions
+
 Features:
 * Update Jikken CLI to have command driven execution. Instead of `jk` automatically running tests there are now various commands `jk run`, `jk dryrun` etc.
 * Add `jk new` command to create a test file that shows all possible definition options.

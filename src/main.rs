@@ -26,9 +26,9 @@ use tempfile;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
 use test_file::UnvalidatedTest;
+use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
-use tokio::fs::File;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,7 +38,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    
+
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
@@ -56,13 +56,13 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         tags_or: bool,
     },
-    
+
     /// process tests without calling api endpoints
     #[command(name = "dryrun")]
     DryRun {
         #[arg(short, long = "tag", name = "tag")]
         tags: Vec<String>,
-    
+
         #[arg(long, default_value_t = false)]
         tags_or: bool,
     },
@@ -169,7 +169,6 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
             } else {
                 settings.environment
             };
-
         } else {
             result_settings.continue_on_failure = envvar_cof;
             result_settings.api_key = envvar_apikey;
@@ -308,7 +307,7 @@ async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Error + 
             env::consts::OS
         ))
         .body(Body::empty())?;
-    
+
     let resp = client.request(req).await?;
     let (_, body) = resp.into_parts();
     let response_bytes = body::to_bytes(body).await?;
@@ -336,7 +335,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => {
             cli_tags = tags;
             cli_tags_or = *tags_or;
-        },
+        }
         _ => {}
     };
 
@@ -389,7 +388,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             }
                         }
                     }
-                },
+                }
                 Err(error) => {
                     trace!("error checking for updates: {}", error);
                 }
@@ -397,29 +396,32 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
             error!("Jikken was unable to find an update for this platform and release channel");
             std::process::exit(0);
-        },
-        _ => {
-            match latest_version_opt {
-                Ok(lv_opt) => {
-                    if let Some(lv) = lv_opt {
-                        info!(
+        }
+        _ => match latest_version_opt {
+            Ok(lv_opt) => {
+                if let Some(lv) = lv_opt {
+                    info!(
                             "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
                             lv.version, VERSION
                         );
-                        info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
-                    }
-                },
-                Err(error) => {
-                    trace!("error checking for updates: {}", error);
+                    info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
                 }
             }
-        }
+            Err(error) => {
+                trace!("error checking for updates: {}", error);
+            }
+        },
     }
 
     match &cli.command {
-        Commands::New { full, multistage, output, name } => {
+        Commands::New {
+            full,
+            multistage,
+            output,
+            name,
+        } => {
             let template = if *full {
-                 serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
+                serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
             } else if *multistage {
                 serde_yaml::to_string(&UnvalidatedTest::template_staged()?)?
             } else {
@@ -427,7 +429,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             };
             let template = template.replace("''", "");
             let mut result = "".to_string();
-            
+
             for line in template.lines() {
                 if !line.contains("null") {
                     result = format!("{}{}\n", result, line)
@@ -447,14 +449,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                         if std::path::Path::new(&filename).exists() {
                             println!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
-                            std::process::exit(1);    
+                            std::process::exit(1);
                         }
-                        
+
                         let mut file = File::create(&filename).await?;
                         file.write_all(result.as_bytes()).await?;
                         println!("Successfully created test (`{}`).", filename);
                         std::process::exit(0);
-                    },
+                    }
                     None => {
                         println!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
                         std::process::exit(1);
@@ -463,7 +465,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
 
             std::process::exit(0);
-        },
+        }
         _ => {}
     }
 
@@ -597,7 +599,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
         let dry_run = match cli.command {
-            Commands::DryRun {tags: _, tags_or: _} => true,
+            Commands::DryRun {
+                tags: _,
+                tags_or: _,
+            } => true,
             _ => false,
         };
 
