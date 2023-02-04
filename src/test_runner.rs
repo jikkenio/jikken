@@ -117,7 +117,7 @@ impl TestRunner {
                 &td.variables,
             );
             let setup_headers = td.get_setup_request_headers(iteration);
-            let setup_body = td.get_setup_request_body(iteration);
+            let setup_body = td.get_body(&setup.request, &td.variables, iteration);
             println!("setup: {} {}", setup_method, setup_url);
             if setup_headers.len() > 0 {
                 println!("setup_headers: ");
@@ -178,7 +178,11 @@ impl TestRunner {
                 &[&stage.variables[..], &td.variables[..]].concat(),
             );
             let stage_headers = td.get_headers(&stage.request.headers, iteration);
-            let stage_body = td.get_stage_request_body(stage_index, iteration);
+            let stage_body = td.get_body(
+                &stage.request,
+                &[&stage.variables[..], &td.variables[..]].concat(),
+                iteration,
+            );
             println!("stage {}: {} {}", stage_index + 1, stage_method, stage_url);
             if stage_headers.len() > 0 {
                 println!("headers: ");
@@ -318,7 +322,7 @@ impl TestRunner {
                 &td.variables,
             );
             let cleanup_headers = td.get_setup_request_headers(iteration);
-            let cleanup_body = td.get_setup_request_body(iteration);
+            let cleanup_body = td.get_body(&cleanup.request, &td.variables, iteration);
             println!("cleanup: {} {}", cleanup_method, cleanup_url);
             if cleanup_headers.len() > 0 {
                 println!("cleanup_headers: ");
@@ -446,7 +450,7 @@ impl TestRunner {
                 &td.variables,
             );
             let req_headers = td.get_setup_request_headers(iteration);
-            let req_body = td.get_setup_request_body(iteration);
+            let req_body = td.get_body(&setup.request, &td.variables, iteration);
             let req_response = TestRunner::process_request(
                 req_method,
                 req_url,
@@ -517,7 +521,7 @@ impl TestRunner {
                     let success_url =
                         &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
                     let success_headers = td.get_headers(&onsuccess.headers, iteration);
-                    let success_body = td.get_body(iteration, onsuccess, &td.variables);
+                    let success_body = td.get_body(onsuccess, &td.variables, iteration);
                     _ = TestRunner::process_request(
                         success_method,
                         success_url,
@@ -533,7 +537,7 @@ impl TestRunner {
                     let failure_url =
                         &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
                     let failure_headers = td.get_headers(&onfailure.headers, iteration);
-                    let failure_body = td.get_body(iteration, onfailure, &td.variables);
+                    let failure_body = td.get_body(onfailure, &td.variables, iteration);
                     _ = TestRunner::process_request(
                         failure_method,
                         failure_url,
@@ -553,7 +557,7 @@ impl TestRunner {
                 &td.variables,
             );
             let req_headers = td.get_cleanup_request_headers(iteration);
-            let req_body = td.get_cleanup_request_body(iteration);
+            let req_body = td.get_body(&cleanup.request, &td.variables, iteration);
             _ = TestRunner::process_request(
                 req_method,
                 req_url,
@@ -582,7 +586,11 @@ impl TestRunner {
             &[&stage.variables[..], &td.variables[..]].concat(),
         );
         let req_headers = td.get_headers(&stage.request.headers, iteration);
-        let req_body = td.get_stage_request_body(stage_index, iteration);
+        let req_body = td.get_body(
+            &stage.request,
+            &[&stage.variables[..], &td.variables[..]].concat(),
+            iteration,
+        );
         let req_response = TestRunner::process_request(
             req_method,
             req_uri,
@@ -609,7 +617,11 @@ impl TestRunner {
                 &[&stage.variables[..], &td.variables[..]].concat(),
             );
             let compare_headers = td.get_stage_compare_headers(stage_index, iteration);
-            let compare_body = td.get_stage_compare_body(stage_index, iteration);
+            let compare_body = td.get_compare_body(
+                compare,
+                &[&stage.variables[..], &td.variables[..]].concat(),
+                iteration,
+            );
             compare_response_opt = Some(
                 TestRunner::process_request(
                     compare_method,
