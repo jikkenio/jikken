@@ -11,7 +11,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, info, debug, Level, LevelFilter};
+use log::{debug, error, info, trace, warn, Level, LevelFilter};
 use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
@@ -358,7 +358,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Level::Info
     };
 
-    let my_logger = logger::SimpleLogger { level: log_level, disabled: cli.quiet };
+    let my_logger = logger::SimpleLogger {
+        level: log_level,
+        disabled: cli.quiet,
+    };
 
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
         error!("Error creating logger: {}", e);
@@ -413,11 +416,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         _ => match latest_version_opt {
             Ok(lv_opt) => {
                 if let Some(lv) = lv_opt {
-                    info!(
-                            "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m\n",
-                            lv.version, VERSION
-                        );
-                    info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m\n");
+                    warn!(
+                        "Jikken found new version ({}), currently running version ({})",
+                        lv.version, VERSION
+                    );
+                    warn!("Run command: `jk --update` to update jikken or update using your package manager");
                 }
             }
             Err(error) => {
@@ -502,6 +505,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|f| (f, fs::read_to_string(f)))
         .filter_map(|(filename, f)| match f {
             Ok(file_data) => {
+                debug!("loading test definition file: {}", filename);
                 let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
                     serde_yaml::from_str(&file_data);
                 match result {
@@ -573,6 +577,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         })
         .collect();
 
+    if tests_to_ignore.len() > 0 {
+        trace!("filtering out tests which don't match the tag pattern")
+    }
+
     let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
         .clone()
         .into_iter()
@@ -585,6 +593,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut duplicate_filter: HashSet<String> = HashSet::new();
 
     let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+
+    trace!("determine test execution order based on dependency graph");
 
     for td in tests_to_run.into_iter() {
         match &td.requires {

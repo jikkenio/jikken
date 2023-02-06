@@ -5,7 +5,7 @@ use crate::test_file::{
 };
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use hyper::Method;
-use log::{debug, error};
+use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -710,20 +710,24 @@ impl RequestResponseDescriptor {
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
     pub onfailure: Option<RequestDescriptor>,
-    pub request: RequestDescriptor,
+    pub request: Option<RequestDescriptor>,
 }
 
 impl CleanupDescriptor {
-    pub fn new_opt(
+    pub fn new(
         cleanup_opt: Option<UnvalidatedCleanup>,
-    ) -> Result<Option<CleanupDescriptor>, ValidationError> {
+    ) -> Result<CleanupDescriptor, ValidationError> {
         match cleanup_opt {
-            Some(cleanup) => Ok(Some(CleanupDescriptor {
+            Some(cleanup) => Ok(CleanupDescriptor {
                 onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess)?,
                 onfailure: RequestDescriptor::new_opt(cleanup.onfailure)?,
-                request: RequestDescriptor::new(cleanup.request)?,
-            })),
-            None => Ok(None),
+                request: RequestDescriptor::new_opt(cleanup.request)?,
+            }),
+            None => Ok(CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                request: None,
+            }),
         }
     }
 
@@ -744,7 +748,7 @@ pub struct TestDefinition {
     pub global_variables: Vec<TestVariable>,
     pub stages: Vec<StageDescriptor>,
     pub setup: Option<RequestResponseDescriptor>,
-    pub cleanup: Option<CleanupDescriptor>,
+    pub cleanup: CleanupDescriptor,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -781,7 +785,7 @@ impl TestDefinition {
                 test.stages,
             )?,
             setup: RequestResponseDescriptor::new_opt(test.setup)?,
-            cleanup: CleanupDescriptor::new_opt(test.cleanup)?,
+            cleanup: CleanupDescriptor::new(test.cleanup)?,
         };
 
         td.update_variable_matching();
@@ -892,11 +896,11 @@ impl TestDefinition {
     }
 
     fn update_variable_matching(&self) {
-        debug!("updating variable matching");
+        trace!("scanning test definition for variable pattern matches");
 
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
             let var_pattern = format!("${}$", variable.name.trim());
-            debug!("pattern: {}", var_pattern);
+            // debug!("pattern: {}", var_pattern);
 
             if let Some(setup) = self.setup.as_ref() {
                 TestDefinition::update_request_variables(&setup.request, var_pattern.as_str());
@@ -906,16 +910,16 @@ impl TestDefinition {
                 }
             }
 
-            if let Some(cleanup) = self.cleanup.as_ref() {
-                TestDefinition::update_request_variables(&cleanup.request, var_pattern.as_str());
+            if let Some(request) = &self.cleanup.request {
+                TestDefinition::update_request_variables(&request, var_pattern.as_str());
+            }
 
-                if let Some(onsuccess) = &cleanup.onsuccess {
-                    TestDefinition::update_request_variables(&onsuccess, var_pattern.as_str());
-                }
+            if let Some(onsuccess) = &self.cleanup.onsuccess {
+                TestDefinition::update_request_variables(&onsuccess, var_pattern.as_str());
+            }
 
-                if let Some(onfailure) = &cleanup.onfailure {
-                    TestDefinition::update_request_variables(&onfailure, var_pattern.as_str());
-                }
+            if let Some(onfailure) = &self.cleanup.onfailure {
+                TestDefinition::update_request_variables(&onfailure, var_pattern.as_str());
             }
         }
 
@@ -926,7 +930,7 @@ impl TestDefinition {
                 .chain(self.variables.iter().chain(self.global_variables.iter()))
             {
                 let var_pattern = format!("${}$", variable.name.trim());
-                debug!("pattern: {}", var_pattern);
+                // debug!("pattern: {}", var_pattern);
 
                 TestDefinition::update_request_variables(&stage.request, var_pattern.as_str());
 
@@ -1062,8 +1066,8 @@ impl TestDefinition {
     }
 
     pub fn get_cleanup_request_headers(&self, iteration: u32) -> Vec<(String, String)> {
-        match self.cleanup.as_ref() {
-            Some(cleanup) => self.get_headers(&cleanup.request.headers, iteration),
+        match &self.cleanup.request {
+            Some(request) => self.get_headers(&request.headers, iteration),
             None => Vec::new(),
         }
     }
@@ -1191,15 +1195,14 @@ impl TestDefinition {
     }
 
     pub fn validate(&self) -> bool {
+        trace!("validating test definition");
         let mut valid_td = true;
 
         if let Some(setup) = &self.setup {
             valid_td &= setup.validate();
         }
 
-        if let Some(cleanup) = &self.cleanup {
-            valid_td &= cleanup.validate();
-        }
+        valid_td &= self.cleanup.validate();
 
         for stage in self.stages.iter() {
             valid_td &= stage.request.validate();
