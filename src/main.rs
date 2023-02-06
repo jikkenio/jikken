@@ -448,12 +448,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
             for line in template.lines() {
                 if !line.contains("null") {
-                    result = format!("{}{}", result, line)
+                    result = format!("{}{}\n", result, line)
                 }
             }
 
             if *output {
-                error!("{}", result);
+                info!("{}\n", result);
             } else {
                 match name {
                     Some(n) => {
