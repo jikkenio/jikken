@@ -1,6 +1,10 @@
 Next (Version determined when release is cut)
 =====
 
+
+0.4.0
+=====
+
 Bugfixes:
 * Fix cleanup stage to properly handle onsuccess and onfailure definitions
 
