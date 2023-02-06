@@ -255,7 +255,7 @@ impl UnvalidatedRequestResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedCleanup {
-    pub request: UnvalidatedRequest,
+    pub request: Option<UnvalidatedRequest>,
     pub onsuccess: Option<UnvalidatedRequest>,
     pub onfailure: Option<UnvalidatedRequest>,
 }
@@ -263,7 +263,7 @@ pub struct UnvalidatedCleanup {
 impl UnvalidatedCleanup {
     pub fn new_full() -> Result<UnvalidatedCleanup, Box<dyn Error + Send + Sync>> {
         Ok(UnvalidatedCleanup {
-            request: UnvalidatedRequest::new_full()?,
+            request: Some(UnvalidatedRequest::new_full()?),
             onsuccess: Some(UnvalidatedRequest::new_full()?),
             onfailure: Some(UnvalidatedRequest::new_full()?),
         })

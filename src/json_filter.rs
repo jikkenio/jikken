@@ -7,17 +7,12 @@ pub fn filter_json(
     json: serde_json::Value,
 ) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
     let path_segments: Vec<&str> = path.split(".").collect();
-
-    // println!("path ({}), depth({}), json({})", path, depth, json);
-
     if depth + 1 > path_segments.len() {
         return Ok(json);
     }
 
     if path_segments.len() == depth + 1 {
         let segment = path_segments[depth];
-
-        // println!("segment ({})", segment);
         match json {
             serde_json::Value::Object(_) => {
                 let mut map: Map<String, Value> = serde_json::from_value(json)?;
@@ -47,7 +42,6 @@ pub fn filter_json(
     }
 
     let current_segment = path_segments[depth];
-    // println!("current_segment ({})", current_segment);
     match json {
         serde_json::Value::Object(_) => {
             let mut map: Map<String, Value> = serde_json::from_value(json)?;

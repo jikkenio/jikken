@@ -5,7 +5,7 @@ use crate::test_definition::{StageDescriptor, TestDefinition};
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, info, debug};
+use log::{debug, error, info, trace};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
@@ -47,6 +47,7 @@ impl TestRunner {
             td.iterate
         );
         io::stdout().flush().unwrap();
+        debug!(""); // print a new line if we're in debug | trace mode
 
         self.run += 1;
 
@@ -183,7 +184,12 @@ impl TestRunner {
                 &[&stage.variables[..], &td.variables[..]].concat(),
                 iteration,
             );
-            info!("stage {}: {} {}\n", stage_index + 1, stage_method, stage_url);
+            info!(
+                "stage {}: {} {}\n",
+                stage_index + 1,
+                stage_method,
+                stage_url
+            );
             if stage_headers.len() > 0 {
                 info!("headers:\n");
                 for (key, value) in stage_headers.iter() {
@@ -279,7 +285,10 @@ impl TestRunner {
                 };
 
                 info!("comparison mode\n");
-                info!("compare_request: {} {}\n", stage_compare_method, compare_url);
+                info!(
+                    "compare_request: {} {}\n",
+                    stage_compare_method, compare_url
+                );
 
                 if stage_compare_headers.len() > 0 {
                     info!("compare_headers:\n");
@@ -313,17 +322,52 @@ impl TestRunner {
             }
         }
 
-        // TODO: fix dryrun cleanup explanation
-        if let Some(cleanup) = &td.cleanup {
-            let cleanup_method = cleanup.request.method.as_method();
-            let cleanup_url = &td.get_url(
-                iteration,
-                &cleanup.request.url,
-                &cleanup.request.params,
-                &td.variables,
-            );
+        if let Some(onsuccess) = &td.cleanup.onsuccess {
+            info!("when test successful, run onsuccess request:\n");
+            let onsuccess_method = onsuccess.method.as_method();
+            let onsuccess_url =
+                &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
+            let onsuccess_headers = td.get_setup_request_headers(iteration);
+            let onsuccess_body = td.get_body(&onsuccess, &td.variables, iteration);
+            info!("onsuccess: {} {}\n", onsuccess_method, onsuccess_url);
+            if onsuccess_headers.len() > 0 {
+                info!("onsuccess_headers:\n");
+                for (key, value) in onsuccess_headers.iter() {
+                    info!("-- {}: {}\n", key, value);
+                }
+            }
+
+            if let Some(body) = onsuccess_body {
+                info!("onsuccess_body: {}\n", body);
+            }
+        }
+
+        if let Some(onfailure) = &td.cleanup.onfailure {
+            info!("when test fails, run onfailure request:\n");
+            let onfailure_method = onfailure.method.as_method();
+            let onfailure_url =
+                &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+            let onfailure_headers = td.get_setup_request_headers(iteration);
+            let onfailure_body = td.get_body(&onfailure, &td.variables, iteration);
+            info!("onfailure: {} {}\n", onfailure_method, onfailure_url);
+            if onfailure_headers.len() > 0 {
+                info!("onfailure_headers:\n");
+                for (key, value) in onfailure_headers.iter() {
+                    info!("-- {}: {}\n", key, value);
+                }
+            }
+
+            if let Some(body) = onfailure_body {
+                info!("onfailure_body: {}\n", body);
+            }
+        }
+
+        if let Some(request) = &td.cleanup.request {
+            info!("run cleanup requests:\n");
+            let cleanup_method = request.method.as_method();
+            let cleanup_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
             let cleanup_headers = td.get_setup_request_headers(iteration);
-            let cleanup_body = td.get_body(&cleanup.request, &td.variables, iteration);
+            let cleanup_body = td.get_body(&request, &td.variables, iteration);
             info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
             if cleanup_headers.len() > 0 {
                 info!("cleanup_headers:\n");
@@ -344,6 +388,7 @@ impl TestRunner {
         actual: hyper::StatusCode,
         expected: hyper::StatusCode,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        trace!("validating status codes");
         let equality = actual == expected;
         if !equality {
             return Err(Box::from(TestFailure {
@@ -361,6 +406,7 @@ impl TestRunner {
         actual: hyper::StatusCode,
         expected: u16,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        trace!("validating status codes");
         let equality = actual.as_u16() == expected;
         if !equality {
             return Err(Box::from(TestFailure {
@@ -381,23 +427,21 @@ impl TestRunner {
         expected: Value,
         ignore: Vec<String>,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        trace!("validating response body");
         let mut modified_actual = actual.clone();
         let mut modified_expected = expected.clone();
 
         // TODO: make this more efficient, with a single pass filter
         for path in ignore.iter() {
+            trace!("stripping path({}) from response", path);
             modified_actual = filter_json(path, 0, modified_actual)?;
             modified_expected = filter_json(path, 0, modified_expected)?;
         }
 
+        trace!("compare json");
         let r = modified_actual == modified_expected;
 
         if !r {
-            // debug!(
-            //     "data doesn't match: req({}) compare({})",
-            //     modified_actual,
-            //     modified_expected
-            // );
             let result = assert_json_diff::assert_json_matches_no_panic(
                 &modified_actual,
                 &modified_expected,
@@ -451,6 +495,9 @@ impl TestRunner {
             );
             let req_headers = td.get_setup_request_headers(iteration);
             let req_body = td.get_body(&setup.request, &td.variables, iteration);
+
+            debug!("executing setup stage: {}", req_url);
+
             let req_response = TestRunner::process_request(
                 req_method,
                 req_url,
@@ -514,50 +561,57 @@ impl TestRunner {
         iteration: u32,
         succeeded: bool,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        if let Some(cleanup) = &td.cleanup {
-            if succeeded {
-                if let Some(onsuccess) = &cleanup.onsuccess {
-                    let success_method = onsuccess.method.as_method();
-                    let success_url =
-                        &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
-                    let success_headers = td.get_headers(&onsuccess.headers, iteration);
-                    let success_body = td.get_body(onsuccess, &td.variables, iteration);
-                    _ = TestRunner::process_request(
-                        success_method,
-                        success_url,
-                        success_headers,
-                        success_body,
-                        &self.global_variables,
-                    )
-                    .await?;
-                }
-            } else {
-                if let Some(onfailure) = &cleanup.onfailure {
-                    let failure_method = onfailure.method.as_method();
-                    let failure_url =
-                        &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
-                    let failure_headers = td.get_headers(&onfailure.headers, iteration);
-                    let failure_body = td.get_body(onfailure, &td.variables, iteration);
-                    _ = TestRunner::process_request(
-                        failure_method,
-                        failure_url,
-                        failure_headers,
-                        failure_body,
-                        &self.global_variables,
-                    )
-                    .await?;
-                }
-            }
+        if td.cleanup.request.is_some()
+            || td.cleanup.onsuccess.is_some()
+            || td.cleanup.onfailure.is_some()
+        {
+            debug!("running test cleanup");
+        } else {
+            return Ok(true);
+        }
 
-            let req_method = cleanup.request.method.as_method();
-            let req_url = &td.get_url(
-                iteration,
-                &cleanup.request.url,
-                &cleanup.request.params,
-                &td.variables,
-            );
+        if succeeded {
+            if let Some(onsuccess) = &td.cleanup.onsuccess {
+                debug!("execute onsucess request");
+                let success_method = onsuccess.method.as_method();
+                let success_url =
+                    &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
+                let success_headers = td.get_headers(&onsuccess.headers, iteration);
+                let success_body = td.get_body(onsuccess, &td.variables, iteration);
+                _ = TestRunner::process_request(
+                    success_method,
+                    success_url,
+                    success_headers,
+                    success_body,
+                    &self.global_variables,
+                )
+                .await?;
+            }
+        } else {
+            if let Some(onfailure) = &td.cleanup.onfailure {
+                debug!("execute onfailure request");
+                let failure_method = onfailure.method.as_method();
+                let failure_url =
+                    &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+                let failure_headers = td.get_headers(&onfailure.headers, iteration);
+                let failure_body = td.get_body(onfailure, &td.variables, iteration);
+                _ = TestRunner::process_request(
+                    failure_method,
+                    failure_url,
+                    failure_headers,
+                    failure_body,
+                    &self.global_variables,
+                )
+                .await?;
+            }
+        }
+
+        if let Some(request) = &td.cleanup.request {
+            debug!("execute cleanup request");
+            let req_method = request.method.as_method();
+            let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
             let req_headers = td.get_cleanup_request_headers(iteration);
-            let req_body = td.get_body(&cleanup.request, &td.variables, iteration);
+            let req_body = td.get_body(&request, &td.variables, iteration);
             _ = TestRunner::process_request(
                 req_method,
                 req_url,
@@ -578,6 +632,7 @@ impl TestRunner {
         stage_index: usize,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        debug!("execute stage request");
         let req_method = stage.request.method.as_method();
         let req_uri = &td.get_url(
             iteration,
@@ -603,6 +658,7 @@ impl TestRunner {
         let mut compare_response_opt = None;
 
         if let Some(compare) = &stage.compare {
+            debug!("execute stage comparison");
             let params = if compare.params.len() > 0 {
                 &compare.params
             } else {
@@ -724,7 +780,7 @@ impl TestRunner {
         global_variables: &HashMap<String, String>,
     ) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
         let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-        debug!("Url: {}", uri);
+        debug!("url({})", uri);
         match Url::parse(uri) {
             Ok(_) => {}
             Err(error) => {
@@ -743,6 +799,7 @@ impl TestRunner {
                 header_value = header_value.replace(&key_search, gv.1);
             }
 
+            debug!("header({}) value({})", &header.0, &header_value);
             req_builder = req_builder.header(&header.0, header_value);
         }
 
