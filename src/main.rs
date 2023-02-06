@@ -8,10 +8,10 @@ mod test_file;
 mod test_runner;
 
 use chrono::Local;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, info, trace, Level, LevelFilter};
+use log::{debug, error, info, trace, warn, Level, LevelFilter};
 use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
@@ -25,29 +25,77 @@ use std::{env, fs};
 use tempfile;
 use test_definition::TestDefinition;
 use test_definition::TestVariable;
+use test_file::UnvalidatedTest;
+use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(short, long = "tag", name = "tag")]
-    tags: Vec<String>,
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 
-    #[arg(long, default_value_t = false)]
-    tags_or: bool,
+    /// The environment flag can be used to indicate which environment{n}the tests are executing against.
+    /// This is not used unless tests{n}are reporting to the Jikken.IO platform via an API Key{n}
+    #[arg(short, long = "env", name = "env")]
+    environment: Option<String>,
 
+    /// Quiet mode suppresses all console output
+    #[arg(short, long, default_value_t = false)]
+    quiet: bool,
+
+    /// Verbose mode provides more detailed console output
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    #[arg(short, long, default_value_t = false)]
-    dry_run: bool,
+    /// Trace mode provides significant console output
+    #[arg(long, default_value_t = false)]
+    trace: bool,
+}
 
-    #[arg(short, long, default_value_t = false)]
-    update: bool,
+#[derive(Subcommand)]
+enum Commands {
+    /// Execute tests
+    Run {
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+
+    /// Process tests without calling api endpoints
+    #[command(name = "dryrun")]
+    DryRun {
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+    /// Jikken updates itself if a newer version exists
+    Update,
+    /// Create a new test
+    New {
+        /// Generates a test template with all options
+        #[arg(short, long = "full", name = "full")]
+        full: bool,
+
+        /// Generates a multi-stage test template
+        #[arg(short = 'm', long = "multistage", name = "multistage")]
+        multistage: bool,
+
+        /// Output to console instead of saving to a file
+        #[arg(short = 'o')]
+        output: bool,
+
+        /// The file name to create
+        name: Option<String>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -101,9 +149,16 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         None
     };
 
+    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
+        Some(env)
+    } else {
+        None
+    };
+
     let mut result_settings = config::Settings {
         continue_on_failure: None,
         api_key: None,
+        environment: None,
     };
 
     if let Some(c) = config {
@@ -119,9 +174,16 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
             } else {
                 settings.api_key
             };
+
+            result_settings.environment = if envvar_env.is_some() {
+                envvar_env
+            } else {
+                settings.environment
+            };
         } else {
             result_settings.continue_on_failure = envvar_cof;
             result_settings.api_key = envvar_apikey;
+            result_settings.environment = envvar_env;
         }
 
         return Some(config::Config {
@@ -134,6 +196,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         settings: Some(config::Settings {
             continue_on_failure: envvar_cof,
             api_key: envvar_apikey,
+            environment: envvar_env,
         }),
         globals: None,
     })
@@ -173,13 +236,13 @@ fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVari
 }
 
 async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-    print!("Jikken is updating to the latest version...");
+    info!("Jikken is updating to the latest version...");
     stdout().flush().unwrap();
 
     let file_name_opt = url.split("/").last();
 
     if file_name_opt.is_none() {
-        println!("error: invalid url");
+        error!("error: invalid url");
         return Ok(());
     }
 
@@ -193,7 +256,7 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     let save_file_reuslts = tmp_tarball.write_all_buf(&mut content).await;
 
     if let Err(error) = save_file_reuslts {
-        println!("error saving downloaded file: {}", error);
+        error!("error saving downloaded file: {}", error);
         return Ok(());
     }
 
@@ -246,70 +309,59 @@ fn has_newer_version(new_version: String) -> bool {
     false
 }
 
-async fn check_for_updates() -> Option<ReleaseResponse> {
+async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let req_opt = Request::builder()
+    let req = Request::builder()
         .uri(format!(
             "{}?channel=stable&platform={}",
             UPDATE_URL,
             env::consts::OS
         ))
-        .body(Body::empty());
-    match req_opt {
-        Ok(req) => {
-            let resp_opt = client.request(req).await;
-            match resp_opt {
-                Ok(resp) => {
-                    let (_, body) = resp.into_parts();
-                    let response_bytes_opt = body::to_bytes(body).await;
-                    match response_bytes_opt {
-                        Ok(response_bytes) => {
-                            match serde_json::from_slice::<ReleaseResponse>(
-                                &response_bytes.to_vec(),
-                            ) {
-                                Ok(r) => {
-                                    if has_newer_version(r.version.clone()) {
-                                        return Some(r);
-                                    }
-                                }
-                                Err(error) => {
-                                    trace!("unable to deserialize response: {}", error)
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            trace!("unable to read response from update server: {}", error)
-                        }
-                    }
-                }
-                Err(error) => {
-                    trace!("unable to contact update server: {}", error)
-                }
-            }
-        }
-        Err(error) => {
-            trace!("unable to contact update server: {}", error)
+        .body(Body::empty())?;
+
+    let resp = client.request(req).await?;
+    let (_, body) = resp.into_parts();
+    let response_bytes = body::to_bytes(body).await?;
+    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes.to_vec()) {
+        if has_newer_version(r.version.clone()) {
+            return Ok(Some(r));
         }
     }
 
-    None
+    Ok(None)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let args = Args::parse();
+    let cli = Cli::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
     let mut runner = test_runner::TestRunner::new();
 
-    let log_level = if args.verbose {
+    let mut cli_tags = &Vec::new();
+    let mut cli_tags_or = false;
+
+    match &cli.command {
+        Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => {
+            cli_tags = tags;
+            cli_tags_or = *tags_or;
+        }
+        _ => {}
+    };
+
+    let log_level = if cli.verbose {
+        Level::Debug
+    } else if cli.trace {
         Level::Trace
     } else {
         Level::Info
     };
 
-    let my_logger = logger::SimpleLogger { level: log_level };
+    let my_logger = logger::SimpleLogger {
+        level: log_level,
+        disabled: cli.quiet,
+    };
 
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
         error!("Error creating logger: {}", e);
@@ -334,38 +386,109 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let latest_version_opt = check_for_updates().await;
 
-    if !args.update {
-        if let Some(lv) = latest_version_opt {
-            info!(
-                "\x1b[33mJikken found new version ({}), currently running version ({})\x1b[0m",
-                lv.version, VERSION
-            );
-            info!("\x1b[33mRun command: `jk --update` to update jikken or update using your package manager\x1b[0m");
-        }
-    } else {
-        if let Some(lv) = latest_version_opt {
-            match update(&lv.url).await {
-                Ok(_) => {
-                    info!("update completed");
-                    std::process::exit(0);
+    match cli.command {
+        Commands::Update => {
+            match latest_version_opt {
+                Ok(lv_opt) => {
+                    if let Some(lv) = lv_opt {
+                        match update(&lv.url).await {
+                            Ok(_) => {
+                                info!("update completed\n");
+                                std::process::exit(0);
+                            }
+                            Err(error) => {
+                                error!(
+                                    "Jikken encountered an error when trying to update itself: {}",
+                                    error
+                                );
+                            }
+                        }
+                    }
                 }
                 Err(error) => {
-                    error!(
-                        "Jikken encountered an error when trying to update itself: {}",
-                        error
-                    );
+                    debug!("error checking for updates: {}", error);
                 }
             }
-        } else {
+
             error!("Jikken was unable to find an update for this platform and release channel");
+            std::process::exit(0);
         }
-        std::process::exit(1);
+        _ => match latest_version_opt {
+            Ok(lv_opt) => {
+                if let Some(lv) = lv_opt {
+                    warn!(
+                        "Jikken found new version ({}), currently running version ({})",
+                        lv.version, VERSION
+                    );
+                    warn!("Run command: `jk --update` to update jikken or update using your package manager");
+                }
+            }
+            Err(error) => {
+                debug!("error checking for updates: {}", error);
+            }
+        },
+    }
+
+    match &cli.command {
+        Commands::New {
+            full,
+            multistage,
+            output,
+            name,
+        } => {
+            let template = if *full {
+                serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
+            } else if *multistage {
+                serde_yaml::to_string(&UnvalidatedTest::template_staged()?)?
+            } else {
+                serde_yaml::to_string(&UnvalidatedTest::template()?)?
+            };
+            let template = template.replace("''", "");
+            let mut result = "".to_string();
+
+            for line in template.lines() {
+                if !line.contains("null") {
+                    result = format!("{}{}\n", result, line)
+                }
+            }
+
+            if *output {
+                info!("{}\n", result);
+            } else {
+                match name {
+                    Some(n) => {
+                        let filename = if !n.ends_with(".jkt") {
+                            format!("{}.jkt", n)
+                        } else {
+                            n.clone()
+                        };
+
+                        if std::path::Path::new(&filename).exists() {
+                            error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
+                            std::process::exit(1);
+                        }
+
+                        let mut file = File::create(&filename).await?;
+                        file.write_all(result.as_bytes()).await?;
+                        info!("Successfully created test (`{}`).\n", filename);
+                        std::process::exit(0);
+                    }
+                    None => {
+                        error!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            std::process::exit(0);
+        }
+        _ => {}
     }
 
     let files = get_files();
     let mut continue_on_failure = false;
 
-    info!("Jikken found {} tests", files.len());
+    info!("Jikken found {} tests\n", files.len());
 
     if let Some(c) = config.as_ref() {
         if let Some(settings) = c.settings.as_ref() {
@@ -382,18 +505,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|f| (f, fs::read_to_string(f)))
         .filter_map(|(filename, f)| match f {
             Ok(file_data) => {
+                debug!("loading test definition file: {}", filename);
                 let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
                     serde_yaml::from_str(&file_data);
                 match result {
                     Ok(file) => Some(file),
                     Err(e) => {
-                        println!("unable to parse file ({}) data: {}", filename, e);
+                        error!("unable to parse file ({}) data: {}", filename, e);
                         None
                     }
                 }
             }
             Err(err) => {
-                println!("error loading file: {}", err);
+                error!("error loading file: {}", err);
                 None
             }
         })
@@ -408,10 +532,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         );
                         None
                     } else {
-                        if args.tags.len() > 0 {
+                        if cli_tags.len() > 0 {
                             let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                            if args.tags_or {
-                                for t in args.tags.iter() {
+                            if cli_tags_or {
+                                for t in cli_tags.iter() {
                                     if td_tags.contains(t) {
                                         return Some(td);
                                     }
@@ -419,19 +543,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                                 tests_to_ignore.push(td.clone());
 
-                                trace!(
+                                debug!(
                                     "test `{}` doesn't match any tags: {}",
                                     td.name.unwrap_or("".to_string()),
-                                    args.tags.join(", ")
+                                    cli_tags.join(", ")
                                 );
 
                                 return None;
                             } else {
-                                for t in args.tags.iter() {
+                                for t in cli_tags.iter() {
                                     if !td_tags.contains(t) {
                                         tests_to_ignore.push(td.clone());
 
-                                        trace!(
+                                        debug!(
                                             "test `{}` is missing tag: {}",
                                             td.name.unwrap_or("".to_string()),
                                             t
@@ -446,12 +570,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     }
                 }
                 Err(e) => {
-                    trace!("test definition creation failed: {}", e);
+                    error!("test definition creation failed: {}", e);
                     None
                 }
             }
         })
         .collect();
+
+    if tests_to_ignore.len() > 0 {
+        trace!("filtering out tests which don't match the tag pattern")
+    }
 
     let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
         .clone()
@@ -465,6 +593,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut duplicate_filter: HashSet<String> = HashSet::new();
 
     let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+
+    trace!("determine test execution order based on dependency graph");
 
     for td in tests_to_run.into_iter() {
         match &td.requires {
@@ -491,8 +621,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         let boxed_td: Box<TestDefinition> = Box::from(td);
 
+        let dry_run = match cli.command {
+            Commands::DryRun {
+                tags: _,
+                tags_or: _,
+            } => true,
+            _ => false,
+        };
+
         for iteration in 0..boxed_td.iterate {
-            let passed = if args.dry_run {
+            let passed = if dry_run {
                 runner
                     .dry_run(boxed_td.as_ref(), i, total_count, iteration)
                     .await

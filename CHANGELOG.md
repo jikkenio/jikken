@@ -1,6 +1,24 @@
 Next (Version determined when release is cut)
 =====
 
+
+0.4.0
+=====
+
+Bugfixes:
+* Fix cleanup stage to properly handle onsuccess and onfailure definitions
+
+Changes:
+* Adjusted console output messages around various verbosity levels
+* Updated CLI help descriptions
+
+Features:
+* Update Jikken CLI to have command driven execution. Instead of `jk` automatically running tests there are now various commands `jk run`, `jk dryrun` etc.
+* Add `jk new` command to create a test file that shows all possible definition options.
+* Add `environment` flag to test definition, cli args, config, and environment variables.
+* Add `--quiet` flag to disable console output.
+* Add `--trace` flag for more detailed output, intended use is for Jikken developers
+
 0.3.0
 =====
 
