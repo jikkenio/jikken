@@ -2,4 +2,10 @@ VERIFICATION
 Verification is intended to assist the Chocolatey moderators and community
 in verifying that this package's contents are trustworthy.
  
-I am the software owner
+https://github.com/jikkenio/jikken/releases
+Find the correct release version. Match the hash with the chocolatey executable hash.
+
+SHA-256 Binary Hashes
+Windows (jk.exe): 6FF616CF0C446639F215FE99EC313E4612D15960B0035696785ABEA1A105B597
+Linux (jk): 927E139E3FEAB6B5167C02204B3D155953448EC373A90C069EA0DAB3C8F3018C
+Mac (jk): FA86D105E501E37016E8B0C4BC8536F62DDBC96B04A0F9C4FEEA6FFCBBD277F5
