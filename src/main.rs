@@ -1,31 +1,33 @@
 mod config;
 mod errors;
-mod json_extractor;
-mod json_filter;
+mod executor;
+mod json;
 mod logger;
-mod test_definition;
-mod test_file;
-mod test_runner;
+mod test;
 
 use chrono::Local;
 use clap::{Parser, Subcommand};
+use config::{Config, Settings};
+use executor::runner::TestRunner;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace, warn, Level, LevelFilter};
+use logger::SimpleLogger;
 use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::env;
 use std::error::Error;
 use std::io::Cursor;
 use std::io::{stdout, Write};
 use std::path::Path;
-use std::{env, fs};
 use tempfile;
-use test_definition::TestDefinition;
-use test_definition::TestVariable;
-use test_file::UnvalidatedTest;
+use test::definition::TestDefinition;
+use test::definition::TestVariable;
+use test::file::TestFile;
+use test::templates::{template, template_full, template_staged};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use walkdir::{DirEntry, WalkDir};
@@ -126,13 +128,13 @@ fn get_files() -> Vec<String> {
     results
 }
 
-async fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
+async fn get_config(file: &str) -> Result<Config, Box<dyn Error>> {
     let data = tokio::fs::read_to_string(file).await?;
-    let config: config::Config = toml::from_str(&data)?;
+    let config: Config = toml::from_str(&data)?;
     Ok(config)
 }
 
-fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config> {
+fn apply_config_envvars(config: Option<Config>) -> Option<Config> {
     let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
         if let Ok(b) = cof.parse::<bool>() {
             Some(b)
@@ -155,7 +157,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
         None
     };
 
-    let mut result_settings = config::Settings {
+    let mut result_settings = Settings {
         continue_on_failure: None,
         api_key: None,
         environment: None,
@@ -186,14 +188,14 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
             result_settings.environment = envvar_env;
         }
 
-        return Some(config::Config {
+        return Some(Config {
             settings: Some(result_settings),
             globals: c.globals,
         });
     }
 
-    Some(config::Config {
-        settings: Some(config::Settings {
+    Some(Config {
+        settings: Some(Settings {
             continue_on_failure: envvar_cof,
             api_key: envvar_apikey,
             environment: envvar_env,
@@ -202,7 +204,7 @@ fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config
     })
 }
 
-fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVariable> {
+fn generate_global_variables(config_opt: Option<Config>) -> Vec<TestVariable> {
     let mut global_variables = HashMap::new();
     global_variables.insert(
         "TODAY".to_string(),
@@ -228,7 +230,7 @@ fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVari
         .map(|i| TestVariable {
             name: i.0.to_string(),
             value: serde_yaml::Value::String(i.1),
-            data_type: test_definition::VariableTypes::String,
+            data_type: test::definition::VariableTypes::String,
             modifier: None,
             format: None,
         })
@@ -336,8 +338,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
-    let mut config: Option<config::Config> = None;
-    let mut runner = test_runner::TestRunner::new();
+    let mut config: Option<Config> = None;
+    let mut runner = TestRunner::new();
 
     let mut cli_tags = &Vec::new();
     let mut cli_tags_or = false;
@@ -358,7 +360,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Level::Info
     };
 
-    let my_logger = logger::SimpleLogger {
+    let my_logger = SimpleLogger {
         level: log_level,
         disabled: cli.quiet,
     };
@@ -437,11 +439,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             name,
         } => {
             let template = if *full {
-                serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
+                serde_yaml::to_string(&template_full()?)?
             } else if *multistage {
-                serde_yaml::to_string(&UnvalidatedTest::template_staged()?)?
+                serde_yaml::to_string(&template_staged()?)?
             } else {
-                serde_yaml::to_string(&UnvalidatedTest::template()?)?
+                serde_yaml::to_string(&template()?)?
             };
             let template = template.replace("''", "");
             let mut result = "".to_string();
@@ -502,23 +504,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
     let mut tests_to_run: Vec<TestDefinition> = files
         .iter()
-        .map(|f| (f, fs::read_to_string(f)))
-        .filter_map(|(filename, f)| match f {
-            Ok(file_data) => {
-                debug!("loading test definition file: {}", filename);
-                let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
-                    serde_yaml::from_str(&file_data);
-                match result {
-                    Ok(file) => Some(file),
-                    Err(e) => {
-                        error!("unable to parse file ({}) data: {}", filename, e);
-                        None
-                    }
+        .filter_map(|filename| {
+            let result = TestFile::load(filename);
+            match result {
+                Ok(file) => Some(file),
+                Err(e) => {
+                    error!("unable to load test file ({}) data: {}", filename, e);
+                    None
                 }
-            }
-            Err(err) => {
-                error!("error loading file: {}", err);
-                None
             }
         })
         .filter_map(|f| {

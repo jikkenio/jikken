@@ -1,50 +1,14 @@
 use crate::errors::ValidationError;
-use crate::test_file::{
-    UnvalidatedCleanup, UnvalidatedCompareRequest, UnvalidatedRequest, UnvalidatedRequestResponse,
-    UnvalidatedResponse, UnvalidatedStage, UnvalidatedTest, UnvalidatedVariable,
+use crate::test::file::{
+    TestFile, UnvalidatedCleanup, UnvalidatedCompareRequest, UnvalidatedRequest,
+    UnvalidatedRequestResponse, UnvalidatedResponse, UnvalidatedStage, UnvalidatedVariable,
 };
+use crate::test::http::{HttpHeader, HttpParameter, HttpVerb};
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
-use hyper::Method;
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum HttpVerb {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Undefined,
-}
-
-impl HttpVerb {
-    pub fn as_method(&self) -> Method {
-        match &self {
-            HttpVerb::Post => Method::POST,
-            HttpVerb::Patch => Method::PATCH,
-            HttpVerb::Put => Method::PUT,
-            _ => Method::GET,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpHeader {
-    pub header: String,
-    pub value: String,
-
-    matches_variable: Cell<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpParameter {
-    pub param: String,
-    pub value: String,
-
-    matches_variable: Cell<bool>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestBody {
@@ -755,7 +719,7 @@ pub struct TestDefinition {
 // TODO: Validation should be type driven for compile time correctness
 impl TestDefinition {
     pub fn new(
-        test: UnvalidatedTest,
+        test: TestFile,
         global_variables: Vec<TestVariable>,
     ) -> Result<TestDefinition, ValidationError> {
         let new_tags = if let Some(tags) = test.tags.as_ref() {
