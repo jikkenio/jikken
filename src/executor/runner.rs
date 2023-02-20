@@ -1,7 +1,7 @@
 use crate::errors::TestFailure;
-use crate::json_extractor::extract_json;
-use crate::json_filter::filter_json;
-use crate::test_definition::{StageDescriptor, TestDefinition};
+use crate::json::extractor::extract_json;
+use crate::json::filter::filter_json;
+use crate::test::definition::{StageDescriptor, TestDefinition};
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
@@ -455,7 +455,7 @@ impl TestRunner {
                 }
                 Err(msg) => {
                     return Err(Box::from(TestFailure {
-                        reason: format!("response body doesn't match{}", msg),
+                        reason: format!("response body doesn't match\n{}", msg),
                     }));
                 }
             }
