@@ -5,12 +5,12 @@ pub mod template;
 pub mod validation;
 pub mod variable;
 
-use log::{debug, trace, error};
+use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
+use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct File {
