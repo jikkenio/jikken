@@ -1,7 +1,8 @@
 use crate::errors::TestFailure;
 use crate::json::extractor::extract_json;
 use crate::json::filter::filter_json;
-use crate::test::definition::{StageDescriptor, TestDefinition};
+use crate::test;
+use crate::test::definition;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
@@ -33,7 +34,7 @@ impl TestRunner {
 
     pub async fn run(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         count: usize,
         total: usize,
         iteration: u32,
@@ -74,7 +75,7 @@ impl TestRunner {
 
     pub async fn dry_run(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         count: usize,
         total: usize,
         iteration: u32,
@@ -104,7 +105,7 @@ impl TestRunner {
 
     fn validate_dry_run(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         // construct request block
@@ -466,7 +467,7 @@ impl TestRunner {
 
     async fn validate_td(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let mut result = true;
@@ -482,7 +483,7 @@ impl TestRunner {
 
     async fn validate_setup(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         if let Some(setup) = &td.setup {
@@ -557,7 +558,7 @@ impl TestRunner {
 
     async fn run_cleanup(
         &mut self,
-        td: &TestDefinition,
+        td: &test::Definition,
         iteration: u32,
         succeeded: bool,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -627,8 +628,8 @@ impl TestRunner {
 
     async fn validate_stage(
         &mut self,
-        td: &TestDefinition,
-        stage: &StageDescriptor,
+        td: &test::Definition,
+        stage: &definition::StageDescriptor,
         stage_index: usize,
         iteration: u32,
     ) -> Result<bool, Box<dyn Error + Send + Sync>> {

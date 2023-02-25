@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpHeader {
+pub struct Header {
     pub header: String,
     pub value: String,
 
@@ -12,7 +12,7 @@ pub struct HttpHeader {
     pub matches_variable: Cell<bool>,
 }
 
-impl Hash for HttpHeader {
+impl Hash for Header {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.header.hash(state);
         self.value.hash(state);
@@ -29,7 +29,7 @@ impl Hash for HttpHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpParameter {
+pub struct Parameter {
     pub param: String,
     pub value: String,
 
@@ -37,7 +37,7 @@ pub struct HttpParameter {
     pub matches_variable: Cell<bool>,
 }
 
-impl Hash for HttpParameter {
+impl Hash for Parameter {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.param.hash(state);
         self.value.hash(state);
@@ -54,7 +54,7 @@ impl Hash for HttpParameter {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum HttpVerb {
+pub enum Verb {
     Get,
     Post,
     Put,
@@ -62,12 +62,12 @@ pub enum HttpVerb {
     Undefined,
 }
 
-impl HttpVerb {
+impl Verb {
     pub fn as_method(&self) -> Method {
         match &self {
-            HttpVerb::Post => Method::POST,
-            HttpVerb::Patch => Method::PATCH,
-            HttpVerb::Put => Method::PUT,
+            Verb::Post => Method::POST,
+            Verb::Patch => Method::PATCH,
+            Verb::Put => Method::PUT,
             _ => Method::GET,
         }
     }
