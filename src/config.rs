@@ -1,8 +1,7 @@
 use crate::test;
 use chrono::Local;
 use serde::Deserialize;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::error::Error;
 

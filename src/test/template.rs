@@ -1,8 +1,5 @@
 use crate::test;
-use crate::test::definition;
-use crate::test::file;
-use crate::test::http::{Header, Parameter, Verb};
-use crate::test::variable;
+use crate::test::{definition, file, http, variable};
 use std::cell::Cell;
 use std::error::Error;
 use uuid::Uuid;
@@ -130,7 +127,7 @@ fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send
 
 fn new_full_compare() -> Result<file::UnvalidatedCompareRequest, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedCompareRequest {
-        method: Some(Verb::Get),
+        method: Some(http::Verb::Get),
         url: "".to_string(),
         params: Some(vec![new_parameter()]),
         add_params: Some(vec![new_parameter()]),
@@ -154,7 +151,7 @@ fn new_request() -> file::UnvalidatedRequest {
 
 fn new_full_request() -> Result<file::UnvalidatedRequest, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedRequest {
-        method: Some(Verb::Get),
+        method: Some(http::Verb::Get),
         url: "".to_string(),
         params: Some(vec![new_parameter()]),
         headers: Some(vec![new_header()]),
@@ -162,8 +159,8 @@ fn new_full_request() -> Result<file::UnvalidatedRequest, Box<dyn Error + Send +
     })
 }
 
-fn new_header() -> Header {
-    Header {
+fn new_header() -> http::Header {
+    http::Header {
         header: "".to_string(),
         value: "".to_string(),
 
@@ -171,8 +168,8 @@ fn new_header() -> Header {
     }
 }
 
-fn new_parameter() -> Parameter {
-    Parameter {
+fn new_parameter() -> http::Parameter {
+    http::Parameter {
         param: "".to_string(),
         value: "".to_string(),
 

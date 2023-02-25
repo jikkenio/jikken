@@ -13,7 +13,7 @@ use logger::SimpleLogger;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::Path;
-use test::template;
+use test::{template, validation};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -288,55 +288,44 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         })
         .filter_map(|f| {
-            let result = test::Definition::new(f, global_variables.clone());
+            let name = f.name.clone().unwrap_or(f.filename.clone());
+            let result = validation::validate_file(f, &global_variables);
             match result {
                 Ok(td) => {
-                    if !td.validate() {
-                        error!(
-                            "test failed validation: {}",
-                            td.name.unwrap_or("unnamed test".to_string())
-                        );
-                        None
-                    } else {
-                        if cli_tags.len() > 0 {
-                            let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                            if cli_tags_or {
-                                for t in cli_tags.iter() {
-                                    if td_tags.contains(t) {
-                                        return Some(td);
-                                    }
+                    if cli_tags.len() > 0 {
+                        let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
+                        if cli_tags_or {
+                            for t in cli_tags.iter() {
+                                if td_tags.contains(t) {
+                                    return Some(td);
                                 }
+                            }
 
-                                tests_to_ignore.push(td.clone());
+                            tests_to_ignore.push(td.clone());
 
-                                debug!(
-                                    "test `{}` doesn't match any tags: {}",
-                                    td.name.unwrap_or("".to_string()),
-                                    cli_tags.join(", ")
-                                );
+                            debug!(
+                                "test `{}` doesn't match any tags: {}",
+                                name,
+                                cli_tags.join(", ")
+                            );
 
-                                return None;
-                            } else {
-                                for t in cli_tags.iter() {
-                                    if !td_tags.contains(t) {
-                                        tests_to_ignore.push(td.clone());
+                            return None;
+                        } else {
+                            for t in cli_tags.iter() {
+                                if !td_tags.contains(t) {
+                                    tests_to_ignore.push(td.clone());
 
-                                        debug!(
-                                            "test `{}` is missing tag: {}",
-                                            td.name.unwrap_or("".to_string()),
-                                            t
-                                        );
-                                        return None;
-                                    }
+                                    debug!("test `{}` is missing tag: {}", name, t);
+                                    return None;
                                 }
                             }
                         }
-
-                        Some(td)
                     }
+
+                    Some(td)
                 }
                 Err(e) => {
-                    error!("test definition creation failed: {}", e);
+                    error!("test ({}) failed validation: {}", name, e);
                     None
                 }
             }
