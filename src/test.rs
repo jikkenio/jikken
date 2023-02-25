@@ -337,44 +337,6 @@ pub struct Definition {
 // TODO: add validation logic to verify the descriptor is valid
 // TODO: Validation should be type driven for compile time correctness
 impl Definition {
-    pub fn new(
-        test: File,
-        global_variables: Vec<Variable>,
-    ) -> Result<Definition, validation::Error> {
-        let new_tags = if let Some(tags) = test.tags.as_ref() {
-            tags.to_lowercase()
-                .split_whitespace()
-                .map(|s| s.to_string())
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        let generated_id = test.generate_id();
-
-        let td = Definition {
-            name: test.name,
-            id: test.id.unwrap_or(generated_id).to_lowercase(),
-            environment: test.env,
-            requires: test.requires,
-            tags: new_tags,
-            iterate: test.iterate.unwrap_or(1),
-            variables: Variable::validate_variables_opt(test.variables)?,
-            global_variables: global_variables,
-            stages: definition::StageDescriptor::validate_stages_opt(
-                test.request,
-                test.compare,
-                test.response,
-                test.stages,
-            )?,
-            setup: definition::RequestResponseDescriptor::new_opt(test.setup)?,
-            cleanup: definition::CleanupDescriptor::new(test.cleanup)?,
-        };
-
-        td.update_variable_matching();
-        Ok(td)
-    }
-
     fn update_request_variables(request: &definition::RequestDescriptor, var_pattern: &str) {
         for header in request.headers.iter() {
             if header.matches_variable.get() {
@@ -779,30 +741,5 @@ impl Definition {
         }
 
         None
-    }
-
-    pub fn validate(&self) -> bool {
-        trace!("validating test definition");
-        let mut valid_td = true;
-
-        if let Some(setup) = &self.setup {
-            valid_td &= setup.validate();
-        }
-
-        valid_td &= self.cleanup.validate();
-
-        for stage in self.stages.iter() {
-            valid_td &= stage.request.validate();
-
-            if let Some(compare) = &stage.compare {
-                valid_td &= compare.validate();
-            }
-
-            if let Some(resp) = &stage.response {
-                valid_td &= resp.validate();
-            }
-        }
-
-        valid_td
     }
 }

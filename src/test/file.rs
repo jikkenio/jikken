@@ -1,7 +1,5 @@
 use crate::test;
-use crate::test::definition::ResponseExtraction;
-use crate::test::http;
-use crate::test::variable;
+use crate::test::{definition, http, variable};
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -59,7 +57,7 @@ pub struct UnvalidatedResponse {
     pub headers: Option<Vec<http::Header>>,
     pub body: Option<serde_json::Value>,
     pub ignore: Option<Vec<String>>,
-    pub extract: Option<Vec<ResponseExtraction>>,
+    pub extract: Option<Vec<definition::ResponseExtraction>>,
 }
 
 impl Hash for UnvalidatedResponse {

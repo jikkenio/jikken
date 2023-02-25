@@ -1,7 +1,5 @@
 use crate::test;
-use crate::test::file;
-use crate::test::http;
-use crate::test::validation;
+use crate::test::{file, http, validation};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 
@@ -73,10 +71,6 @@ impl RequestDescriptor {
             Some(request) => Ok(Some(RequestDescriptor::new(request)?)),
             None => Ok(None),
         }
-    }
-
-    pub fn validate(&self) -> bool {
-        true
     }
 }
 
@@ -190,10 +184,6 @@ impl CompareDescriptor {
             None => Ok(None),
         }
     }
-
-    pub fn validate(&self) -> bool {
-        true
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -267,10 +257,6 @@ impl ResponseDescriptor {
             }
             None => Ok(None),
         }
-    }
-
-    pub fn validate(&self) -> bool {
-        true
     }
 }
 
@@ -355,10 +341,6 @@ impl RequestResponseDescriptor {
             None => Ok(None),
         }
     }
-
-    pub fn validate(&self) -> bool {
-        true
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -384,9 +366,5 @@ impl CleanupDescriptor {
                 request: None,
             }),
         }
-    }
-
-    pub fn validate(&self) -> bool {
-        true
     }
 }
