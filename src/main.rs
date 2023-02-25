@@ -5,10 +5,8 @@ mod json;
 mod logger;
 mod test;
 
-use chrono::Local;
 use clap::{Parser, Subcommand};
-use config::{Config, Settings};
-use executor::runner::TestRunner;
+use executor::TestRunner;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace, warn, Level, LevelFilter};
@@ -16,21 +14,15 @@ use logger::SimpleLogger;
 use remove_dir_all::remove_dir_all;
 use self_update;
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::error::Error;
-use std::io::Cursor;
-use std::io::{stdout, Write};
+use std::io::{stdout, Cursor, Write};
 use std::path::Path;
 use tempfile;
-use test::definition::TestDefinition;
-use test::definition::TestVariable;
-use test::file::TestFile;
-use test::templates::{template, template_full, template_staged};
-use tokio::fs::File;
+use test::template;
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use walkdir::{DirEntry, WalkDir};
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -107,7 +99,7 @@ struct ReleaseResponse {
 }
 
 // TODO: Add ignore and filter out hidden etc
-fn is_jkt(entry: &DirEntry) -> bool {
+fn is_jkt(entry: &walkdir::DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
@@ -118,7 +110,7 @@ fn is_jkt(entry: &DirEntry) -> bool {
 fn get_files() -> Vec<String> {
     let mut results = Vec::new();
 
-    WalkDir::new(".")
+    walkdir::WalkDir::new(".")
         .into_iter()
         .filter_entry(is_jkt)
         .filter_map(|v| v.ok())
@@ -126,115 +118,6 @@ fn get_files() -> Vec<String> {
         .for_each(|x| results.push(String::from(x.path().to_str().unwrap())));
 
     results
-}
-
-async fn get_config(file: &str) -> Result<Config, Box<dyn Error>> {
-    let data = tokio::fs::read_to_string(file).await?;
-    let config: Config = toml::from_str(&data)?;
-    Ok(config)
-}
-
-fn apply_config_envvars(config: Option<Config>) -> Option<Config> {
-    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
-        if let Ok(b) = cof.parse::<bool>() {
-            Some(b)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
-        Some(key)
-    } else {
-        None
-    };
-
-    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
-        Some(env)
-    } else {
-        None
-    };
-
-    let mut result_settings = Settings {
-        continue_on_failure: None,
-        api_key: None,
-        environment: None,
-    };
-
-    if let Some(c) = config {
-        if let Some(settings) = c.settings {
-            result_settings.continue_on_failure = if envvar_cof.is_some() {
-                envvar_cof
-            } else {
-                settings.continue_on_failure
-            };
-
-            result_settings.api_key = if envvar_apikey.is_some() {
-                envvar_apikey
-            } else {
-                settings.api_key
-            };
-
-            result_settings.environment = if envvar_env.is_some() {
-                envvar_env
-            } else {
-                settings.environment
-            };
-        } else {
-            result_settings.continue_on_failure = envvar_cof;
-            result_settings.api_key = envvar_apikey;
-            result_settings.environment = envvar_env;
-        }
-
-        return Some(Config {
-            settings: Some(result_settings),
-            globals: c.globals,
-        });
-    }
-
-    Some(Config {
-        settings: Some(Settings {
-            continue_on_failure: envvar_cof,
-            api_key: envvar_apikey,
-            environment: envvar_env,
-        }),
-        globals: None,
-    })
-}
-
-fn generate_global_variables(config_opt: Option<Config>) -> Vec<TestVariable> {
-    let mut global_variables = HashMap::new();
-    global_variables.insert(
-        "TODAY".to_string(),
-        format!("{}", Local::now().format("%Y-%m-%d")),
-    );
-
-    if let Some(config) = config_opt {
-        if let Some(globals) = config.globals {
-            for (key, value) in globals.into_iter() {
-                global_variables.insert(key, value.clone());
-            }
-        }
-    }
-
-    for (key, value) in env::vars() {
-        if key.starts_with("JIKKEN_GLOBAL_") {
-            global_variables.insert(key[14..].to_string(), value);
-        }
-    }
-
-    global_variables
-        .into_iter()
-        .map(|i| TestVariable {
-            name: i.0.to_string(),
-            value: serde_yaml::Value::String(i.1),
-            data_type: test::definition::VariableTypes::String,
-            modifier: None,
-            format: None,
-        })
-        .collect()
 }
 
 async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -338,7 +221,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
-    let mut config: Option<Config> = None;
+    let mut config: Option<config::Config> = None;
     let mut runner = TestRunner::new();
 
     let mut cli_tags = &Vec::new();
@@ -373,7 +256,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     log::set_max_level(LevelFilter::Trace);
 
     if Path::new(".jikken").exists() {
-        let config_raw = get_config(".jikken").await;
+        let config_raw = config::get_config(".jikken").await;
         match config_raw {
             Ok(c) => {
                 config = Some(c);
@@ -384,7 +267,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
     }
-    config = apply_config_envvars(config);
+    config = config::apply_config_envvars(config);
 
     let latest_version_opt = check_for_updates().await;
 
@@ -439,11 +322,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             name,
         } => {
             let template = if *full {
-                serde_yaml::to_string(&template_full()?)?
+                serde_yaml::to_string(&template::template_full()?)?
             } else if *multistage {
-                serde_yaml::to_string(&template_staged()?)?
+                serde_yaml::to_string(&template::template_staged()?)?
             } else {
-                serde_yaml::to_string(&template()?)?
+                serde_yaml::to_string(&template::template()?)?
             };
             let template = template.replace("''", "");
             let mut result = "".to_string();
@@ -470,7 +353,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             std::process::exit(1);
                         }
 
-                        let mut file = File::create(&filename).await?;
+                        let mut file = fs::File::create(&filename).await?;
                         file.write_all(result.as_bytes()).await?;
                         info!("Successfully created test (`{}`).\n", filename);
                         std::process::exit(0);
@@ -500,12 +383,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let global_variables = generate_global_variables(config);
-    let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
-    let mut tests_to_run: Vec<TestDefinition> = files
+    let global_variables = config::generate_global_variables(config);
+    let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
+    let mut tests_to_run: Vec<test::Definition> = files
         .iter()
         .filter_map(|filename| {
-            let result = TestFile::load(filename);
+            let result = test::file::load(filename);
             match result {
                 Ok(file) => Some(file),
                 Err(e) => {
@@ -515,7 +398,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         })
         .filter_map(|f| {
-            let result = TestDefinition::new(f, global_variables.clone());
+            let result = test::Definition::new(f, global_variables.clone());
             match result {
                 Ok(td) => {
                     if !td.validate() {
@@ -574,7 +457,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         trace!("filtering out tests which don't match the tag pattern")
     }
 
-    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
+    let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
@@ -585,7 +468,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut duplicate_filter: HashSet<String> = HashSet::new();
 
-    let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+    let mut tests_to_run_with_dependencies: Vec<test::Definition> = Vec::new();
 
     trace!("determine test execution order based on dependency graph");
 
@@ -612,7 +495,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let total_count = tests_to_run_with_dependencies.len();
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
-        let boxed_td: Box<TestDefinition> = Box::from(td);
+        let boxed_td: Box<test::Definition> = Box::from(td);
 
         let dry_run = match cli.command {
             Commands::DryRun {

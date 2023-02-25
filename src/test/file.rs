@@ -1,18 +1,19 @@
-use crate::test::definition::{Modifier, ResponseExtraction, VariableTypes};
-use crate::test::http::{HttpHeader, HttpParameter, HttpVerb};
+use crate::test;
+use crate::test::definition::ResponseExtraction;
+use crate::test::http;
+use crate::test::variable;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::fs;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedRequest {
-    pub method: Option<HttpVerb>,
+    pub method: Option<http::Verb>,
     pub url: String,
-    pub params: Option<Vec<HttpParameter>>,
-    pub headers: Option<Vec<HttpHeader>>,
+    pub params: Option<Vec<http::Parameter>>,
+    pub headers: Option<Vec<http::Header>>,
     pub body: Option<serde_json::Value>,
 }
 
@@ -28,13 +29,13 @@ impl Hash for UnvalidatedRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedCompareRequest {
-    pub method: Option<HttpVerb>,
+    pub method: Option<http::Verb>,
     pub url: String,
-    pub params: Option<Vec<HttpParameter>>,
-    pub add_params: Option<Vec<HttpParameter>>,
+    pub params: Option<Vec<http::Parameter>>,
+    pub add_params: Option<Vec<http::Parameter>>,
     pub ignore_params: Option<Vec<String>>,
-    pub headers: Option<Vec<HttpHeader>>,
-    pub add_headers: Option<Vec<HttpHeader>>,
+    pub headers: Option<Vec<http::Header>>,
+    pub add_headers: Option<Vec<http::Header>>,
     pub ignore_headers: Option<Vec<String>>,
     pub body: Option<serde_json::Value>,
 }
@@ -55,7 +56,7 @@ impl Hash for UnvalidatedCompareRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedResponse {
     pub status: Option<u16>,
-    pub headers: Option<Vec<HttpHeader>>,
+    pub headers: Option<Vec<http::Header>>,
     pub body: Option<serde_json::Value>,
     pub ignore: Option<Vec<String>>,
     pub extract: Option<Vec<ResponseExtraction>>,
@@ -73,9 +74,9 @@ impl Hash for UnvalidatedResponse {
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedVariable {
     pub name: String,
-    pub data_type: VariableTypes,
+    pub data_type: variable::Type,
     pub value: serde_yaml::Value,
-    pub modifier: Option<Modifier>,
+    pub modifier: Option<variable::Modifier>,
     pub format: Option<String>,
 }
 
@@ -100,45 +101,17 @@ pub struct UnvalidatedCleanup {
     pub onfailure: Option<UnvalidatedRequest>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct TestFile {
-    pub name: Option<String>,
-    pub id: Option<String>,
-    pub env: Option<String>,
-    pub tags: Option<String>,
-    pub requires: Option<String>,
-    pub iterate: Option<u32>,
-    pub setup: Option<UnvalidatedRequestResponse>,
-    pub request: Option<UnvalidatedRequest>,
-    pub compare: Option<UnvalidatedCompareRequest>,
-    pub response: Option<UnvalidatedResponse>,
-    pub stages: Option<Vec<UnvalidatedStage>>,
-    pub cleanup: Option<UnvalidatedCleanup>,
-    pub variables: Option<Vec<UnvalidatedVariable>>,
-
-    #[serde(skip_serializing, skip_deserializing)]
-    pub filename: String,
-}
-
-impl TestFile {
-    pub fn load(filename: &str) -> Result<TestFile, Box<dyn Error + Send + Sync>> {
-        let file_data = fs::read_to_string(filename)?;
-        let result: Result<TestFile, serde_yaml::Error> = serde_yaml::from_str(&file_data);
-        match result {
-            Ok(mut file) => {
-                file.filename = String::from(filename);
-                Ok(file)
-            }
-            Err(e) => {
-                error!("unable to parse file ({}) data: {}", filename, e);
-                Err(Box::from(e))
-            }
+pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> {
+    let file_data = fs::read_to_string(filename)?;
+    let result: Result<test::File, serde_yaml::Error> = serde_yaml::from_str(&file_data);
+    match result {
+        Ok(mut file) => {
+            file.filename = String::from(filename);
+            Ok(file)
         }
-    }
-
-    pub fn generate_id(&self) -> String {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        format!("{}", s.finish())
+        Err(e) => {
+            error!("unable to parse file ({}) data: {}", filename, e);
+            Err(Box::from(e))
+        }
     }
 }
