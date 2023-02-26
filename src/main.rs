@@ -1,36 +1,22 @@
 mod config;
 mod errors;
-mod json_extractor;
-mod json_filter;
+mod executor;
+mod json;
 mod logger;
-mod test_definition;
-mod test_file;
-mod test_runner;
+mod test;
+mod updator;
 
-use chrono::Local;
 use clap::{Parser, Subcommand};
-use hyper::{body, Body, Client, Request};
-use hyper_tls::HttpsConnector;
+use executor::TestRunner;
 use log::{debug, error, info, trace, warn, Level, LevelFilter};
-use remove_dir_all::remove_dir_all;
-use self_update;
-use serde::Deserialize;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use logger::SimpleLogger;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::io::Cursor;
-use std::io::{stdout, Write};
 use std::path::Path;
-use std::{env, fs};
-use tempfile;
-use test_definition::TestDefinition;
-use test_definition::TestVariable;
-use test_file::UnvalidatedTest;
-use tokio::fs::File;
+use test::{template, validation};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use walkdir::{DirEntry, WalkDir};
 
-const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser)]
@@ -98,14 +84,8 @@ enum Commands {
     },
 }
 
-#[derive(Deserialize)]
-struct ReleaseResponse {
-    version: String,
-    url: String,
-}
-
 // TODO: Add ignore and filter out hidden etc
-fn is_jkt(entry: &DirEntry) -> bool {
+fn is_jkt(entry: &walkdir::DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
@@ -116,7 +96,7 @@ fn is_jkt(entry: &DirEntry) -> bool {
 fn get_files() -> Vec<String> {
     let mut results = Vec::new();
 
-    WalkDir::new(".")
+    walkdir::WalkDir::new(".")
         .into_iter()
         .filter_entry(is_jkt)
         .filter_map(|v| v.ok())
@@ -126,218 +106,13 @@ fn get_files() -> Vec<String> {
     results
 }
 
-async fn get_config(file: &str) -> Result<config::Config, Box<dyn Error>> {
-    let data = tokio::fs::read_to_string(file).await?;
-    let config: config::Config = toml::from_str(&data)?;
-    Ok(config)
-}
-
-fn apply_config_envvars(config: Option<config::Config>) -> Option<config::Config> {
-    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
-        if let Ok(b) = cof.parse::<bool>() {
-            Some(b)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
-        Some(key)
-    } else {
-        None
-    };
-
-    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
-        Some(env)
-    } else {
-        None
-    };
-
-    let mut result_settings = config::Settings {
-        continue_on_failure: None,
-        api_key: None,
-        environment: None,
-    };
-
-    if let Some(c) = config {
-        if let Some(settings) = c.settings {
-            result_settings.continue_on_failure = if envvar_cof.is_some() {
-                envvar_cof
-            } else {
-                settings.continue_on_failure
-            };
-
-            result_settings.api_key = if envvar_apikey.is_some() {
-                envvar_apikey
-            } else {
-                settings.api_key
-            };
-
-            result_settings.environment = if envvar_env.is_some() {
-                envvar_env
-            } else {
-                settings.environment
-            };
-        } else {
-            result_settings.continue_on_failure = envvar_cof;
-            result_settings.api_key = envvar_apikey;
-            result_settings.environment = envvar_env;
-        }
-
-        return Some(config::Config {
-            settings: Some(result_settings),
-            globals: c.globals,
-        });
-    }
-
-    Some(config::Config {
-        settings: Some(config::Settings {
-            continue_on_failure: envvar_cof,
-            api_key: envvar_apikey,
-            environment: envvar_env,
-        }),
-        globals: None,
-    })
-}
-
-fn generate_global_variables(config_opt: Option<config::Config>) -> Vec<TestVariable> {
-    let mut global_variables = HashMap::new();
-    global_variables.insert(
-        "TODAY".to_string(),
-        format!("{}", Local::now().format("%Y-%m-%d")),
-    );
-
-    if let Some(config) = config_opt {
-        if let Some(globals) = config.globals {
-            for (key, value) in globals.into_iter() {
-                global_variables.insert(key, value.clone());
-            }
-        }
-    }
-
-    for (key, value) in env::vars() {
-        if key.starts_with("JIKKEN_GLOBAL_") {
-            global_variables.insert(key[14..].to_string(), value);
-        }
-    }
-
-    global_variables
-        .into_iter()
-        .map(|i| TestVariable {
-            name: i.0.to_string(),
-            value: serde_yaml::Value::String(i.1),
-            data_type: test_definition::VariableTypes::String,
-            modifier: None,
-            format: None,
-        })
-        .collect()
-}
-
-async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-    info!("Jikken is updating to the latest version...");
-    stdout().flush().unwrap();
-
-    let file_name_opt = url.split("/").last();
-
-    if file_name_opt.is_none() {
-        error!("error: invalid url");
-        return Ok(());
-    }
-
-    let tmp_dir = tempfile::Builder::new().tempdir_in(::std::env::current_dir()?)?;
-
-    let tmp_tarball_path = tmp_dir.path().join(file_name_opt.unwrap());
-
-    let mut tmp_tarball = tokio::fs::File::create(&tmp_tarball_path).await?;
-    let response = reqwest::get(url).await?;
-    let mut content = Cursor::new(response.bytes().await?);
-    let save_file_reuslts = tmp_tarball.write_all_buf(&mut content).await;
-
-    if let Err(error) = save_file_reuslts {
-        error!("error saving downloaded file: {}", error);
-        return Ok(());
-    }
-
-    if env::consts::OS == "windows" {
-        self_update::Extract::from_source(&tmp_tarball_path)
-            .archive(self_update::ArchiveKind::Zip)
-            .extract_into(&tmp_dir.path())?;
-    } else {
-        self_update::Extract::from_source(&tmp_tarball_path)
-            .archive(self_update::ArchiveKind::Tar(Some(
-                self_update::Compression::Gz,
-            )))
-            .extract_into(&tmp_dir.path())?;
-    }
-
-    let tmp_file = tmp_dir.path().join("replacement_tmp");
-    let bin_path = match env::consts::OS {
-        "windows" => tmp_dir.path().join("jk.exe"),
-        _ => tmp_dir.path().join("jk"),
-    };
-    self_update::Move::from_source(&bin_path)
-        .replace_using_temp(&tmp_file)
-        .to_dest(&::std::env::current_exe()?)?;
-
-    drop(tmp_tarball);
-    _ = remove_dir_all(tmp_dir);
-
-    Ok(())
-}
-
-fn has_newer_version(new_version: String) -> bool {
-    let new_version_segments: Vec<&str> = new_version.split(".").collect();
-    let my_version_segments: Vec<&str> = VERSION.split(".").collect();
-
-    let segment_length = std::cmp::min(new_version_segments.len(), my_version_segments.len());
-
-    for i in 0..segment_length {
-        let new_segment_opt = new_version_segments[i].parse::<u32>();
-        let my_segment_opt = my_version_segments[i].parse::<u32>();
-
-        if new_segment_opt.is_err() || my_segment_opt.is_err() {
-            return false;
-        } else {
-            if new_segment_opt.unwrap() > my_segment_opt.unwrap() {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let req = Request::builder()
-        .uri(format!(
-            "{}?channel=stable&platform={}",
-            UPDATE_URL,
-            env::consts::OS
-        ))
-        .body(Body::empty())?;
-
-    let resp = client.request(req).await?;
-    let (_, body) = resp.into_parts();
-    let response_bytes = body::to_bytes(body).await?;
-    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes.to_vec()) {
-        if has_newer_version(r.version.clone()) {
-            return Ok(Some(r));
-        }
-    }
-
-    Ok(None)
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
     // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
     let mut config: Option<config::Config> = None;
-    let mut runner = test_runner::TestRunner::new();
+    let mut runner = TestRunner::new();
 
     let mut cli_tags = &Vec::new();
     let mut cli_tags_or = false;
@@ -358,7 +133,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Level::Info
     };
 
-    let my_logger = logger::SimpleLogger {
+    let my_logger = SimpleLogger {
         level: log_level,
         disabled: cli.quiet,
     };
@@ -371,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     log::set_max_level(LevelFilter::Trace);
 
     if Path::new(".jikken").exists() {
-        let config_raw = get_config(".jikken").await;
+        let config_raw = config::get_config(".jikken").await;
         match config_raw {
             Ok(c) => {
                 config = Some(c);
@@ -382,16 +157,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }
     }
-    config = apply_config_envvars(config);
+    config = config::apply_config_envvars(config);
 
-    let latest_version_opt = check_for_updates().await;
+    let latest_version_opt = updator::check_for_updates().await;
 
     match cli.command {
         Commands::Update => {
             match latest_version_opt {
                 Ok(lv_opt) => {
                     if let Some(lv) = lv_opt {
-                        match update(&lv.url).await {
+                        match updator::update(&lv.url).await {
                             Ok(_) => {
                                 info!("update completed\n");
                                 std::process::exit(0);
@@ -437,11 +212,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             name,
         } => {
             let template = if *full {
-                serde_yaml::to_string(&UnvalidatedTest::template_full()?)?
+                serde_yaml::to_string(&template::template_full()?)?
             } else if *multistage {
-                serde_yaml::to_string(&UnvalidatedTest::template_staged()?)?
+                serde_yaml::to_string(&template::template_staged()?)?
             } else {
-                serde_yaml::to_string(&UnvalidatedTest::template()?)?
+                serde_yaml::to_string(&template::template()?)?
             };
             let template = template.replace("''", "");
             let mut result = "".to_string();
@@ -468,7 +243,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             std::process::exit(1);
                         }
 
-                        let mut file = File::create(&filename).await?;
+                        let mut file = fs::File::create(&filename).await?;
                         file.write_all(result.as_bytes()).await?;
                         info!("Successfully created test (`{}`).\n", filename);
                         std::process::exit(0);
@@ -498,79 +273,59 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     }
 
-    let global_variables = generate_global_variables(config);
-    let mut tests_to_ignore: Vec<TestDefinition> = Vec::new();
-    let mut tests_to_run: Vec<TestDefinition> = files
+    let global_variables = config::generate_global_variables(config);
+    let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
+    let mut tests_to_run: Vec<test::Definition> = files
         .iter()
-        .map(|f| (f, fs::read_to_string(f)))
-        .filter_map(|(filename, f)| match f {
-            Ok(file_data) => {
-                debug!("loading test definition file: {}", filename);
-                let result: Result<test_file::UnvalidatedTest, serde_yaml::Error> =
-                    serde_yaml::from_str(&file_data);
-                match result {
-                    Ok(file) => Some(file),
-                    Err(e) => {
-                        error!("unable to parse file ({}) data: {}", filename, e);
-                        None
-                    }
+        .filter_map(|filename| {
+            let result = test::file::load(filename);
+            match result {
+                Ok(file) => Some(file),
+                Err(e) => {
+                    error!("unable to load test file ({}) data: {}", filename, e);
+                    None
                 }
-            }
-            Err(err) => {
-                error!("error loading file: {}", err);
-                None
             }
         })
         .filter_map(|f| {
-            let result = TestDefinition::new(f, global_variables.clone());
+            let name = f.name.clone().unwrap_or(f.filename.clone());
+            let result = validation::validate_file(f, &global_variables);
             match result {
                 Ok(td) => {
-                    if !td.validate() {
-                        error!(
-                            "test failed validation: {}",
-                            td.name.unwrap_or("unnamed test".to_string())
-                        );
-                        None
-                    } else {
-                        if cli_tags.len() > 0 {
-                            let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                            if cli_tags_or {
-                                for t in cli_tags.iter() {
-                                    if td_tags.contains(t) {
-                                        return Some(td);
-                                    }
+                    if cli_tags.len() > 0 {
+                        let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
+                        if cli_tags_or {
+                            for t in cli_tags.iter() {
+                                if td_tags.contains(t) {
+                                    return Some(td);
                                 }
+                            }
 
-                                tests_to_ignore.push(td.clone());
+                            tests_to_ignore.push(td.clone());
 
-                                debug!(
-                                    "test `{}` doesn't match any tags: {}",
-                                    td.name.unwrap_or("".to_string()),
-                                    cli_tags.join(", ")
-                                );
+                            debug!(
+                                "test `{}` doesn't match any tags: {}",
+                                name,
+                                cli_tags.join(", ")
+                            );
 
-                                return None;
-                            } else {
-                                for t in cli_tags.iter() {
-                                    if !td_tags.contains(t) {
-                                        tests_to_ignore.push(td.clone());
+                            return None;
+                        } else {
+                            for t in cli_tags.iter() {
+                                if !td_tags.contains(t) {
+                                    tests_to_ignore.push(td.clone());
 
-                                        debug!(
-                                            "test `{}` is missing tag: {}",
-                                            td.name.unwrap_or("".to_string()),
-                                            t
-                                        );
-                                        return None;
-                                    }
+                                    debug!("test `{}` is missing tag: {}", name, t);
+                                    return None;
                                 }
                             }
                         }
-
-                        Some(td)
                     }
+
+                    Some(td)
                 }
                 Err(e) => {
-                    error!("test definition creation failed: {}", e);
+                    error!("test ({}) failed validation: {}", name, e);
                     None
                 }
             }
@@ -581,7 +336,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         trace!("filtering out tests which don't match the tag pattern")
     }
 
-    let tests_by_id: HashMap<String, TestDefinition> = tests_to_run
+    let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
@@ -592,7 +347,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut duplicate_filter: HashSet<String> = HashSet::new();
 
-    let mut tests_to_run_with_dependencies: Vec<TestDefinition> = Vec::new();
+    let mut tests_to_run_with_dependencies: Vec<test::Definition> = Vec::new();
 
     trace!("determine test execution order based on dependency graph");
 
@@ -619,7 +374,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let total_count = tests_to_run_with_dependencies.len();
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
-        let boxed_td: Box<TestDefinition> = Box::from(td);
+        let boxed_td: Box<test::Definition> = Box::from(td);
 
         let dry_run = match cli.command {
             Commands::DryRun {
