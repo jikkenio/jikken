@@ -1,31 +1,154 @@
 use crate::test;
 use chrono::Local;
-use serde::Deserialize;
-use std::collections::{BTreeMap, HashMap};
+use log::error;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::env;
-use std::error::Error;
+use std::path::Path;
+use dirs;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Config {
-    pub settings: Option<Settings>,
+    pub settings: Settings,
+    pub globals: BTreeMap<String, String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    pub continue_on_failure: bool,
+    pub api_key: Option<String>,
+    pub environment: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct File {
+    pub settings: Option<FileSettings>,
     pub globals: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Settings {
+struct FileSettings {
     pub continue_on_failure: Option<bool>,
     pub api_key: Option<String>,
     pub environment: Option<String>,
 }
 
-pub async fn get_config(file: &str) -> Result<Config, Box<dyn Error>> {
-    let data = tokio::fs::read_to_string(file).await?;
-    let config: Config = toml::from_str(&data)?;
-    Ok(config)
+impl Config {
+    pub fn generate_global_variables(&self) -> Vec<test::Variable> {
+        let mut global_variables = BTreeMap::new();
+        global_variables.insert(
+            "TODAY".to_string(),
+            format!("{}", Local::now().format("%Y-%m-%d")),
+        );
+    
+        global_variables
+            .iter()
+            .chain(self.globals.iter())
+            .map(|i| test::Variable {
+                name: i.0.to_string(),
+                value: serde_yaml::Value::String(i.1.to_string()),
+                data_type: test::variable::Type::String,
+                modifier: None,
+                format: None,
+            })
+            .collect()
+    }
 }
 
-pub fn apply_config_envvars(config: Option<Config>) -> Option<Config> {
+pub async fn get_config() -> Config {
+    let mut config = get_default_config();
+
+    config = apply_config_file(config, load_home_file().await);
+    config = apply_config_file(config, load_config_file(".jikken").await);
+
+    apply_envvars(config)
+}
+
+async fn load_config_file(file: &str) -> Option<File> {
+    if !Path::new(file).exists() {
+        return None;
+    }
+
+    match tokio::fs::read_to_string(file).await {
+        Ok(data) => {
+            let config_result: Result<File, _> = toml::from_str(&data);
+            match config_result {
+                Ok(config) => {
+                    Some(config)
+                },
+                Err(e) => {
+                    error!("uanble to load config file:  {}", e);
+                    None
+                }
+            }
+        },
+        Err(e) => {
+            error!("uanble to load config file:  {}", e);
+            None
+        }
+    }
+}
+
+async fn load_home_file() -> Option<File> {
+    let home_dir_opt = dirs::home_dir();
+
+    if let Some(home_dir_path) = home_dir_opt {
+        if let Some(home_dir) = home_dir_path.to_str() {
+            let resolved_home_file = if home_dir.contains("/") {
+                format!("{}/.jikken", home_dir)
+            } else {
+                format!("{}\\.jikken", home_dir)
+            };
+
+            return load_config_file(&resolved_home_file).await;
+        }
+    }
+
+    None
+}
+
+fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
+    if let Some(file) = file_opt {
+        let merged_globals: BTreeMap<String, String> = config.globals.into_iter().chain(file.globals.unwrap_or(BTreeMap::new())).collect();
+
+        if let Some(settings) = file.settings {
+            return Config {
+                settings: Settings {
+                    continue_on_failure: settings
+                        .continue_on_failure
+                        .unwrap_or(config.settings.continue_on_failure),
+                    api_key: settings.api_key.or(config.settings.api_key),
+                    environment: settings.environment.or(config.settings.environment),
+                },
+                globals: merged_globals,
+            };
+        }
+        
+        return Config {
+            settings: config.settings,
+            globals: merged_globals,
+        };
+    }
+    
+    config
+}
+
+fn get_default_config() -> Config {
+    Config {
+        settings: Settings {
+            continue_on_failure: false,
+            api_key: None,
+            environment: None,
+        },
+        globals: BTreeMap::new(),
+    }
+}
+
+fn apply_envvars(config: Config) -> Config {
     let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
         if let Ok(b) = cof.parse::<bool>() {
             Some(b)
@@ -48,82 +171,19 @@ pub fn apply_config_envvars(config: Option<Config>) -> Option<Config> {
         None
     };
 
-    let mut result_settings = Settings {
-        continue_on_failure: None,
-        api_key: None,
-        environment: None,
-    };
-
-    if let Some(c) = config {
-        if let Some(settings) = c.settings {
-            result_settings.continue_on_failure = if envvar_cof.is_some() {
-                envvar_cof
-            } else {
-                settings.continue_on_failure
-            };
-
-            result_settings.api_key = if envvar_apikey.is_some() {
-                envvar_apikey
-            } else {
-                settings.api_key
-            };
-
-            result_settings.environment = if envvar_env.is_some() {
-                envvar_env
-            } else {
-                settings.environment
-            };
-        } else {
-            result_settings.continue_on_failure = envvar_cof;
-            result_settings.api_key = envvar_apikey;
-            result_settings.environment = envvar_env;
-        }
-
-        return Some(Config {
-            settings: Some(result_settings),
-            globals: c.globals,
-        });
-    }
-
-    Some(Config {
-        settings: Some(Settings {
-            continue_on_failure: envvar_cof,
-            api_key: envvar_apikey,
-            environment: envvar_env,
-        }),
-        globals: None,
-    })
-}
-
-pub fn generate_global_variables(config_opt: Option<Config>) -> Vec<test::Variable> {
-    let mut global_variables = HashMap::new();
-    global_variables.insert(
-        "TODAY".to_string(),
-        format!("{}", Local::now().format("%Y-%m-%d")),
-    );
-
-    if let Some(config) = config_opt {
-        if let Some(globals) = config.globals {
-            for (key, value) in globals.into_iter() {
-                global_variables.insert(key, value.clone());
-            }
-        }
-    }
-
+    let mut global_variables = config.globals.clone();
     for (key, value) in env::vars() {
         if key.starts_with("JIKKEN_GLOBAL_") {
             global_variables.insert(key[14..].to_string(), value);
         }
     }
 
-    global_variables
-        .into_iter()
-        .map(|i| test::Variable {
-            name: i.0.to_string(),
-            value: serde_yaml::Value::String(i.1),
-            data_type: test::variable::Type::String,
-            modifier: None,
-            format: None,
-        })
-        .collect()
+    return Config {
+        settings: Settings {
+            continue_on_failure: envvar_cof.unwrap_or(config.settings.continue_on_failure),
+            api_key: envvar_apikey.or(config.settings.api_key),
+            environment: envvar_env.or(config.settings.environment),
+        },
+        globals: global_variables,
+    };
 }
