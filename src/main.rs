@@ -4,24 +4,24 @@ mod executor;
 mod json;
 mod logger;
 mod test;
-mod updator;
+mod updater;
 
 use clap::{Parser, Subcommand};
 use executor::TestRunner;
 use log::{debug, error, info, trace, warn, Level, LevelFilter};
 use logger::SimpleLogger;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::path::Path;
 use test::{template, validation};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Parser)]
+#[derive(Parser, Serialize, Deserialize)]
 #[command(author, version, about, long_about = None)]
-struct Cli {
+pub struct Cli {
     #[command(subcommand)]
     command: Commands,
 
@@ -43,8 +43,8 @@ struct Cli {
     trace: bool,
 }
 
-#[derive(Subcommand)]
-enum Commands {
+#[derive(Subcommand, Serialize, Deserialize)]
+pub enum Commands {
     /// Execute tests
     Run {
         #[arg(short, long = "tag", name = "tag")]
@@ -109,9 +109,7 @@ fn get_files() -> Vec<String> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
-    // TODO: Separate config class from config file deserialization class
     // TODO: Add support for arguments for extended functionality
-    let mut config: Option<config::Config> = None;
     let mut runner = TestRunner::new();
 
     let mut cli_tags = &Vec::new();
@@ -145,28 +143,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     log::set_max_level(LevelFilter::Trace);
 
-    if Path::new(".jikken").exists() {
-        let config_raw = config::get_config(".jikken").await;
-        match config_raw {
-            Ok(c) => {
-                config = Some(c);
-            }
-            Err(e) => {
-                error!("invalid configuration file: {}", e);
-                std::process::exit(exitcode::CONFIG);
-            }
-        }
-    }
-    config = config::apply_config_envvars(config);
-
-    let latest_version_opt = updator::check_for_updates().await;
+    let config = config::get_config().await;
+    let latest_version_opt = updater::check_for_updates().await;
 
     match cli.command {
         Commands::Update => {
             match latest_version_opt {
                 Ok(lv_opt) => {
                     if let Some(lv) = lv_opt {
-                        match updator::update(&lv.url).await {
+                        match updater::update(&lv.url).await {
                             Ok(_) => {
                                 info!("update completed\n");
                                 std::process::exit(0);
@@ -261,19 +246,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     let files = get_files();
-    let mut continue_on_failure = false;
 
     info!("Jikken found {} tests\n", files.len());
 
-    if let Some(c) = config.as_ref() {
-        if let Some(settings) = c.settings.as_ref() {
-            if let Some(cof) = settings.continue_on_failure {
-                continue_on_failure = cof;
-            }
-        }
-    }
-
-    let global_variables = config::generate_global_variables(config);
+    let global_variables = config.generate_global_variables();
     let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
     let mut tests_to_run: Vec<test::Definition> = files
         .iter()
@@ -373,16 +349,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let total_count = tests_to_run_with_dependencies.len();
 
+    let dry_run = match cli.command {
+        Commands::DryRun {
+            tags: _,
+            tags_or: _,
+        } => true,
+        _ => false,
+    };
+
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         let boxed_td: Box<test::Definition> = Box::from(td);
-
-        let dry_run = match cli.command {
-            Commands::DryRun {
-                tags: _,
-                tags_or: _,
-            } => true,
-            _ => false,
-        };
 
         for iteration in 0..boxed_td.iterate {
             let passed = if dry_run {
@@ -395,7 +371,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .await
             };
 
-            if !continue_on_failure && !passed {
+            if !config.settings.continue_on_failure && !passed {
                 std::process::exit(1);
             }
         }
