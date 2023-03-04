@@ -3,21 +3,25 @@ mod errors;
 mod executor;
 mod json;
 mod logger;
+mod telemetry;
 mod test;
 mod updater;
 
 use clap::{Parser, Subcommand};
-use executor::TestRunner;
-use log::{debug, error, info, trace, warn, Level, LevelFilter};
+use log::{debug, error, info, warn, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use test::{template, validation};
+use test::template;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub enum TagMode {
+    AND,
+    OR,
+}
 
 #[derive(Parser, Serialize, Deserialize)]
 #[command(author, version, about, long_about = None)]
@@ -109,18 +113,12 @@ fn get_files() -> Vec<String> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
-    // TODO: Add support for arguments for extended functionality
-    let mut runner = TestRunner::new();
-
-    let mut cli_tags = &Vec::new();
-    let mut cli_tags_or = false;
-
-    match &cli.command {
-        Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => {
-            cli_tags = tags;
-            cli_tags_or = *tags_or;
-        }
-        _ => {}
+    let (cli_tags, cli_tag_mode) = match &cli.command {
+        Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => (
+            tags.clone(),
+            if *tags_or { TagMode::OR } else { TagMode::AND },
+        ),
+        _ => (Vec::new(), TagMode::AND),
     };
 
     let log_level = if cli.verbose {
@@ -247,135 +245,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let files = get_files();
 
-    info!("Jikken found {} tests\n", files.len());
+    info!("Jikken found {} test files\n", files.len());
 
-    let global_variables = config.generate_global_variables();
-    let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
-    let mut tests_to_run: Vec<test::Definition> = files
-        .iter()
-        .filter_map(|filename| {
-            let result = test::file::load(filename);
-            match result {
-                Ok(file) => Some(file),
-                Err(e) => {
-                    error!("unable to load test file ({}) data: {}", filename, e);
-                    None
-                }
-            }
-        })
-        .filter_map(|f| {
-            let name = f.name.clone().unwrap_or(f.filename.clone());
-            let result = validation::validate_file(f, &global_variables);
-            match result {
-                Ok(td) => {
-                    if cli_tags.len() > 0 {
-                        let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                        if cli_tags_or {
-                            for t in cli_tags.iter() {
-                                if td_tags.contains(t) {
-                                    return Some(td);
-                                }
-                            }
-
-                            tests_to_ignore.push(td.clone());
-
-                            debug!(
-                                "test `{}` doesn't match any tags: {}",
-                                name,
-                                cli_tags.join(", ")
-                            );
-
-                            return None;
-                        } else {
-                            for t in cli_tags.iter() {
-                                if !td_tags.contains(t) {
-                                    tests_to_ignore.push(td.clone());
-
-                                    debug!("test `{}` is missing tag: {}", name, t);
-                                    return None;
-                                }
-                            }
-                        }
-                    }
-
-                    Some(td)
-                }
-                Err(e) => {
-                    error!("test ({}) failed validation: {}", name, e);
-                    None
-                }
-            }
-        })
-        .collect();
-
-    if tests_to_ignore.len() > 0 {
-        trace!("filtering out tests which don't match the tag pattern")
-    }
-
-    let tests_by_id: HashMap<String, test::Definition> = tests_to_run
-        .clone()
-        .into_iter()
-        .chain(tests_to_ignore.into_iter())
-        .map(|td| (td.id.clone(), td))
-        .collect();
-
-    tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-
-    let mut duplicate_filter: HashSet<String> = HashSet::new();
-
-    let mut tests_to_run_with_dependencies: Vec<test::Definition> = Vec::new();
-
-    trace!("determine test execution order based on dependency graph");
-
-    for td in tests_to_run.into_iter() {
-        match &td.requires {
-            Some(req) => {
-                if tests_by_id.contains_key(req) {
-                    if !duplicate_filter.contains(req) {
-                        duplicate_filter.insert(req.clone());
-                        tests_to_run_with_dependencies
-                            .push(tests_by_id.get(req).unwrap().to_owned());
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        if !duplicate_filter.contains(&td.id) {
-            duplicate_filter.insert(td.id.clone());
-            tests_to_run_with_dependencies.push(td);
-        }
-    }
-
-    let total_count = tests_to_run_with_dependencies.len();
-
-    let dry_run = match cli.command {
-        Commands::DryRun {
-            tags: _,
-            tags_or: _,
-        } => true,
-        _ => false,
-    };
-
-    for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
-        let boxed_td: Box<test::Definition> = Box::from(td);
-
-        for iteration in 0..boxed_td.iterate {
-            let passed = if dry_run {
-                runner
-                    .dry_run(boxed_td.as_ref(), i, total_count, iteration)
-                    .await
-            } else {
-                runner
-                    .run(boxed_td.as_ref(), i, total_count, iteration)
-                    .await
-            };
-
-            if !config.settings.continue_on_failure && !passed {
-                std::process::exit(1);
-            }
-        }
-    }
+    executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
 
     Ok(())
 }
