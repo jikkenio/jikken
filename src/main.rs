@@ -178,7 +178,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         "Jikken found new version ({}), currently running version ({})",
                         lv.version, VERSION
                     );
-                    warn!("Run command: `jk --update` to update jikken or update using your package manager");
+                    warn!("Run command: `jk update` to update jikken or update using your package manager");
                 }
             }
             Err(error) => {
