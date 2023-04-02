@@ -18,18 +18,19 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
-    pub api_key: Option<String>,
     pub environment: Option<String>,
+    #[serde(skip_serializing)]
+    pub api_key: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct File {
     pub settings: Option<FileSettings>,
     pub globals: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FileSettings {
     pub continue_on_failure: Option<bool>,

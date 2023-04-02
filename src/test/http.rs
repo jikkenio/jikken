@@ -12,6 +12,12 @@ pub struct Header {
     pub matches_variable: Cell<bool>,
 }
 
+impl Header {
+    pub fn new(header: String, value: String) -> Header {
+        Header { header, value, matches_variable: Cell::from(false) }
+    }
+}
+
 impl Hash for Header {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.header.hash(state);

@@ -343,6 +343,20 @@ impl RequestResponseDescriptor {
     }
 }
 
+pub struct ResolvedRequest {
+    pub req_resp: RequestResponseDescriptor,
+    pub url: String,
+    pub method: hyper::Method,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<serde_json::Value>,
+}
+
+impl ResolvedRequest {
+    pub fn new(req_resp: &RequestResponseDescriptor, url: String, method: hyper::Method, headers: Vec<(String, String)>, body: Option<serde_json::Value>) -> ResolvedRequest {
+        ResolvedRequest { req_resp: req_resp.clone(), url, method, headers, body }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
