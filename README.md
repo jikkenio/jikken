@@ -1,5 +1,6 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/jikkenio/jikken)](https://github.com/jikkenio/jikken/releases)
 [![Crates.io](https://img.shields.io/crates/v/jikken)](https://crates.io/crates/jikken)
+[![Chocolatey](https://img.shields.io/chocolatey/v/jikken)](https://community.chocolatey.org/packages/jikken/)
 
 jikken (jk)
 -----------
@@ -38,13 +39,18 @@ If you are a Rust developer you can install from crates.io using cargo.
 ```
 $ cargo install jikken
 ```
-or directly from the repository using cargo's git flag
+
+or directly from the repository using cargo's git flag.
 
 ```
 $ cargo install --git http://www.github.com/jikkenio/jikken
 ```
 
-Support for chocolatey and scoop are planned (hopefully soon). If you have a favorite package manager or platform that you'd like to see us support, feel free to open [an issue](https://github.com/jikkenio/jikken/issues/new/choose).
+If you use chocolatey you can install it from the community repository.
+
+```
+$ choco install jikken
+```
 
 If you would like to manually install from source, cargo is still your best bet. All you need to do is git clone the repo and then cargo install from the repo directory.
 
