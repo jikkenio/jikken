@@ -14,7 +14,11 @@ pub struct Header {
 
 impl Header {
     pub fn new(header: String, value: String) -> Header {
-        Header { header, value, matches_variable: Cell::from(false) }
+        Header {
+            header,
+            value,
+            matches_variable: Cell::from(false),
+        }
     }
 }
 

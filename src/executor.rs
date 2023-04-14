@@ -4,23 +4,22 @@ use crate::json::extractor::extract_json;
 use crate::json::filter::filter_json;
 use crate::telemetry;
 use crate::test;
-use crate::test::http;
-use crate::test::definition::RequestResponseDescriptor;
 use crate::test::definition::ResponseDescriptor;
+use crate::test::http;
 use crate::test::{definition, validation};
 use crate::Commands;
 use crate::TagMode;
-use hyper::Method;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace};
+use serde::{Serialize, Serializer};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::io::{self, Write};
+use std::time::Instant;
 use url::Url;
-use std::time::{Duration, Instant};
 
 pub struct Report {
     run: u16,
@@ -32,67 +31,130 @@ struct State {
     variables: HashMap<String, String>,
 }
 
-
-pub enum TestStatus {
-    Invalid, // this may be removed, but could indicate the test was unable to be executed
-    Passed,
-    Failed,
+#[derive(PartialEq, Clone)]
+pub enum StageType {
+    Unknown = 0,
+    Setup = 1,
+    Normal = 2,
+    Cleanup = 3,
 }
 
+#[derive(PartialEq, Clone)]
+pub enum TestStatus {
+    Invalid = 0, // this may be removed, but could indicate the test was unable to be executed
+    Passed = 1,
+    Failed = 2,
+}
+
+#[derive(Clone, Serialize)]
 pub struct ResultData {
     headers: Vec<http::Header>,
-    status: u32,
+    status: u16,
     body: serde_json::Value,
 }
 
 impl ResultData {
     fn default() -> ResultData {
-        ResultData { headers: Vec::new(), status: 0, body: serde_json::Value::Null }
+        ResultData {
+            headers: Vec::new(),
+            status: 0,
+            body: serde_json::Value::Null,
+        }
     }
 
-    pub fn from_response(resp: Option<ResponseDescriptor>) -> ResultData {
-        if let Some(r) = resp {
-            return ResultData{
+    pub fn from_request(req: Option<ResponseDescriptor>) -> ResultData {
+        if let Some(r) = req {
+            return ResultData {
                 headers: r.headers,
-                status: r.status.unwrap_or(0) as u32,
+                status: r.status.unwrap_or(0),
                 body: r.body.map_or(serde_json::Value::Null, |b| b.data),
             };
         }
-        
+
         ResultData::default()
+    }
+
+    pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
+        let response_status = resp.status();
+        // TODO: We'll have to revisit this to support non-ASCII headers
+        let headers = resp
+            .headers()
+            .iter()
+            .map(|h| http::Header::new(h.0.to_string(), h.1.to_str().unwrap_or("").to_string()))
+            .collect();
+        let (_, body) = resp.into_parts();
+        let response_bytes = body::to_bytes(body).await;
+
+        match response_bytes {
+            Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
+                Ok(data) => {
+                    return Some(ResultData {
+                        headers,
+                        status: response_status.as_u16(),
+                        body: data,
+                    });
+                }
+                Err(e) => {
+                    error!("response is not valid JSON: {}", e);
+                    return None;
+                }
+            },
+            Err(e) => {
+                error!("unable to get response bytes: {}", e);
+                return None;
+            }
+        }
     }
 }
 
-struct RequestDetails {
+#[derive(Clone)]
+pub struct HttpVerb(hyper::Method);
+
+impl Serialize for HttpVerb {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct RequestDetails {
     headers: Vec<http::Header>,
     url: String,
-    method: hyper::Method,
+    method: HttpVerb,
     body: serde_json::Value,
 }
 
 impl RequestDetails {
     pub fn from_resolved(req: test::definition::ResolvedRequest) -> RequestDetails {
-        RequestDetails { 
-            headers: req.headers.iter().map(|h| http::Header::new(h.0, h.1)).collect(),
+        RequestDetails {
+            headers: req
+                .headers
+                .iter()
+                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                .collect(),
             url: req.url,
-            method: req.method,
+            method: HttpVerb(req.method),
             body: req.body.unwrap_or(serde_json::Value::Null),
         }
     }
 }
 
-struct ResultDetails {
+#[derive(Clone, Serialize)]
+pub struct ResultDetails {
     request: RequestDetails,
     expected: ResultData,
     actual: Option<ResultData>,
+    compare_request: Option<RequestDetails>,
+    compare_actual: Option<ResultData>,
 }
 
-struct StageResult {
-    stage: u32,
-    stage_type: u32,
-    runtime: u32,
-    status: TestStatus,
-    details: ResultDetails,
+#[derive(Clone)]
+pub struct StageResult {
+    pub stage: u32,
+    pub stage_type: StageType,
+    pub runtime: u32,
+    pub status: TestStatus,
+    pub details: ResultDetails,
 }
 
 pub async fn execute_tests(
@@ -238,12 +300,14 @@ pub async fn execute_tests(
     let mut passed_count: u16 = 0;
     let mut failed_count: u16 = 0;
 
+    let start_time = Instant::now();
+
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         for iteration in 0..td.iterate {
             run_count = run_count + 1;
 
             let mut passed = true;
-            
+
             if mode_dryrun {
                 info!(
                     "Dry Run Test ({}\\{}) `{}` Iteration({}\\{})\n",
@@ -272,43 +336,36 @@ pub async fn execute_tests(
                 io::stdout().flush().unwrap();
                 debug!(""); // print a new line if we're in debug | trace mode
 
-                let _test = if let Some(s) = &session {
+                let test = if let Some(s) = &session {
                     match telemetry::create_test(s, &td).await {
-                        Ok(t) => {
-                            Some(t)
-                        },
+                        Ok(t) => Some(t),
                         Err(e) => {
                             debug!("telemetry failed: {}", e);
                             None
                         }
                     }
-                } else  {
+                } else {
                     None
                 };
 
-                let result = run(&mut state, &td, iteration).await;
+                let result = run(&mut state, &td, iteration, test).await;
 
                 match result {
                     Ok(p) => {
-                        if p {
+                        if p.0 {
                             info!("\x1b[32mPASSED\x1b[0m\n");
                         } else {
                             info!("\x1b[31mFAILED\x1b[0m\n");
                             passed = false;
                         }
-                    },
+                    }
                     Err(e) => {
                         info!("\x1b[31mFAILED\x1b[0m\n");
                         error!("{}", e);
                         passed = false;
                     }
                 }
-
-                // if let Some(t) = test {
-                //     telemetry::
-                // }
             };
-
 
             if passed {
                 passed_count = passed_count + 1;
@@ -317,9 +374,19 @@ pub async fn execute_tests(
             }
 
             if !config.settings.continue_on_failure && !passed {
+                if let Some(s) = session {
+                    let runtime = start_time.elapsed().as_millis() as u32;
+                    _ = telemetry::complete_session(s, runtime, 2).await;
+                }
+
                 std::process::exit(1);
             }
         }
+    }
+
+    if let Some(s) = session {
+        let runtime = start_time.elapsed().as_millis() as u32;
+        _ = telemetry::complete_session(s, runtime, 1).await;
     }
 
     Report {
@@ -329,14 +396,63 @@ pub async fn execute_tests(
     }
 }
 
-async fn run(state: &mut State, td: &test::Definition, iteration: u32) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    let mut result = validate_setup(state, td, iteration).await;
-    if result.is_ok() {
-        result = validate_td(state, td, iteration).await;
-        _ = run_cleanup(state, td, iteration, result.is_ok()).await;
+async fn run(
+    state: &mut State,
+    td: &test::Definition,
+    iteration: u32,
+    test: Option<telemetry::Test>,
+) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+    let mut results = Vec::new();
+    let mut setup_result = validate_setup(state, td, iteration).await?;
+    if let Some(test_telemetry) = &test {
+        if setup_result.1.len() > 0 {
+            let telemetry_result =
+                telemetry::complete_stage(&test_telemetry, iteration, setup_result.1[0].clone())
+                    .await;
+            if let Err(e) = telemetry_result {
+                debug!("telemetry stage completion failed: {}", e);
+            }
+        }
+    }
+    results.append(&mut setup_result.1);
+    let mut success = setup_result.0;
+
+    if success {
+        let td_results = validate_td(state, td, iteration, test.clone()).await;
+
+        match td_results {
+            Ok(mut r) => {
+                results.append(&mut r.1);
+                success = r.0;
+            }
+            Err(e) => {
+                success = false;
+            }
+        }
+
+        let cleanup_result = run_cleanup(state, td, iteration, success, results.len() as u32).await;
+        match cleanup_result {
+            Ok(mut r) => {
+                if let Some(test_telemetry) = &test {
+                    for result in r.1.iter() {
+                        let telemetry_result =
+                            telemetry::complete_stage(&test_telemetry, iteration, result.clone())
+                                .await;
+                        if let Err(e) = telemetry_result {
+                            debug!("telemetry stage completion failed: {}", e);
+                        }
+                    }
+                }
+                results.append(&mut r.1);
+                success &= r.0;
+            }
+            Err(e) => {
+                success = false;
+            }
+        }
     }
 
-    result
+    Ok((success, results))
 }
 
 async fn dry_run(
@@ -347,49 +463,10 @@ async fn dry_run(
     validate_dry_run(state, td, iteration)
 }
 
-fn validate_status_codes(
-    actual: hyper::StatusCode,
-    expected: hyper::StatusCode,
-// ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-) -> bool {
-    trace!("validating status codes");
-    actual == expected
-    // if !equality {
-    //     return Err(Box::from(TestFailure {
-    //         reason: format!(
-    //             "http status codes don't match: actual({}) expected({})",
-    //             actual, expected
-    //         ),
-    //     }));
-    // }
-    // Ok(true)
-}
-
-fn validate_status_code(
-    actual: hyper::StatusCode,
-    expected: u16,
-// ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-) -> bool {
-    trace!("validating status codes");
-    actual.as_u16() == expected
-    // if !equality {
-    //     return Err(Box::from(TestFailure {
-    //         reason: format!(
-    //             "http status codes don't match: actual({}) expected({})",
-    //             actual, expected
-    //         ),
-    //     }));
-    // }
-
-    // Ok(true)
-}
-
-// TODO: Add support for ignore when comparing two urls.
-// TODO: Add support for nested ignore hierarchies.
 fn validate_body(
-    actual: Value,
-    expected: Value,
-    ignore: Vec<String>,
+    actual: &Value,
+    expected: &Value,
+    ignore: &Vec<String>,
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
     trace!("validating response body");
     let mut modified_actual = actual.clone();
@@ -432,23 +509,119 @@ async fn validate_td(
     state: &mut State,
     td: &test::Definition,
     iteration: u32,
-) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    let mut result = true;
+    test: Option<telemetry::Test>,
+) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+    let mut results = Vec::new();
 
     for (stage_index, stage) in td.stages.iter().enumerate() {
-        result &= validate_stage(state, td, stage, stage_index, iteration).await?;
+        let stage_result = validate_stage(state, td, stage, stage_index, iteration).await?;
+
+        if let Some(test_telemetry) = &test {
+            let telemetry_result =
+                telemetry::complete_stage(&test_telemetry, iteration, stage_result.clone()).await;
+            if let Err(e) = telemetry_result {
+                debug!("telemetry stage completion failed: {}", e);
+            }
+        }
+
+        let status = stage_result.status.clone();
+        results.push(stage_result);
+
+        if status == TestStatus::Failed {
+            return Ok((false, results));
+        }
     }
 
-    Ok(result)
+    Ok((true, results))
+}
+
+fn process_response(
+    stage: u32,
+    stage_type: StageType,
+    runtime: u32,
+    details: ResultDetails,
+    ignore_body: &Vec<String>,
+) -> StageResult {
+    let mut result = StageResult {
+        stage,
+        stage_type,
+        runtime,
+        details: details.clone(),
+        status: TestStatus::Passed,
+    };
+
+    if let Some(resp) = details.actual {
+        let header_match = if details.expected.headers.len() > 0 {
+            // compare headers
+            trace!("validating headers");
+            true
+        } else {
+            true
+        };
+
+        let status_match = if details.expected.status > 0 {
+            trace!("validating status codes");
+            details.expected.status == resp.status
+        } else {
+            true
+        };
+
+        let body_match = if details.expected.body != serde_json::Value::Null {
+            trace!("validating body");
+            let body_result = validate_body(&resp.body, &details.expected.body, ignore_body);
+            match body_result {
+                Ok(passed) => passed,
+                Err(e) => {
+                    error!("{}", e);
+                    false
+                }
+            }
+        } else {
+            true
+        };
+
+        let mut status_compare_match = true;
+        let mut body_compare_match = true;
+
+        if let Some(compare) = details.compare_actual {
+            trace!("validating compare status");
+            status_compare_match = compare.status == resp.status;
+
+            trace!("validating compare body");
+            let body_result = validate_body(&resp.body, &compare.body, ignore_body);
+            body_compare_match = match body_result {
+                Ok(passed) => passed,
+                Err(e) => {
+                    error!("{}", e);
+                    false
+                }
+            };
+        }
+
+        if !header_match
+            || !status_match
+            || !body_match
+            || !status_compare_match
+            || !body_compare_match
+        {
+            result.status = TestStatus::Failed;
+        }
+    } else if details.expected.headers.len() > 0
+        || details.expected.status > 0
+        || details.expected.body != serde_json::Value::Null
+    {
+        // failed
+        result.status = TestStatus::Failed;
+    }
+
+    result
 }
 
 async fn validate_setup(
     state: &mut State,
     td: &test::Definition,
     iteration: u32,
-) -> Result<Vec<StageResult>, Box<dyn Error + Send + Sync>> {
-    let mut result: Option<StageResult> = None;
-
+) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
     if let Some(setup) = &td.setup {
         let req_method = setup.request.method.as_method();
         let req_url = td.get_url(
@@ -460,292 +633,52 @@ async fn validate_setup(
         let req_headers = td.get_setup_request_headers(iteration);
         let req_body = td.get_body(&setup.request, &td.variables, iteration);
 
-        let resolved_request = test::definition::ResolvedRequest::new(setup, req_url.clone(), req_method.clone(), req_headers.clone(), req_body.clone());
+        let resolved_request = test::definition::ResolvedRequest::new(
+            req_url.clone(),
+            req_method.clone(),
+            req_headers.clone(),
+            req_body.clone(),
+        );
 
         debug!("executing setup stage: {}", req_url);
 
-        let expected = ResultData::from_response(setup.response.clone());
+        let expected = ResultData::from_request(setup.response.clone());
         let start_time = Instant::now();
-        let req_response_res = process_request(state, resolved_request).await;
-        let runtime = start_time.elapsed();
-        
-        match req_response_res {
-            Err(e) => {
-                return Ok(vec!(StageResult{
-                    stage: 0,
-                    stage_type: 1,
-                    runtime: runtime.as_millis() as u32,
-                    details: ResultDetails {
-                        request: RequestDetails{
-                            headers: req_headers.iter().map(|h| http::Header::new(h.0.clone(), h.1.clone())).collect(),
-                            url: req_url.to_string(),
-                            method: req_method,
-                            body: req_body.unwrap_or(serde_json::Value::Null),
-                        },
-                        expected,
-                        actual: None
-                    },
-                    status: TestStatus::Failed
-                }));
-            },
-            Ok(req_response) => {
-                let response_status = req_response.status();
-                let (_, body) = req_response.into_parts();
-                let response_bytes = body::to_bytes(body).await?;
-        
-                if let Some(r) = &setup.response {
-                    // compare to response definition
-                    if let Some(setup_response_status) = r.status {
-                        validate_status_code(response_status, setup_response_status);
-                    }
-        
-                    match serde_json::from_slice(response_bytes.as_ref()) {
-                        Ok(l) => {
-                            let rv: Value = l;
-                            for v in &r.extract {
-                                match extract_json(&v.field, 0, rv.clone()) {
-                                    Ok(result) => {
-                                        let converted_result = match result {
-                                            serde_json::Value::Bool(b) => b.to_string(),
-                                            serde_json::Value::Number(n) => n.to_string(),
-                                            serde_json::Value::String(s) => s.to_string(),
-                                            _ => "".to_string(),
-                                        };
-                                        state.variables.insert(v.name.clone(), converted_result);
-                                    }
-                                    Err(error) => {
-                                        error!("no json result found: {}", error);
-                                    }
-                                }
-                            }
-        
-                            if let Some(b) = &r.body {
-                                validate_body(rv, b.data.clone(), r.ignore.clone())?;
-                            }
-                        }
-                        Err(e) => {
-                            error!("response is not valid JSON: {}", e);
-                            // return Err(Box::from(TestFailure {
-                            //     reason: "response is not valid JSON".to_string(),
-                            // }));
-                        }
-                    }
-                }
-            }
-        }
-    }
+        let req_response = process_request(state, resolved_request).await?;
+        let runtime = start_time.elapsed().as_millis() as u32;
+        let actual = ResultData::from_response(req_response).await;
 
-    Ok(Vec::new())
-}
-
-async fn validate_response(state: &mut State, request: test::definition::ResolvedRequest, response_result: Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>>, stage: u32, stage_type: u32, runtime: u32) -> StageResult {
-    let expected = ResultData::from_response(request.req_resp.response);
-    let request_details = RequestDetails::from_resolved(request);
-    
-    match response_result {
-        Err(e) => {
-            return StageResult{
-                stage,
-                stage_type,
-                runtime,
-                status: TestStatus::Invalid,
-                details: ResultDetails {
-                    request: request_details,
-                    expected,
-                    actual: None
-                },
-            };
-        },
-        Ok(req_response) => {
-            let response_status = req_response.status();
-            let (_, body) = req_response.into_parts();
-            let response_bytes = body::to_bytes(body).await;
-    
-            match response_bytes {
-                Ok(bytes) => {
-                    if let Some(r) = request.req_resp.response {
-                        // compare to response definition
-                        if let Some(setup_response_status) = r.status {
-                            validate_status_code(response_status, setup_response_status);
-                        }
-            
-                        match serde_json::from_slice(bytes.as_ref()) {
-                            Ok(l) => {
-                                let rv: Value = l;
-                                for v in &r.extract {
-                                    match extract_json(&v.field, 0, rv.clone()) {
-                                        Ok(result) => {
-                                            let converted_result = match result {
-                                                serde_json::Value::Bool(b) => b.to_string(),
-                                                serde_json::Value::Number(n) => n.to_string(),
-                                                serde_json::Value::String(s) => s.to_string(),
-                                                _ => "".to_string(),
-                                            };
-                                            state.variables.insert(v.name.clone(), converted_result);
-                                        }
-                                        Err(error) => {
-                                            error!("no json result found: {}", error);
-                                        }
-                                    }
-                                }
-            
-                                if let Some(b) = &r.body {
-                                    validate_body(rv, b.data.clone(), r.ignore.clone());
-                                }
-                            },
-                            Err(e) => {
-                                error!("response is not valid JSON: {}", e);
-                                // return Err(Box::from(TestFailure {
-                                //     reason: "response is not valid JSON".to_string(),
-                                // }));
-                            }
-                        }
-                    }
-                }, 
-                Err(e) => {
-
-                }
-            }
-        }
-    }
-}
-
-async fn run_cleanup(
-    state: &mut State,
-    td: &test::Definition,
-    iteration: u32,
-    succeeded: bool,
-) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    if td.cleanup.request.is_some()
-        || td.cleanup.onsuccess.is_some()
-        || td.cleanup.onfailure.is_some()
-    {
-        debug!("running test cleanup");
-    } else {
-        return Ok(true);
-    }
-
-    if succeeded {
-        if let Some(onsuccess) = &td.cleanup.onsuccess {
-            debug!("execute onsucess request");
-            let success_method = onsuccess.method.as_method();
-            let success_url =
-                &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
-            let success_headers = td.get_headers(&onsuccess.headers, iteration);
-            let success_body = td.get_body(onsuccess, &td.variables, iteration);
-            _ = process_request(
-                state,
-                success_method,
-                success_url,
-                success_headers,
-                success_body,
-            )
-            .await?;
-        }
-    } else {
-        if let Some(onfailure) = &td.cleanup.onfailure {
-            debug!("execute onfailure request");
-            let failure_method = onfailure.method.as_method();
-            let failure_url =
-                &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
-            let failure_headers = td.get_headers(&onfailure.headers, iteration);
-            let failure_body = td.get_body(onfailure, &td.variables, iteration);
-            _ = process_request(
-                state,
-                failure_method,
-                failure_url,
-                failure_headers,
-                failure_body,
-            )
-            .await?;
-        }
-    }
-
-    if let Some(request) = &td.cleanup.request {
-        debug!("execute cleanup request");
-        let req_method = request.method.as_method();
-        let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
-        let req_headers = td.get_cleanup_request_headers(iteration);
-        let req_body = td.get_body(&request, &td.variables, iteration);
-        _ = process_request(state, req_method, req_url, req_headers, req_body).await?;
-    }
-
-    Ok(true)
-}
-
-async fn validate_stage(
-    state: &mut State,
-    td: &test::Definition,
-    stage: &definition::StageDescriptor,
-    stage_index: usize,
-    iteration: u32,
-) -> Result<StageResult, Box<dyn Error + Send + Sync>> {
-    debug!("execute stage request");
-    let req_method = stage.request.method.as_method();
-    let req_uri = &td.get_url(
-        iteration,
-        &stage.request.url,
-        &stage.request.params,
-        &[&stage.variables[..], &td.variables[..]].concat(),
-    );
-    let req_headers = td.get_headers(&stage.request.headers, iteration);
-    let req_body = td.get_body(
-        &stage.request,
-        &[&stage.variables[..], &td.variables[..]].concat(),
-        iteration,
-    );
-
-    let req_response = process_request(state, req_method, req_uri, req_headers, req_body).await?;
-    let mut compare_response_opt = None;
-
-    if let Some(compare) = &stage.compare {
-        debug!("execute stage comparison");
-        let params = if compare.params.len() > 0 {
-            &compare.params
-        } else {
-            &stage.request.params
+        let request = RequestDetails {
+            headers: req_headers
+                .iter()
+                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                .collect(),
+            url: req_url.to_string(),
+            method: HttpVerb(req_method),
+            body: req_body.unwrap_or(serde_json::Value::Null),
         };
 
-        let compare_method = compare.method.as_method();
-        let compare_uri = &td.get_url(
-            iteration,
-            &compare.url,
-            &params,
-            &[&stage.variables[..], &td.variables[..]].concat(),
-        );
-        let compare_headers = td.get_stage_compare_headers(stage_index, iteration);
-        let compare_body = td.get_compare_body(
-            compare,
-            &[&stage.variables[..], &td.variables[..]].concat(),
-            iteration,
-        );
-        compare_response_opt = Some(
-            process_request(
-                state,
-                compare_method,
-                compare_uri,
-                compare_headers,
-                compare_body,
-            )
-            .await?,
-        );
-    }
+        let details = ResultDetails {
+            request,
+            expected,
+            actual,
+            compare_request: None,
+            compare_actual: None,
+        };
 
-    let response_status = req_response.status();
-    let (_, body) = req_response.into_parts();
-    let response_bytes = body::to_bytes(body).await?;
+        let result = process_response(
+            0,
+            StageType::Setup,
+            runtime,
+            details,
+            &setup.response.clone().map_or(Vec::new(), |r| r.ignore),
+        );
 
-    if let Some(r) = &stage.response {
-        // compare to response definition
-        if let Some(stage_response_status) = r.status {
-            validate_status_code(response_status, stage_response_status)?;
-        }
-
-        match serde_json::from_slice(response_bytes.as_ref()) {
-            Ok(l) => {
-                let rv: Value = l;
+        // extract variables and add them to the state
+        if let Some(r) = &setup.response {
+            if let Some(a) = &result.details.actual {
                 for v in &r.extract {
-                    match extract_json(&v.field, 0, rv.clone()) {
+                    match extract_json(&v.field, 0, a.body.clone()) {
                         Ok(result) => {
                             let converted_result = match result {
                                 serde_json::Value::Bool(b) => b.to_string(),
@@ -760,61 +693,308 @@ async fn validate_stage(
                         }
                     }
                 }
+            }
+        }
 
-                if let Some(b) = &r.body {
-                    validate_body(rv, b.data.clone(), r.ignore.clone())?;
-                }
-            }
-            Err(e) => {
-                error!("{}", e);
-                return Err(Box::from(TestFailure {
-                    reason: "response is not valid JSON".to_string(),
-                }));
-            }
+        return Ok((result.status == TestStatus::Passed, vec![result]));
+    }
+
+    Ok((true, Vec::new()))
+}
+
+async fn run_cleanup(
+    state: &mut State,
+    td: &test::Definition,
+    iteration: u32,
+    succeeded: bool,
+    stage_count: u32,
+) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+    let mut results = Vec::new();
+    let mut counter = stage_count;
+
+    if td.cleanup.request.is_some()
+        || td.cleanup.onsuccess.is_some()
+        || td.cleanup.onfailure.is_some()
+    {
+        debug!("running test cleanup");
+    } else {
+        return Ok((true, results));
+    }
+
+    if succeeded {
+        if let Some(onsuccess) = &td.cleanup.onsuccess {
+            debug!("execute onsuccess request");
+            let success_method = onsuccess.method.as_method();
+            let success_url =
+                &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
+            let success_headers = td.get_headers(&onsuccess.headers, iteration);
+            let success_body = td.get_body(onsuccess, &td.variables, iteration);
+            let resolved_request = test::definition::ResolvedRequest::new(
+                success_url.clone(),
+                success_method.clone(),
+                success_headers.clone(),
+                success_body.clone(),
+            );
+
+            let expected = ResultData::from_request(None);
+            let start_time = Instant::now();
+            let req_response = process_request(state, resolved_request).await?;
+            let runtime = start_time.elapsed().as_millis() as u32;
+            let actual = ResultData::from_response(req_response).await;
+
+            let request = RequestDetails {
+                headers: success_headers
+                    .iter()
+                    .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                    .collect(),
+                url: success_url.to_string(),
+                method: HttpVerb(success_method),
+                body: success_body.unwrap_or(serde_json::Value::Null),
+            };
+
+            let details = ResultDetails {
+                request,
+                expected,
+                actual,
+                compare_request: None,
+                compare_actual: None,
+            };
+
+            let result =
+                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+            counter += 1;
+            results.push(result);
+        }
+    } else {
+        if let Some(onfailure) = &td.cleanup.onfailure {
+            debug!("execute onfailure request");
+            let failure_method = onfailure.method.as_method();
+            let failure_url =
+                &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+            let failure_headers = td.get_headers(&onfailure.headers, iteration);
+            let failure_body = td.get_body(onfailure, &td.variables, iteration);
+            let resolved_request = test::definition::ResolvedRequest::new(
+                failure_url.clone(),
+                failure_method.clone(),
+                failure_headers.clone(),
+                failure_body.clone(),
+            );
+
+            let expected = ResultData::from_request(None);
+            let start_time = Instant::now();
+            let req_response = process_request(state, resolved_request).await?;
+            let runtime = start_time.elapsed().as_millis() as u32;
+            let actual = ResultData::from_response(req_response).await;
+
+            let request = RequestDetails {
+                headers: failure_headers
+                    .iter()
+                    .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                    .collect(),
+                url: failure_url.to_string(),
+                method: HttpVerb(failure_method),
+                body: failure_body.unwrap_or(serde_json::Value::Null),
+            };
+
+            let details = ResultDetails {
+                request,
+                expected,
+                actual,
+                compare_request: None,
+                compare_actual: None,
+            };
+
+            let result =
+                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+            counter += 1;
+            results.push(result);
         }
     }
 
-    if let Some(compare_resp) = compare_response_opt {
-        // compare to comparison response
-        validate_status_codes(response_status, compare_resp.status())?;
+    if let Some(request) = &td.cleanup.request {
+        debug!("execute cleanup request");
+        let req_method = request.method.as_method();
+        let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
+        let req_headers = td.get_cleanup_request_headers(iteration);
+        let req_body = td.get_body(&request, &td.variables, iteration);
+        let resolved_request = test::definition::ResolvedRequest::new(
+            req_url.clone(),
+            req_method.clone(),
+            req_headers.clone(),
+            req_body.clone(),
+        );
 
-        let compare_data = body::to_bytes(compare_resp.into_body()).await?;
-        let ignored_json_fields = match &stage.response {
-            Some(r) => r.ignore.to_owned(),
-            None => Vec::new(),
+        let expected = ResultData::from_request(None);
+        let start_time = Instant::now();
+        let req_response = process_request(state, resolved_request).await?;
+        let runtime = start_time.elapsed().as_millis() as u32;
+        let actual = ResultData::from_response(req_response).await;
+
+        let request = RequestDetails {
+            headers: req_headers
+                .iter()
+                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                .collect(),
+            url: req_url.to_string(),
+            method: HttpVerb(req_method),
+            body: req_body.unwrap_or(serde_json::Value::Null),
         };
 
-        match serde_json::from_slice(response_bytes.as_ref()) {
-            Ok(data_json) => match serde_json::from_slice(compare_data.as_ref()) {
-                Ok(compare_data_json) => {
-                    validate_body(data_json, compare_data_json, ignored_json_fields)?;
+        let details = ResultDetails {
+            request,
+            expected,
+            actual,
+            compare_request: None,
+            compare_actual: None,
+        };
+
+        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+        results.push(result);
+    }
+
+    Ok((true, results))
+}
+
+async fn validate_stage(
+    state: &mut State,
+    td: &test::Definition,
+    stage: &definition::StageDescriptor,
+    stage_index: usize,
+    iteration: u32,
+) -> Result<StageResult, Box<dyn Error + Send + Sync>> {
+    debug!("execute stage request");
+
+    let req_method = stage.request.method.as_method();
+    let req_url = &td.get_url(
+        iteration,
+        &stage.request.url,
+        &stage.request.params,
+        &[&stage.variables[..], &td.variables[..]].concat(),
+    );
+    let req_headers = td.get_headers(&stage.request.headers, iteration);
+    let req_body = td.get_body(
+        &stage.request,
+        &[&stage.variables[..], &td.variables[..]].concat(),
+        iteration,
+    );
+
+    let resolved_request = test::definition::ResolvedRequest::new(
+        req_url.clone(),
+        req_method.clone(),
+        req_headers.clone(),
+        req_body.clone(),
+    );
+    debug!("executing test stage: {}", req_url);
+    let expected = ResultData::from_request(stage.response.clone());
+    let request = RequestDetails {
+        headers: req_headers
+            .iter()
+            .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+            .collect(),
+        url: req_url.to_string(),
+        method: HttpVerb(req_method),
+        body: req_body.unwrap_or(serde_json::Value::Null),
+    };
+    let mut compare_response_opt = None;
+    let mut compare_request = None;
+
+    let start_time = Instant::now();
+    let req_response = process_request(state, resolved_request).await?;
+
+    if let Some(compare) = &stage.compare {
+        debug!("execute stage comparison");
+        let params = if compare.params.len() > 0 {
+            &compare.params
+        } else {
+            &stage.request.params
+        };
+
+        let compare_method = compare.method.as_method();
+        let compare_url = &td.get_url(
+            iteration,
+            &compare.url,
+            &params,
+            &[&stage.variables[..], &td.variables[..]].concat(),
+        );
+        let compare_headers = td.get_stage_compare_headers(stage_index, iteration);
+        let compare_body = td.get_compare_body(
+            compare,
+            &[&stage.variables[..], &td.variables[..]].concat(),
+            iteration,
+        );
+
+        let resolved_compare_request = test::definition::ResolvedRequest::new(
+            compare_url.clone(),
+            compare_method.clone(),
+            compare_headers.clone(),
+            compare_body.clone(),
+        );
+
+        compare_request = Some(RequestDetails {
+            headers: compare_headers
+                .iter()
+                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                .collect(),
+            url: compare_url.to_string(),
+            method: HttpVerb(compare_method),
+            body: compare_body.unwrap_or(serde_json::Value::Null),
+        });
+
+        compare_response_opt = Some(process_request(state, resolved_compare_request).await?);
+    }
+
+    let runtime = start_time.elapsed().as_millis() as u32;
+    let actual = ResultData::from_response(req_response).await;
+    let mut compare_actual = None;
+
+    if let Some(compare_response) = compare_response_opt {
+        compare_actual = ResultData::from_response(compare_response).await;
+    }
+
+    let details = ResultDetails {
+        request,
+        expected,
+        actual,
+        compare_request,
+        compare_actual,
+    };
+
+    let result = process_response(
+        stage_index as u32,
+        StageType::Normal,
+        runtime,
+        details,
+        &stage.response.clone().map_or(Vec::new(), |r| r.ignore),
+    );
+
+    // extract variables and add them to the state
+    if let Some(r) = &stage.response {
+        if let Some(a) = &result.details.actual {
+            for v in &r.extract {
+                match extract_json(&v.field, 0, a.body.clone()) {
+                    Ok(result) => {
+                        let converted_result = match result {
+                            serde_json::Value::Bool(b) => b.to_string(),
+                            serde_json::Value::Number(n) => n.to_string(),
+                            serde_json::Value::String(s) => s.to_string(),
+                            _ => "".to_string(),
+                        };
+                        state.variables.insert(v.name.clone(), converted_result);
+                    }
+                    Err(error) => {
+                        error!("no json result found: {}", error);
+                    }
                 }
-                Err(e) => {
-                    error!("{}", e);
-                    return Err(Box::from(TestFailure {
-                        reason: "comparison response is not valid JSON".to_string(),
-                    }));
-                }
-            },
-            Err(e) => {
-                error!("{}", e);
-                return Err(Box::from(TestFailure {
-                    reason: "response is not valid JSON".to_string(),
-                }));
             }
         }
     }
 
-    Ok(true)
+    return Ok(result);
 }
 
 async fn process_request(
     state: &State,
     resolved_request: test::definition::ResolvedRequest,
-    // http_method: hyper::Method,
-    // uri: &str,
-    // headers: Vec<(String, String)>,
-    // body: Option<serde_json::Value>,
 ) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     debug!("url({})", resolved_request.url);
