@@ -42,7 +42,7 @@ pub fn extract_json(
 
                 return Ok(json!(results));
             }
-            _ => return Ok(json),
+            _ => return Ok(json.clone()),
         }
     }
 
