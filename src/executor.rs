@@ -33,7 +33,6 @@ struct State {
 
 #[derive(PartialEq, Clone)]
 pub enum StageType {
-    Unknown = 0,
     Setup = 1,
     Normal = 2,
     Cleanup = 3,
@@ -41,7 +40,6 @@ pub enum StageType {
 
 #[derive(PartialEq, Clone)]
 pub enum TestStatus {
-    Invalid = 0, // this may be removed, but could indicate the test was unable to be executed
     Passed = 1,
     Failed = 2,
 }
@@ -122,21 +120,6 @@ pub struct RequestDetails {
     url: String,
     method: HttpVerb,
     body: serde_json::Value,
-}
-
-impl RequestDetails {
-    pub fn from_resolved(req: test::definition::ResolvedRequest) -> RequestDetails {
-        RequestDetails {
-            headers: req
-                .headers
-                .iter()
-                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
-                .collect(),
-            url: req.url,
-            method: HttpVerb(req.method),
-            body: req.body.unwrap_or(serde_json::Value::Null),
-        }
-    }
 }
 
 #[derive(Clone, Serialize)]
@@ -426,6 +409,7 @@ async fn run(
                 success = r.0;
             }
             Err(e) => {
+                trace!("td validation error: {}", e);
                 success = false;
             }
         }
@@ -447,6 +431,7 @@ async fn run(
                 success &= r.0;
             }
             Err(e) => {
+                trace!("cleanup validation error: {}", e);
                 success = false;
             }
         }
