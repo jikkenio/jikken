@@ -1,11 +1,11 @@
 use crate::test;
 use chrono::Local;
+use dirs;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
-use dirs;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -18,18 +18,19 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
-    pub api_key: Option<String>,
     pub environment: Option<String>,
+    #[serde(skip_serializing)]
+    pub api_key: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct File {
     pub settings: Option<FileSettings>,
     pub globals: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FileSettings {
     pub continue_on_failure: Option<bool>,
@@ -44,7 +45,7 @@ impl Config {
             "TODAY".to_string(),
             format!("{}", Local::now().format("%Y-%m-%d")),
         );
-    
+
         global_variables
             .iter()
             .chain(self.globals.iter())
@@ -77,17 +78,15 @@ async fn load_config_file(file: &str) -> Option<File> {
         Ok(data) => {
             let config_result: Result<File, _> = toml::from_str(&data);
             match config_result {
-                Ok(config) => {
-                    Some(config)
-                },
+                Ok(config) => Some(config),
                 Err(e) => {
-                    error!("uanble to load config file:  {}", e);
+                    error!("unable to load config file ({}): {}", file, e);
                     None
                 }
             }
-        },
+        }
         Err(e) => {
-            error!("uanble to load config file:  {}", e);
+            error!("unable to load config file ({}): {}", file, e);
             None
         }
     }
@@ -113,7 +112,11 @@ async fn load_home_file() -> Option<File> {
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     if let Some(file) = file_opt {
-        let merged_globals: BTreeMap<String, String> = config.globals.into_iter().chain(file.globals.unwrap_or(BTreeMap::new())).collect();
+        let merged_globals: BTreeMap<String, String> = config
+            .globals
+            .into_iter()
+            .chain(file.globals.unwrap_or(BTreeMap::new()))
+            .collect();
 
         if let Some(settings) = file.settings {
             return Config {
@@ -127,13 +130,13 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                 globals: merged_globals,
             };
         }
-        
+
         return Config {
             settings: config.settings,
             globals: merged_globals,
         };
     }
-    
+
     config
 }
 
