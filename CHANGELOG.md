@@ -1,6 +1,12 @@
 Next (Version determined when release is cut)
 =====
 
+0.5.0
+=====
+
+Bugfixes:
+* Ignore and Add Parameter definitions now properly work for compare requests
+
 Features:
 * Add (optional, opt-in) telemetry support for the Jikken.IO webapp
 * Add basic test file validation
