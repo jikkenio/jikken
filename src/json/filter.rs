@@ -6,7 +6,7 @@ pub fn filter_json(
     depth: usize,
     json: serde_json::Value,
 ) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
-    let path_segments: Vec<&str> = path.split(".").collect();
+    let path_segments: Vec<&str> = path.split('.').collect();
     if depth + 1 > path_segments.len() {
         return Ok(json);
     }
@@ -58,7 +58,7 @@ pub fn filter_json(
                 map.insert(current_segment.to_string(), result);
             }
 
-            return Ok(json!(map));
+            Ok(json!(map))
         }
         serde_json::Value::Array(a) => {
             let mut results = Vec::new();
@@ -72,9 +72,9 @@ pub fn filter_json(
                 }
             }
 
-            return Ok(json!(results));
+            Ok(json!(results))
         }
-        _ => return Ok(json),
+        _ => Ok(json),
     }
 }
 

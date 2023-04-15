@@ -2,11 +2,10 @@ use crate::config;
 use crate::errors::TelemetryError;
 use crate::executor;
 use crate::test;
-use chrono;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{debug, error, info, trace};
+use log::{debug, trace};
 use machineid_rs::{Encryption, HWIDComponent, IdBuilder};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -112,7 +111,7 @@ pub async fn create_session(
     let post_body = SessionPost {
         version: crate::VERSION.to_string(),
         os: env::consts::OS.to_string(),
-        machine_id: machine_id,
+        machine_id,
         tests: test_count,
         args: args_json,
         validation: validation_json,
@@ -148,8 +147,8 @@ pub async fn create_session(
         let session_id = uuid::Uuid::parse_str(&response.session_id)?;
 
         return Ok(Session {
-            token: token,
-            session_id: session_id,
+            token,
+            session_id,
             start_time: chrono::Utc::now(),
         });
     }
@@ -287,8 +286,7 @@ pub async fn complete_session(
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let uri = format!(
         "{}/sessions/{}/completed",
-        TELEMETRY_BASE_URL,
-        session.session_id.to_string()
+        TELEMETRY_BASE_URL, session.session_id
     );
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
