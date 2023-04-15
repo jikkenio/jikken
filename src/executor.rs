@@ -85,13 +85,11 @@ impl ResultData {
 
         match response_bytes {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
-                Ok(data) => {
-                    Some(ResultData {
-                        headers,
-                        status: response_status.as_u16(),
-                        body: data,
-                    })
-                }
+                Ok(data) => Some(ResultData {
+                    headers,
+                    status: response_status.as_u16(),
+                    body: data,
+                }),
                 Err(e) => {
                     error!("response is not valid JSON: {}", e);
                     None
@@ -222,9 +220,7 @@ pub async fn execute_tests(
         if let Some(req) = &td.requires {
             if tests_by_id.contains_key(req) && !duplicate_filter.contains(req) {
                 duplicate_filter.insert(req.clone());
-                tests_to_run_with_dependencies
-                    .push(tests_by_id.get(req).unwrap().to_owned());
-                
+                tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().to_owned());
             }
         }
 
@@ -237,10 +233,13 @@ pub async fn execute_tests(
     let total_count = tests_to_run_with_dependencies.len();
     let mut session: Option<telemetry::Session> = None;
 
-    let mode_dryrun = matches!(cli.command, Commands::DryRun {
-        tags: _,
-        tags_or: _,
-    });
+    let mode_dryrun = matches!(
+        cli.command,
+        Commands::DryRun {
+            tags: _,
+            tags_or: _,
+        }
+    );
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
@@ -374,7 +373,7 @@ async fn run(
     if let Some(test_telemetry) = &test {
         if !setup_result.1.is_empty() {
             let telemetry_result =
-                telemetry::complete_stage(&test_telemetry, iteration, setup_result.1[0].clone())
+                telemetry::complete_stage(test_telemetry, iteration, setup_result.1[0].clone())
                     .await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
@@ -404,7 +403,7 @@ async fn run(
                 if let Some(test_telemetry) = &test {
                     for result in r.1.iter() {
                         let telemetry_result =
-                            telemetry::complete_stage(&test_telemetry, iteration, result.clone())
+                            telemetry::complete_stage(test_telemetry, iteration, result.clone())
                                 .await;
                         if let Err(e) = telemetry_result {
                             debug!("telemetry stage completion failed: {}", e);
@@ -435,7 +434,7 @@ async fn dry_run(
 fn validate_body(
     actual: &Value,
     expected: &Value,
-    ignore: &Vec<String>,
+    ignore: &[String],
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
     trace!("validating response body");
     let mut modified_actual = actual.clone();
@@ -487,7 +486,7 @@ async fn validate_td(
 
         if let Some(test_telemetry) = &test {
             let telemetry_result =
-                telemetry::complete_stage(&test_telemetry, iteration, stage_result.clone()).await;
+                telemetry::complete_stage(test_telemetry, iteration, stage_result.clone()).await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
@@ -509,7 +508,7 @@ fn process_response(
     stage_type: StageType,
     runtime: u32,
     details: ResultDetails,
-    ignore_body: &Vec<String>,
+    ignore_body: &[String],
 ) -> StageResult {
     let mut result = StageResult {
         stage,
@@ -520,7 +519,7 @@ fn process_response(
     };
 
     if let Some(resp) = details.actual {
-        let header_match = if details.expected.headers.len() > 0 {
+        let header_match = if !details.expected.headers.is_empty() {
             // compare headers
             trace!("validating headers");
             true
@@ -575,7 +574,7 @@ fn process_response(
         {
             result.status = TestStatus::Failed;
         }
-    } else if details.expected.headers.len() > 0
+    } else if !details.expected.headers.is_empty()
         || details.expected.status > 0
         || details.expected.body != serde_json::Value::Null
     {
@@ -737,8 +736,7 @@ async fn run_cleanup(
     } else if let Some(onfailure) = &td.cleanup.onfailure {
         debug!("execute onfailure request");
         let failure_method = onfailure.method.as_method();
-        let failure_url =
-            &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+        let failure_url = &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
         let failure_headers = td.get_headers(&onfailure.headers, iteration);
         let failure_body = td.get_body(onfailure, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
@@ -772,8 +770,7 @@ async fn run_cleanup(
             compare_actual: None,
         };
 
-        let result =
-            process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
         counter += 1;
         results.push(result);
     }
@@ -783,7 +780,7 @@ async fn run_cleanup(
         let req_method = request.method.as_method();
         let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
         let req_headers = td.get_cleanup_request_headers(iteration);
-        let req_body = td.get_body(&request, &td.variables, iteration);
+        let req_body = td.get_body(request, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
             req_url.clone(),
             req_method.clone(),
@@ -952,7 +949,7 @@ async fn validate_stage(
         }
     }
 
-    return Ok(result);
+    Ok(result)
 }
 
 async fn process_request(
@@ -1017,7 +1014,7 @@ fn validate_dry_run(
         let setup_headers = td.get_setup_request_headers(iteration);
         let setup_body = td.get_body(&setup.request, &td.variables, iteration);
         info!("setup: {} {}\n", setup_method, setup_url);
-        if setup_headers.len() > 0 {
+        if !setup_headers.is_empty() {
             info!("setup_headers:\n");
             for (key, value) in setup_headers.iter() {
                 info!("-- {}: {}\n", key, value);
@@ -1044,7 +1041,7 @@ fn validate_dry_run(
                 );
             }
 
-            if r.ignore.len() > 0 {
+            if !r.ignore.is_empty() {
                 info!("prune fields from setup_response_body\n");
                 for i in r.ignore.iter() {
                     info!("filter: {}\n", i);
@@ -1052,7 +1049,7 @@ fn validate_dry_run(
             }
 
             if let Some(b) = &r.body {
-                if r.ignore.len() > 0 {
+                if !r.ignore.is_empty() {
                     info!(
                         "validate filtered setup_response_body matches defined body: {}\n",
                         b.data
@@ -1087,7 +1084,7 @@ fn validate_dry_run(
             stage_method,
             stage_url
         );
-        if stage_headers.len() > 0 {
+        if !stage_headers.is_empty() {
             info!("headers:\n");
             for (key, value) in stage_headers.iter() {
                 info!("-- {}: {}\n", key, value);
@@ -1114,7 +1111,7 @@ fn validate_dry_run(
                 );
             }
 
-            if r.ignore.len() > 0 {
+            if !r.ignore.is_empty() {
                 info!("prune fields from response_body\n");
                 for i in r.ignore.iter() {
                     info!("filter: {}\n", i);
@@ -1122,7 +1119,7 @@ fn validate_dry_run(
             }
 
             if let Some(b) = &r.body {
-                if r.ignore.len() > 0 {
+                if !r.ignore.is_empty() {
                     info!(
                         "validate filtered response_body matches defined body: {}\n",
                         b.data
@@ -1183,7 +1180,7 @@ fn validate_dry_run(
                 stage_compare_method, compare_url
             );
 
-            if stage_compare_headers.len() > 0 {
+            if !stage_compare_headers.is_empty() {
                 info!("compare_headers:\n");
                 for (key, value) in stage_compare_headers.iter() {
                     info!("-- {}: {}\n", key, value);
@@ -1198,7 +1195,7 @@ fn validate_dry_run(
             info!("validate request_status_code matches compare_request_status_code\n");
 
             if let Some(r) = &stage.response {
-                if r.ignore.len() > 0 {
+                if !r.ignore.is_empty() {
                     info!("prune fields from compare_response_body\n");
                     for i in r.ignore.iter() {
                         info!("filter: {}\n", i);
@@ -1221,9 +1218,9 @@ fn validate_dry_run(
         let onsuccess_url =
             &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
         let onsuccess_headers = td.get_setup_request_headers(iteration);
-        let onsuccess_body = td.get_body(&onsuccess, &td.variables, iteration);
+        let onsuccess_body = td.get_body(onsuccess, &td.variables, iteration);
         info!("onsuccess: {} {}\n", onsuccess_method, onsuccess_url);
-        if onsuccess_headers.len() > 0 {
+        if !onsuccess_headers.is_empty() {
             info!("onsuccess_headers:\n");
             for (key, value) in onsuccess_headers.iter() {
                 info!("-- {}: {}\n", key, value);
@@ -1241,9 +1238,9 @@ fn validate_dry_run(
         let onfailure_url =
             &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
         let onfailure_headers = td.get_setup_request_headers(iteration);
-        let onfailure_body = td.get_body(&onfailure, &td.variables, iteration);
+        let onfailure_body = td.get_body(onfailure, &td.variables, iteration);
         info!("onfailure: {} {}\n", onfailure_method, onfailure_url);
-        if onfailure_headers.len() > 0 {
+        if !onfailure_headers.is_empty() {
             info!("onfailure_headers:\n");
             for (key, value) in onfailure_headers.iter() {
                 info!("-- {}: {}\n", key, value);
@@ -1260,9 +1257,9 @@ fn validate_dry_run(
         let cleanup_method = request.method.as_method();
         let cleanup_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
         let cleanup_headers = td.get_setup_request_headers(iteration);
-        let cleanup_body = td.get_body(&request, &td.variables, iteration);
+        let cleanup_body = td.get_body(request, &td.variables, iteration);
         info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
-        if cleanup_headers.len() > 0 {
+        if !cleanup_headers.is_empty() {
             info!("cleanup_headers:\n");
             for (key, value) in cleanup_headers.iter() {
                 info!("-- {}: {}\n", key, value);

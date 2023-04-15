@@ -286,8 +286,7 @@ pub async fn complete_session(
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let uri = format!(
         "{}/sessions/{}/completed",
-        TELEMETRY_BASE_URL,
-        session.session_id.to_string()
+        TELEMETRY_BASE_URL, session.session_id
     );
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
