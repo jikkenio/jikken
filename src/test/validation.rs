@@ -11,7 +11,7 @@ impl std::error::Error for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.reason.len() == 0 {
+        if self.reason.is_empty() {
             write!(f, "test validation")
         } else {
             write!(f, "{}", self.reason)
@@ -21,7 +21,7 @@ impl fmt::Display for Error {
 
 fn validate_test_file(
     _file: &test::File,
-    _global_variables: &Vec<test::Variable>,
+    _global_variables: &[test::Variable],
 ) -> Result<bool, Error> {
     Ok(true)
 }
@@ -29,7 +29,7 @@ fn validate_test_file(
 // this method is intended to do basic validation of the test file and convert it into a TestDefinition if it passes
 pub fn validate_file(
     file: test::File,
-    global_variables: &Vec<test::Variable>,
+    global_variables: &[test::Variable],
 ) -> Result<test::Definition, Error> {
     validate_test_file(&file, global_variables)?;
 
@@ -52,7 +52,7 @@ pub fn validate_file(
         tags: new_tags,
         iterate: file.iterate.unwrap_or(1),
         variables: test::Variable::validate_variables_opt(file.variables)?,
-        global_variables: global_variables.clone(),
+        global_variables: global_variables.to_vec(),
         stages: definition::StageDescriptor::validate_stages_opt(
             file.request,
             file.compare,

@@ -20,7 +20,7 @@ pub async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     info!("Jikken is updating to the latest version...");
     stdout().flush().unwrap();
 
-    let file_name_opt = url.split("/").last();
+    let file_name_opt = url.split('/').last();
 
     if file_name_opt.is_none() {
         error!("error: invalid url");
@@ -44,13 +44,13 @@ pub async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     if env::consts::OS == "windows" {
         self_update::Extract::from_source(&tmp_tarball_path)
             .archive(self_update::ArchiveKind::Zip)
-            .extract_into(&tmp_dir.path())?;
+            .extract_into(tmp_dir.path())?;
     } else {
         self_update::Extract::from_source(&tmp_tarball_path)
             .archive(self_update::ArchiveKind::Tar(Some(
                 self_update::Compression::Gz,
             )))
-            .extract_into(&tmp_dir.path())?;
+            .extract_into(tmp_dir.path())?;
     }
 
     let tmp_file = tmp_dir.path().join("replacement_tmp");
@@ -69,8 +69,8 @@ pub async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 fn has_newer_version(new_version: String) -> bool {
-    let new_version_segments: Vec<&str> = new_version.split(".").collect();
-    let my_version_segments: Vec<&str> = crate::VERSION.split(".").collect();
+    let new_version_segments: Vec<&str> = new_version.split('.').collect();
+    let my_version_segments: Vec<&str> = crate::VERSION.split('.').collect();
 
     let segment_length = std::cmp::min(new_version_segments.len(), my_version_segments.len());
 
@@ -101,7 +101,7 @@ pub async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Erro
     let resp = client.request(req).await?;
     let (_, body) = resp.into_parts();
     let response_bytes = body::to_bytes(body).await?;
-    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes.to_vec()) {
+    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes) {
         if has_newer_version(r.version.clone()) {
             return Ok(Some(r));
         }

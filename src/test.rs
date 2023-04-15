@@ -12,7 +12,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
@@ -58,7 +58,7 @@ impl Variable {
             data_type: variable.data_type.clone(),
             value: variable.value.clone(),
             modifier: variable.modifier.clone(),
-            format: variable.format.clone(),
+            format: variable.format,
         })
     }
 
@@ -71,7 +71,7 @@ impl Variable {
                 let count = vars.len();
                 let results = vars
                     .into_iter()
-                    .map(|v| Variable::new(v))
+                    .map(Variable::new)
                     .filter_map(|v| match v {
                         Ok(x) => Some(x),
                         Err(_) => None,
@@ -98,14 +98,14 @@ impl Variable {
 
         debug!("generate_value result: {}", result);
 
-        return result;
+        result
     }
 
     fn generate_int_value(&self, iteration: u32) -> String {
         match &self.value {
             serde_yaml::Value::Number(v) => {
                 debug!("number expression: {:?}", v);
-                return format!("{}", v);
+                format!("{}", v)
             }
             serde_yaml::Value::Sequence(seq) => {
                 debug!("sequence expression: {:?}", seq);
@@ -114,15 +114,13 @@ impl Variable {
                     serde_yaml::Value::Number(st) => st.as_i64().unwrap_or(0),
                     _ => 0,
                 };
-                return format!("{}", test_string);
+                format!("{}", test_string)
             }
             serde_yaml::Value::Mapping(map) => {
                 debug!("map expression: {:?}", map);
-                return String::from("");
+                String::from("")
             }
-            _ => {
-                return String::from("");
-            }
+            _ => String::from(""),
         }
     }
 
@@ -131,7 +129,7 @@ impl Variable {
             serde_yaml::Value::String(v) => {
                 debug!("string expression: {:?}", v);
 
-                if v.contains("$") {
+                if v.contains('$') {
                     let mut modified_value = v.clone();
                     for variable in global_variables.iter() {
                         let var_pattern = format!("${}$", variable.name.trim());
@@ -140,14 +138,14 @@ impl Variable {
                         }
 
                         if let serde_yaml::Value::String(s) = &variable.value {
-                            modified_value = modified_value.replace(&var_pattern, &s);
+                            modified_value = modified_value.replace(&var_pattern, s);
                         }
                     }
 
-                    return format!("{}", modified_value);
+                    return modified_value;
                 }
 
-                return format!("{}", v);
+                v.to_string()
             }
             serde_yaml::Value::Sequence(seq) => {
                 debug!("sequence expression: {:?}", seq);
@@ -157,7 +155,7 @@ impl Variable {
                     _ => "".to_string(),
                 };
 
-                if test_string.contains("$") {
+                if test_string.contains('$') {
                     let mut modified_value = test_string;
                     for variable in global_variables.iter() {
                         let var_pattern = format!("${}$", variable.name.trim());
@@ -166,22 +164,20 @@ impl Variable {
                         }
 
                         if let serde_yaml::Value::String(s) = &variable.value {
-                            modified_value = modified_value.replace(&var_pattern, &s);
+                            modified_value = modified_value.replace(&var_pattern, s);
                         }
                     }
 
-                    return format!("{}", modified_value);
+                    return modified_value;
                 }
 
-                return format!("{}", test_string);
+                test_string
             }
             serde_yaml::Value::Mapping(map) => {
                 debug!("map expression: {:?}", map);
-                return String::from("");
+                String::from("")
             }
-            _ => {
-                return String::from("");
-            }
+            _ => String::from(""),
         }
     }
 
@@ -192,7 +188,7 @@ impl Variable {
                 debug!("string expression: {:?}", v);
                 let mut result_date;
 
-                let modified_value = if v.contains("$") {
+                let modified_value = if v.contains('$') {
                     let mut mv = v.clone();
                     for variable in global_variables.iter() {
                         let var_pattern = format!("${}$", variable.name.trim());
@@ -205,7 +201,7 @@ impl Variable {
                         }
                     }
 
-                    format!("{}", mv)
+                    mv
                 } else {
                     v.to_string()
                 };
@@ -260,7 +256,7 @@ impl Variable {
                         }
                     }
                 }
-                return format!("{}", result_date.format("%Y-%m-%d"));
+                format!("{}", result_date.format("%Y-%m-%d"))
             }
             serde_yaml::Value::Sequence(seq) => {
                 debug!("sequence expression: {:?}", seq);
@@ -271,7 +267,7 @@ impl Variable {
                     _ => "",
                 };
 
-                let modified_string = if test_string.contains("$") {
+                let modified_string = if test_string.contains('$') {
                     let mut modified_value: String = test_string.to_string();
                     for variable in global_variables.iter() {
                         let var_pattern = format!("${}$", variable.name.trim());
@@ -280,11 +276,11 @@ impl Variable {
                         }
 
                         if let serde_yaml::Value::String(s) = &variable.value {
-                            modified_value = modified_value.replace(&var_pattern, &s);
+                            modified_value = modified_value.replace(&var_pattern, s);
                         }
                     }
 
-                    format!("{}", modified_value)
+                    modified_value
                 } else {
                     test_string.to_string()
                 };
@@ -293,33 +289,31 @@ impl Variable {
 
                 match parse_attempt {
                     Ok(p) => {
-                        return format!(
+                        format!(
                             "{}",
                             Local
                                 .from_local_datetime(&p.and_hms_opt(0, 0, 0).unwrap())
                                 .unwrap()
                                 .format("%Y-%m-%d")
-                        );
+                        )
                     }
                     Err(e) => {
                         error!("parse_attempt failed");
                         error!("{}", e);
-                        return String::from("");
+                        String::from("")
                     }
                 }
             }
             serde_yaml::Value::Mapping(map) => {
                 debug!("map expression: {:?}", map);
-                return String::from("");
+                String::from("")
             }
-            _ => {
-                return String::from("");
-            }
+            _ => String::from(""),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Definition {
     pub name: Option<String>,
     pub id: String,
@@ -451,20 +445,20 @@ impl Definition {
                 Definition::update_request_variables(&setup.request, var_pattern.as_str());
 
                 if let Some(response) = &setup.response {
-                    Definition::update_response_variables(&response, var_pattern.as_str());
+                    Definition::update_response_variables(response, var_pattern.as_str());
                 }
             }
 
             if let Some(request) = &self.cleanup.request {
-                Definition::update_request_variables(&request, var_pattern.as_str());
+                Definition::update_request_variables(request, var_pattern.as_str());
             }
 
             if let Some(onsuccess) = &self.cleanup.onsuccess {
-                Definition::update_request_variables(&onsuccess, var_pattern.as_str());
+                Definition::update_request_variables(onsuccess, var_pattern.as_str());
             }
 
             if let Some(onfailure) = &self.cleanup.onfailure {
-                Definition::update_request_variables(&onfailure, var_pattern.as_str());
+                Definition::update_request_variables(onfailure, var_pattern.as_str());
             }
         }
 
@@ -480,11 +474,11 @@ impl Definition {
                 Definition::update_request_variables(&stage.request, var_pattern.as_str());
 
                 if let Some(compare) = &stage.compare {
-                    Definition::update_compare_variables(&compare, var_pattern.as_str());
+                    Definition::update_compare_variables(compare, var_pattern.as_str());
                 }
 
                 if let Some(response) = &stage.response {
-                    Definition::update_response_variables(&response, var_pattern.as_str());
+                    Definition::update_response_variables(response, var_pattern.as_str());
                 }
             }
         }
@@ -494,8 +488,8 @@ impl Definition {
         &self,
         iteration: u32,
         url: &str,
-        params: &Vec<http::Parameter>,
-        variables: &Vec<Variable>,
+        params: &[http::Parameter],
+        variables: &[Variable],
     ) -> String {
         let joined: Vec<_> = params
             .iter()
@@ -505,7 +499,7 @@ impl Definition {
             })
             .collect();
 
-        let modified_url = if url.contains("$") {
+        let modified_url = if url.contains('$') {
             let mut replaced_url = url.to_string();
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
@@ -526,10 +520,10 @@ impl Definition {
             url.to_string()
         };
 
-        if joined.len() > 0 {
+        if !joined.is_empty() {
             format!("{}?{}", modified_url, joined.join("&"))
         } else {
-            modified_url.to_string()
+            modified_url
         }
     }
 
@@ -594,11 +588,7 @@ impl Definition {
         }
     }
 
-    pub fn get_headers(
-        &self,
-        headers: &Vec<http::Header>,
-        iteration: u32,
-    ) -> Vec<(String, String)> {
+    pub fn get_headers(&self, headers: &[http::Header], iteration: u32) -> Vec<(String, String)> {
         headers
             .iter()
             .map(|h| {
@@ -627,7 +617,7 @@ impl Definition {
         let stage = self.stages.get(stage_index).unwrap();
         match stage.compare.as_ref() {
             Some(compare) => {
-                let results = if compare.headers.len() > 0 {
+                let results = if !compare.headers.is_empty() {
                     compare
                         .headers
                         .iter()
@@ -670,7 +660,7 @@ impl Definition {
     pub fn get_body(
         &self,
         request: &definition::RequestDescriptor,
-        variables: &Vec<Variable>,
+        variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
         if let Some(body) = &request.body {
@@ -706,7 +696,7 @@ impl Definition {
     pub fn get_compare_body(
         &self,
         compare: &definition::CompareDescriptor,
-        variables: &Vec<Variable>,
+        variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
         if let Some(body) = &compare.body {

@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fs;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnvalidatedRequest {
     pub method: Option<http::Verb>,
     pub url: String,
@@ -24,7 +24,7 @@ impl Hash for UnvalidatedRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedCompareRequest {
     pub method: Option<http::Verb>,
@@ -51,7 +51,7 @@ impl Hash for UnvalidatedCompareRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnvalidatedResponse {
     pub status: Option<u16>,
     pub headers: Option<Vec<http::Header>>,
@@ -78,7 +78,7 @@ pub struct UnvalidatedVariable {
     pub format: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedStage {
     pub request: UnvalidatedRequest,
     pub compare: Option<UnvalidatedCompareRequest>,
@@ -86,13 +86,13 @@ pub struct UnvalidatedStage {
     pub variables: Option<Vec<UnvalidatedVariable>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedRequestResponse {
     pub request: UnvalidatedRequest,
     pub response: Option<UnvalidatedResponse>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedCleanup {
     pub request: Option<UnvalidatedRequest>,
     pub onsuccess: Option<UnvalidatedRequest>,
