@@ -245,9 +245,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let files = get_files();
 
-    info!("Jikken found {} test files\n", files.len());
+    info!("Jikken found {} test files.\n", files.len());
 
-    executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
+    let report = executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
+
+    info!(
+        "Jikken executed {} tests with {} passed and {} failed.\n",
+        report.run, report.passed, report.failed
+    );
 
     Ok(())
 }
