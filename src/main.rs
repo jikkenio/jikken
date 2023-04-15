@@ -187,67 +187,70 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
     }
 
-    match &cli.command {
-        Commands::New {
-            full,
-            multistage,
-            output,
-            name,
-        } => {
-            let template = if *full {
-                serde_yaml::to_string(&template::template_full()?)?
-            } else if *multistage {
-                serde_yaml::to_string(&template::template_staged()?)?
-            } else {
-                serde_yaml::to_string(&template::template()?)?
-            };
-            let template = template.replace("''", "");
-            let mut result = "".to_string();
+    if let Commands::New {
+        full,
+        multistage,
+        output,
+        name,
+    } = &cli.command
+    {
+        let template = if *full {
+            serde_yaml::to_string(&template::template_full()?)?
+        } else if *multistage {
+            serde_yaml::to_string(&template::template_staged()?)?
+        } else {
+            serde_yaml::to_string(&template::template()?)?
+        };
+        let template = template.replace("''", "");
+        let mut result = "".to_string();
 
-            for line in template.lines() {
-                if !line.contains("null") {
-                    result = format!("{}{}\n", result, line)
-                }
+        for line in template.lines() {
+            if !line.contains("null") {
+                result = format!("{}{}\n", result, line)
             }
+        }
 
-            if *output {
-                info!("{}\n", result);
-            } else {
-                match name {
-                    Some(n) => {
-                        let filename = if !n.ends_with(".jkt") {
-                            format!("{}.jkt", n)
-                        } else {
-                            n.clone()
-                        };
+        if *output {
+            info!("{}\n", result);
+        } else {
+            match name {
+                Some(n) => {
+                    let filename = if !n.ends_with(".jkt") {
+                        format!("{}.jkt", n)
+                    } else {
+                        n.clone()
+                    };
 
-                        if std::path::Path::new(&filename).exists() {
-                            error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
-                            std::process::exit(1);
-                        }
-
-                        let mut file = fs::File::create(&filename).await?;
-                        file.write_all(result.as_bytes()).await?;
-                        info!("Successfully created test (`{}`).\n", filename);
-                        std::process::exit(0);
-                    }
-                    None => {
-                        error!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                    if std::path::Path::new(&filename).exists() {
+                        error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
                         std::process::exit(1);
                     }
+
+                    let mut file = fs::File::create(&filename).await?;
+                    file.write_all(result.as_bytes()).await?;
+                    info!("Successfully created test (`{}`).\n", filename);
+                    std::process::exit(0);
+                }
+                None => {
+                    error!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                    std::process::exit(1);
                 }
             }
-
-            std::process::exit(0);
         }
-        _ => {}
+
+        std::process::exit(0);
     }
 
     let files = get_files();
 
-    info!("Jikken found {} test files\n", files.len());
+    info!("Jikken found {} test files.\n", files.len());
 
-    executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
+    let report = executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
+
+    info!(
+        "Jikken executed {} tests with {} passed and {} failed.\n",
+        report.run, report.passed, report.failed
+    );
 
     Ok(())
 }

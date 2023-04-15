@@ -2,6 +2,7 @@ use crate::test;
 use crate::test::{file, http, validation};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestBody {
@@ -11,7 +12,7 @@ pub struct RequestBody {
     pub matches_variable: Cell<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -47,13 +48,10 @@ impl RequestDescriptor {
             None => Vec::new(),
         };
 
-        let request_body = match request.body {
-            Some(b) => Some(RequestBody {
-                data: b,
-                matches_variable: Cell::from(false),
-            }),
-            None => None,
-        };
+        let request_body = request.body.map(|b| RequestBody {
+            data: b,
+            matches_variable: Cell::from(false),
+        });
 
         Ok(RequestDescriptor {
             method: request.method.unwrap_or(http::Verb::Get),
@@ -74,7 +72,7 @@ impl RequestDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompareDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -108,7 +106,7 @@ impl CompareDescriptor {
                 let mut validated_add_params = Vec::new();
                 let mut validated_ignore_params = Vec::new();
 
-                if validated_params.len() == 0 {
+                if validated_params.is_empty() {
                     validated_add_params = match request.add_params {
                         Some(params) => params
                             .iter()
@@ -122,7 +120,7 @@ impl CompareDescriptor {
                     };
 
                     validated_ignore_params = match request.ignore_params {
-                        Some(params) => params.iter().map(|p| p.clone()).collect(),
+                        Some(params) => params.to_vec(),
                         None => Vec::new(),
                     };
                 }
@@ -142,7 +140,7 @@ impl CompareDescriptor {
                 let mut validated_add_headers = Vec::new();
                 let mut validated_ignore_headers = Vec::new();
 
-                if validated_headers.len() == 0 {
+                if validated_headers.is_empty() {
                     validated_add_headers = match request.add_headers {
                         Some(headers) => headers
                             .iter()
@@ -156,18 +154,15 @@ impl CompareDescriptor {
                     };
 
                     validated_ignore_headers = match request.ignore_headers {
-                        Some(headers) => headers.iter().map(|h| h.clone()).collect(),
+                        Some(headers) => headers.to_vec(),
                         None => Vec::new(),
                     };
                 }
 
-                let compare_body = match request.body {
-                    Some(b) => Some(RequestBody {
-                        data: b,
-                        matches_variable: Cell::from(false),
-                    }),
-                    None => None,
-                };
+                let compare_body = request.body.map(|b| RequestBody {
+                    data: b,
+                    matches_variable: Cell::from(false),
+                });
 
                 Ok(Some(CompareDescriptor {
                     method: request.method.unwrap_or(http::Verb::Get),
@@ -201,7 +196,7 @@ impl ResponseExtraction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
     pub status: Option<u16>,
     pub headers: Vec<http::Header>,
@@ -239,13 +234,10 @@ impl ResponseDescriptor {
                     None => Vec::new(),
                 };
 
-                let response_body = match res.body {
-                    Some(b) => Some(RequestBody {
-                        data: b,
-                        matches_variable: Cell::from(false),
-                    }),
-                    None => None,
-                };
+                let response_body = res.body.map(|b| RequestBody {
+                    data: b,
+                    matches_variable: Cell::from(false),
+                });
 
                 Ok(Some(ResponseDescriptor {
                     status: res.status,
@@ -260,7 +252,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StageDescriptor {
     pub request: RequestDescriptor,
     pub compare: Option<CompareDescriptor>,
@@ -304,7 +296,7 @@ impl StageDescriptor {
                 results.append(
                     &mut stages
                         .into_iter()
-                        .map(|s| StageDescriptor::new(s))
+                        .map(StageDescriptor::new)
                         .filter_map(|v| match v {
                             Ok(x) => Some(x),
                             Err(_) => None,
@@ -321,9 +313,29 @@ impl StageDescriptor {
             }
         }
     }
+
+    pub fn get_compare_parameters(&self) -> Vec<http::Parameter> {
+        if let Some(c) = &self.compare {
+            if !c.params.is_empty() {
+                return c.params.clone();
+            }
+
+            let ignore_lookup: HashSet<String> = c.ignore_params.iter().cloned().collect();
+            return self
+                .request
+                .clone()
+                .params
+                .into_iter()
+                .filter(|p| !ignore_lookup.contains(&p.param))
+                .chain(c.add_params.clone().into_iter())
+                .collect();
+        }
+
+        Vec::new()
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestResponseDescriptor {
     pub request: RequestDescriptor,
     pub response: Option<ResponseDescriptor>,
@@ -346,7 +358,7 @@ impl RequestResponseDescriptor {
 pub struct ResolvedRequest {
     // pub req_resp: RequestResponseDescriptor,
     pub url: String,
-    pub method: hyper::Method,
+    pub method: http::Method,
     pub headers: Vec<(String, String)>,
     pub body: Option<serde_json::Value>,
 }
@@ -354,7 +366,7 @@ pub struct ResolvedRequest {
 impl ResolvedRequest {
     pub fn new(
         url: String,
-        method: hyper::Method,
+        method: http::Method,
         headers: Vec<(String, String)>,
         body: Option<serde_json::Value>,
     ) -> ResolvedRequest {
@@ -367,7 +379,7 @@ impl ResolvedRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
     pub onfailure: Option<RequestDescriptor>,

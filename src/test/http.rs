@@ -1,9 +1,10 @@
-use hyper::Method;
-use serde::{Deserialize, Serialize};
+use hyper;
+use serde::{Deserialize, Serialize, Serializer};
 use std::cell::Cell;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Header {
     pub header: String,
     pub value: String,
@@ -38,7 +39,7 @@ impl Hash for Header {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {
     pub param: String,
     pub value: String,
@@ -75,10 +76,31 @@ pub enum Verb {
 impl Verb {
     pub fn as_method(&self) -> Method {
         match &self {
-            Verb::Post => Method::POST,
-            Verb::Patch => Method::PATCH,
-            Verb::Put => Method::PUT,
-            _ => Method::GET,
+            Verb::Post => Method(hyper::Method::POST),
+            Verb::Patch => Method(hyper::Method::PATCH),
+            Verb::Put => Method(hyper::Method::PUT),
+            _ => Method(hyper::Method::GET),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Method(hyper::Method);
+
+impl Method {
+    pub fn to_hyper(&self) -> hyper::Method {
+        self.0.clone()
+    }
+}
+
+impl Serialize for Method {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
