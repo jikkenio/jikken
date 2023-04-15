@@ -500,12 +500,8 @@ impl Definition {
         let joined: Vec<_> = params
             .iter()
             .map(|param| {
-                if param.matches_variable.get() {
-                    let p = self.get_processed_param(param, iteration);
-                    format!("{}={}", p.0, p.1)
-                } else {
-                    format!("{}={}", param.param, param.value)
-                }
+                let p = self.get_processed_param(param, iteration);
+                format!("{}={}", p.0, p.1)
             })
             .collect();
 
@@ -538,23 +534,25 @@ impl Definition {
     }
 
     fn get_processed_param(&self, parameter: &http::Parameter, iteration: u32) -> (String, String) {
-        for variable in self.variables.iter().chain(self.global_variables.iter()) {
-            let var_pattern = format!("${}$", variable.name);
+        if parameter.matches_variable.get() {
+            for variable in self.variables.iter().chain(self.global_variables.iter()) {
+                let var_pattern = format!("${}$", variable.name);
 
-            if !parameter.value.contains(var_pattern.as_str()) {
-                continue;
+                if !parameter.value.contains(var_pattern.as_str()) {
+                    continue;
+                }
+
+                let replacement = variable.generate_value(iteration, self.global_variables.clone());
+                return (
+                    parameter.param.clone(),
+                    parameter
+                        .value
+                        .replace(var_pattern.as_str(), replacement.as_str()),
+                );
             }
-
-            let replacement = variable.generate_value(iteration, self.global_variables.clone());
-            return (
-                parameter.param.clone(),
-                parameter
-                    .value
-                    .replace(var_pattern.as_str(), replacement.as_str()),
-            );
         }
 
-        (String::from(""), String::from(""))
+        (parameter.param.clone(), parameter.value.clone())
     }
 
     fn get_processed_header(&self, header: &http::Header, iteration: u32) -> (String, String) {
@@ -629,13 +627,8 @@ impl Definition {
         let stage = self.stages.get(stage_index).unwrap();
         match stage.compare.as_ref() {
             Some(compare) => {
-                let ignore_lookup: HashSet<String> =
-                    compare.ignore_headers.iter().cloned().collect();
-
-                let results: Vec<(String, String)>;
-
-                if compare.headers.len() > 0 {
-                    results = compare
+                let results = if compare.headers.len() > 0 {
+                    compare
                         .headers
                         .iter()
                         .map(|h| {
@@ -646,9 +639,12 @@ impl Definition {
                                 (h.header.clone(), h.value.clone())
                             }
                         })
-                        .collect();
+                        .collect()
                 } else {
-                    results = stage
+                    let ignore_lookup: HashSet<String> =
+                        compare.ignore_headers.iter().cloned().collect();
+
+                    stage
                         .request
                         .headers
                         .iter()
@@ -662,8 +658,8 @@ impl Definition {
                                 (h.header.clone(), h.value.clone())
                             }
                         })
-                        .collect();
-                }
+                        .collect()
+                };
 
                 results
             }

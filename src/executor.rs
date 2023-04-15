@@ -13,7 +13,7 @@ use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -22,9 +22,9 @@ use std::time::Instant;
 use url::Url;
 
 pub struct Report {
-    run: u16,
-    passed: u16,
-    failed: u16,
+    pub run: u16,
+    pub passed: u16,
+    pub failed: u16,
 }
 
 struct State {
@@ -105,20 +105,11 @@ impl ResultData {
     }
 }
 
-#[derive(Clone)]
-pub struct HttpVerb(hyper::Method);
-
-impl Serialize for HttpVerb {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.0.as_str())
-    }
-}
-
 #[derive(Clone, Serialize)]
 pub struct RequestDetails {
     headers: Vec<http::Header>,
     url: String,
-    method: HttpVerb,
+    method: http::Method,
     body: serde_json::Value,
 }
 
@@ -639,7 +630,7 @@ async fn validate_setup(
                 .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
                 .collect(),
             url: req_url.to_string(),
-            method: HttpVerb(req_method),
+            method: req_method,
             body: req_body.unwrap_or(serde_json::Value::Null),
         };
 
@@ -733,7 +724,7 @@ async fn run_cleanup(
                     .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
                     .collect(),
                 url: success_url.to_string(),
-                method: HttpVerb(success_method),
+                method: success_method,
                 body: success_body.unwrap_or(serde_json::Value::Null),
             };
 
@@ -777,7 +768,7 @@ async fn run_cleanup(
                     .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
                     .collect(),
                 url: failure_url.to_string(),
-                method: HttpVerb(failure_method),
+                method: failure_method,
                 body: failure_body.unwrap_or(serde_json::Value::Null),
             };
 
@@ -821,7 +812,7 @@ async fn run_cleanup(
                 .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
                 .collect(),
             url: req_url.to_string(),
-            method: HttpVerb(req_method),
+            method: req_method,
             body: req_body.unwrap_or(serde_json::Value::Null),
         };
 
@@ -877,7 +868,7 @@ async fn validate_stage(
             .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
             .collect(),
         url: req_url.to_string(),
-        method: HttpVerb(req_method),
+        method: req_method,
         body: req_body.unwrap_or(serde_json::Value::Null),
     };
     let mut compare_response_opt = None;
@@ -888,11 +879,7 @@ async fn validate_stage(
 
     if let Some(compare) = &stage.compare {
         debug!("execute stage comparison");
-        let params = if compare.params.len() > 0 {
-            &compare.params
-        } else {
-            &stage.request.params
-        };
+        let params = stage.get_compare_parameters();
 
         let compare_method = compare.method.as_method();
         let compare_url = &td.get_url(
@@ -921,7 +908,7 @@ async fn validate_stage(
                 .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
                 .collect(),
             url: compare_url.to_string(),
-            method: HttpVerb(compare_method),
+            method: compare_method,
             body: compare_body.unwrap_or(serde_json::Value::Null),
         });
 
@@ -991,7 +978,7 @@ async fn process_request(
     }
 
     let mut req_builder = Request::builder().uri(resolved_request.url);
-    req_builder = req_builder.method(resolved_request.method);
+    req_builder = req_builder.method(resolved_request.method.to_hyper());
 
     for header in resolved_request.headers {
         let mut header_value: String = header.1;
@@ -1157,11 +1144,7 @@ fn validate_dry_run(
 
         if let Some(stage_compare) = &stage.compare {
             // construct compare block
-            let params = if stage_compare.params.len() > 0 {
-                &stage_compare.params
-            } else {
-                &stage.request.params
-            };
+            let params = stage.get_compare_parameters();
 
             let compare_url = &td.get_url(
                 iteration,
