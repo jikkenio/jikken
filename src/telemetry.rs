@@ -111,7 +111,7 @@ pub async fn create_session(
     let post_body = SessionPost {
         version: crate::VERSION.to_string(),
         os: env::consts::OS.to_string(),
-        machine_id: machine_id,
+        machine_id,
         tests: test_count,
         args: args_json,
         validation: validation_json,
@@ -147,8 +147,8 @@ pub async fn create_session(
         let session_id = uuid::Uuid::parse_str(&response.session_id)?;
 
         return Ok(Session {
-            token: token,
-            session_id: session_id,
+            token,
+            session_id,
             start_time: chrono::Utc::now(),
         });
     }

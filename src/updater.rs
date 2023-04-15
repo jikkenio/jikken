@@ -80,10 +80,8 @@ fn has_newer_version(new_version: String) -> bool {
 
         if new_segment_opt.is_err() || my_segment_opt.is_err() {
             return false;
-        } else {
-            if new_segment_opt.unwrap() > my_segment_opt.unwrap() {
-                return true;
-            }
+        } else if new_segment_opt.unwrap() > my_segment_opt.unwrap() {
+            return true;
         }
     }
 
