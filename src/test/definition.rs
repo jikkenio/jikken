@@ -2,6 +2,7 @@ use crate::test;
 use crate::test::{file, http, validation};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestBody {
@@ -321,6 +322,29 @@ impl StageDescriptor {
             }
         }
     }
+
+    pub fn get_compare_parameters(&self) -> Vec<http::Parameter> {
+        if let Some(c) = &self.compare {
+            if c.params.len() > 0 {
+                return c.params.clone();
+            }
+
+            let ignore_lookup: HashSet<String> = c.ignore_params.iter().cloned().collect();
+
+            print!("ignore table: {:#?}", ignore_lookup);
+
+            return self
+                .request
+                .clone()
+                .params
+                .into_iter()
+                .filter(|p| !ignore_lookup.contains(&p.param))
+                .chain(c.add_params.clone().into_iter())
+                .collect();
+        }
+
+        Vec::new()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -346,7 +370,7 @@ impl RequestResponseDescriptor {
 pub struct ResolvedRequest {
     // pub req_resp: RequestResponseDescriptor,
     pub url: String,
-    pub method: hyper::Method,
+    pub method: http::Method,
     pub headers: Vec<(String, String)>,
     pub body: Option<serde_json::Value>,
 }
@@ -354,7 +378,7 @@ pub struct ResolvedRequest {
 impl ResolvedRequest {
     pub fn new(
         url: String,
-        method: hyper::Method,
+        method: http::Method,
         headers: Vec<(String, String)>,
         body: Option<serde_json::Value>,
     ) -> ResolvedRequest {
