@@ -2,12 +2,10 @@ use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{error, info};
 use remove_dir_all::remove_dir_all;
-use self_update;
 use serde::Deserialize;
 use std::env;
 use std::error::Error;
 use std::io::{stdout, Cursor, Write};
-use tempfile;
 use tokio::io::AsyncWriteExt;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";

@@ -1,6 +1,5 @@
 use crate::test;
 use chrono::Local;
-use dirs;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
