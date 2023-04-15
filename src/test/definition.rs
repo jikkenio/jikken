@@ -321,9 +321,6 @@ impl StageDescriptor {
             }
 
             let ignore_lookup: HashSet<String> = c.ignore_params.iter().cloned().collect();
-
-            print!("ignore table: {:#?}", ignore_lookup);
-
             return self
                 .request
                 .clone()
