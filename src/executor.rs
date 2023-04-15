@@ -31,14 +31,14 @@ struct State {
     variables: HashMap<String, String>,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum StageType {
     Setup = 1,
     Normal = 2,
     Cleanup = 3,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum TestStatus {
     Passed = 1,
     Failed = 2,
@@ -86,20 +86,20 @@ impl ResultData {
         match response_bytes {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
                 Ok(data) => {
-                    return Some(ResultData {
+                    Some(ResultData {
                         headers,
                         status: response_status.as_u16(),
                         body: data,
-                    });
+                    })
                 }
                 Err(e) => {
                     error!("response is not valid JSON: {}", e);
-                    return None;
+                    None
                 }
             },
             Err(e) => {
                 error!("unable to get response bytes: {}", e);
-                return None;
+                None
             }
         }
     }
@@ -153,11 +153,11 @@ pub async fn execute_tests(
             }
         })
         .filter_map(|f| {
-            let name = f.name.clone().unwrap_or(f.filename.clone());
+            let name = f.name.clone().unwrap_or_else(|| f.filename.clone());
             let result = validation::validate_file(f, &global_variables);
             match result {
                 Ok(td) => {
-                    if tags.len() > 0 {
+                    if !tags.is_empty() {
                         let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
                         match tag_mode {
                             TagMode::OR => {
@@ -167,7 +167,7 @@ pub async fn execute_tests(
                                     }
                                 }
 
-                                tests_to_ignore.push(td.clone());
+                                tests_to_ignore.push(td);
 
                                 debug!(
                                     "test `{}` doesn't match any tags: {}",
@@ -180,7 +180,7 @@ pub async fn execute_tests(
                             TagMode::AND => {
                                 for t in tags.iter() {
                                     if !td_tags.contains(t) {
-                                        tests_to_ignore.push(td.clone());
+                                        tests_to_ignore.push(td);
 
                                         debug!("test `{}` is missing tag: {}", name, t);
                                         return None;
@@ -200,7 +200,7 @@ pub async fn execute_tests(
         })
         .collect();
 
-    if tests_to_ignore.len() > 0 {
+    if !tests_to_ignore.is_empty() {
         trace!("filtering out tests which don't match the tag pattern")
     }
 
@@ -219,17 +219,13 @@ pub async fn execute_tests(
     trace!("determine test execution order based on dependency graph");
 
     for td in tests_to_run.into_iter() {
-        match &td.requires {
-            Some(req) => {
-                if tests_by_id.contains_key(req) {
-                    if !duplicate_filter.contains(req) {
-                        duplicate_filter.insert(req.clone());
-                        tests_to_run_with_dependencies
-                            .push(tests_by_id.get(req).unwrap().to_owned());
-                    }
-                }
+        if let Some(req) = &td.requires {
+            if tests_by_id.contains_key(req) && !duplicate_filter.contains(req) {
+                duplicate_filter.insert(req.clone());
+                tests_to_run_with_dependencies
+                    .push(tests_by_id.get(req).unwrap().to_owned());
+                
             }
-            _ => {}
         }
 
         if !duplicate_filter.contains(&td.id) {
@@ -241,18 +237,15 @@ pub async fn execute_tests(
     let total_count = tests_to_run_with_dependencies.len();
     let mut session: Option<telemetry::Session> = None;
 
-    let mode_dryrun = match cli.command {
-        Commands::DryRun {
-            tags: _,
-            tags_or: _,
-        } => true,
-        _ => false,
-    };
+    let mode_dryrun = matches!(cli.command, Commands::DryRun {
+        tags: _,
+        tags_or: _,
+    });
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
-            if let Ok(t) = uuid::Uuid::parse_str(&token) {
-                match telemetry::create_session(t, total_count as u32, &cli, &config).await {
+            if let Ok(t) = uuid::Uuid::parse_str(token) {
+                match telemetry::create_session(t, total_count as u32, cli, &config).await {
                     Ok(sess) => {
                         session = Some(sess);
                     }
@@ -278,7 +271,7 @@ pub async fn execute_tests(
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
         for iteration in 0..td.iterate {
-            run_count = run_count + 1;
+            run_count += 1;
 
             let mut passed = true;
 
@@ -342,9 +335,9 @@ pub async fn execute_tests(
             };
 
             if passed {
-                passed_count = passed_count + 1;
+                passed_count += 1;
             } else {
-                failed_count = failed_count + 1;
+                failed_count += 1;
             }
 
             if !config.settings.continue_on_failure && !passed {
@@ -379,7 +372,7 @@ async fn run(
     let mut results = Vec::new();
     let mut setup_result = validate_setup(state, td, iteration).await?;
     if let Some(test_telemetry) = &test {
-        if setup_result.1.len() > 0 {
+        if !setup_result.1.is_empty() {
             let telemetry_result =
                 telemetry::complete_stage(&test_telemetry, iteration, setup_result.1[0].clone())
                     .await;
@@ -741,50 +734,48 @@ async fn run_cleanup(
             counter += 1;
             results.push(result);
         }
-    } else {
-        if let Some(onfailure) = &td.cleanup.onfailure {
-            debug!("execute onfailure request");
-            let failure_method = onfailure.method.as_method();
-            let failure_url =
-                &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
-            let failure_headers = td.get_headers(&onfailure.headers, iteration);
-            let failure_body = td.get_body(onfailure, &td.variables, iteration);
-            let resolved_request = test::definition::ResolvedRequest::new(
-                failure_url.clone(),
-                failure_method.clone(),
-                failure_headers.clone(),
-                failure_body.clone(),
-            );
+    } else if let Some(onfailure) = &td.cleanup.onfailure {
+        debug!("execute onfailure request");
+        let failure_method = onfailure.method.as_method();
+        let failure_url =
+            &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
+        let failure_headers = td.get_headers(&onfailure.headers, iteration);
+        let failure_body = td.get_body(onfailure, &td.variables, iteration);
+        let resolved_request = test::definition::ResolvedRequest::new(
+            failure_url.clone(),
+            failure_method.clone(),
+            failure_headers.clone(),
+            failure_body.clone(),
+        );
 
-            let expected = ResultData::from_request(None);
-            let start_time = Instant::now();
-            let req_response = process_request(state, resolved_request).await?;
-            let runtime = start_time.elapsed().as_millis() as u32;
-            let actual = ResultData::from_response(req_response).await;
+        let expected = ResultData::from_request(None);
+        let start_time = Instant::now();
+        let req_response = process_request(state, resolved_request).await?;
+        let runtime = start_time.elapsed().as_millis() as u32;
+        let actual = ResultData::from_response(req_response).await;
 
-            let request = RequestDetails {
-                headers: failure_headers
-                    .iter()
-                    .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
-                    .collect(),
-                url: failure_url.to_string(),
-                method: failure_method,
-                body: failure_body.unwrap_or(serde_json::Value::Null),
-            };
+        let request = RequestDetails {
+            headers: failure_headers
+                .iter()
+                .map(|h| http::Header::new(h.0.clone(), h.1.clone()))
+                .collect(),
+            url: failure_url.to_string(),
+            method: failure_method,
+            body: failure_body.unwrap_or(serde_json::Value::Null),
+        };
 
-            let details = ResultDetails {
-                request,
-                expected,
-                actual,
-                compare_request: None,
-                compare_actual: None,
-            };
+        let details = ResultDetails {
+            request,
+            expected,
+            actual,
+            compare_request: None,
+            compare_actual: None,
+        };
 
-            let result =
-                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
-            counter += 1;
-            results.push(result);
-        }
+        let result =
+            process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+        counter += 1;
+        results.push(result);
     }
 
     if let Some(request) = &td.cleanup.request {

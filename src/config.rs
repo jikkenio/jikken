@@ -96,7 +96,7 @@ async fn load_home_file() -> Option<File> {
 
     if let Some(home_dir_path) = home_dir_opt {
         if let Some(home_dir) = home_dir_path.to_str() {
-            let resolved_home_file = if home_dir.contains("/") {
+            let resolved_home_file = if home_dir.contains('/') {
                 format!("{}/.jikken", home_dir)
             } else {
                 format!("{}\\.jikken", home_dir)
@@ -114,7 +114,7 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
         let merged_globals: BTreeMap<String, String> = config
             .globals
             .into_iter()
-            .chain(file.globals.unwrap_or(BTreeMap::new()))
+            .chain(file.globals.unwrap_or_default())
             .collect();
 
         if let Some(settings) = file.settings {
@@ -175,17 +175,17 @@ fn apply_envvars(config: Config) -> Config {
 
     let mut global_variables = config.globals.clone();
     for (key, value) in env::vars() {
-        if key.starts_with("JIKKEN_GLOBAL_") {
-            global_variables.insert(key[14..].to_string(), value);
+        if let Some(stripped) = key.strip_prefix("JIKKEN_GLOBAL_") {
+            global_variables.insert(stripped.to_string(), value);
         }
     }
 
-    return Config {
+    Config {
         settings: Settings {
             continue_on_failure: envvar_cof.unwrap_or(config.settings.continue_on_failure),
             api_key: envvar_apikey.or(config.settings.api_key),
             environment: envvar_env.or(config.settings.environment),
         },
         globals: global_variables,
-    };
+    }
 }
