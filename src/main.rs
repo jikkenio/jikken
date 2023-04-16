@@ -3,6 +3,7 @@ mod errors;
 mod executor;
 mod json;
 mod logger;
+mod machine;
 mod telemetry;
 mod test;
 mod updater;
