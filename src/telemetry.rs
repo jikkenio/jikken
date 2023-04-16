@@ -1,12 +1,12 @@
 use crate::config;
 use crate::errors::TelemetryError;
 use crate::executor;
+use crate::machine;
 use crate::test;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, trace};
-use machineid_rs::{Encryption, HWIDComponent, IdBuilder};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::error::Error;
@@ -100,13 +100,8 @@ pub async fn create_session(
     let validation_json = serde_json::json!({}); // todo: add validation report once validation is implemented
     let config_json = serde_json::to_value(&config)?;
 
-    let machine_id = IdBuilder::new(Encryption::SHA256)
-        .add_component(HWIDComponent::SystemID)
-        .add_component(HWIDComponent::CPUCores)
-        .add_component(HWIDComponent::OSName)
-        .add_component(HWIDComponent::MacAddress)
-        .add_component(HWIDComponent::CPUID)
-        .build("jikken")?;
+    let m = machine::new();
+    let machine_id = m.generate_machine_id();
 
     let post_body = SessionPost {
         version: crate::VERSION.to_string(),
