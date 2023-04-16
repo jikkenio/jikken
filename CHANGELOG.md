@@ -1,6 +1,20 @@
 Next (Version determined when release is cut)
 =====
 
+0.5.0
+=====
+
+Bugfixes:
+* Ignore and Add Parameter definitions now properly work for compare requests
+
+Features:
+* Add (optional, opt-in) telemetry support for the Jikken.IO webapp
+* Add basic test file validation
+* Add support for user-path based configuration file
+
+Changes:
+* Refactored codebase for cleaner more idiomatic rust (module layout)
+* Made config files truly optional. If you provide an incorrect config file you will now receive an error but the tests will still run. Previously it would exit early and refuse to run your tests.
 
 0.4.0
 =====
