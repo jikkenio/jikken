@@ -1,6 +1,13 @@
 Next (Version determined when release is cut)
 =====
 
+Bugfixes:
+* If a test is not checking response bodies, the test will no longer fail if the response body is not valid JSON.
+* If test runs are configured to exit early on failure, the telemetry session completion and console status messages now properly trigger.
+
+Changes:
+* Adjusted cargo compiler flags for release, greatly reduces release binary size.
+
 0.5.0
 =====
 
