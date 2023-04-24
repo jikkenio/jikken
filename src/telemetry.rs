@@ -274,7 +274,7 @@ pub async fn complete_stage(
 }
 
 pub async fn complete_session(
-    session: Session,
+    session: &Session,
     runtime: u32,
     status: u32,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {

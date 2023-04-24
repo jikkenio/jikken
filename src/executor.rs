@@ -272,8 +272,13 @@ pub async fn execute_tests(
     let mut failed_count: u16 = 0;
 
     let start_time = Instant::now();
+    let mut break_early = false;
 
     for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
+        if break_early {
+            break;
+        }
+
         for iteration in 0..td.iterate {
             run_count += 1;
 
@@ -345,17 +350,18 @@ pub async fn execute_tests(
             }
 
             if !config.settings.continue_on_failure && !passed {
-                if let Some(s) = session {
+                if let Some(s) = &session {
                     let runtime = start_time.elapsed().as_millis() as u32;
                     _ = telemetry::complete_session(s, runtime, 2).await;
                 }
 
-                std::process::exit(1);
+                break_early = true;
+                break;
             }
         }
     }
 
-    if let Some(s) = session {
+    if let Some(s) = &session {
         let runtime = start_time.elapsed().as_millis() as u32;
         _ = telemetry::complete_session(s, runtime, 1).await;
     }
