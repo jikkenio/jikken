@@ -274,7 +274,7 @@ pub async fn complete_stage(
 }
 
 pub async fn complete_session(
-    session: Session,
+    session: &Session,
     runtime: u32,
     status: u32,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -307,7 +307,7 @@ pub async fn complete_session(
         let response = client.request(req).await?;
         let status = response.status();
 
-        if status.as_u16() != 201 {
+        if status.as_u16() != 200 {
             // session creation failed
             debug!("session completion failed: status({})", status);
             return Err(Box::from(TelemetryError {

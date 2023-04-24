@@ -7,3 +7,7 @@
 rustflags = ["-C", "target-feature=+crt-static"]
 [target.i686-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+lto = true # enable link time optimization
