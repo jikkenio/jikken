@@ -90,9 +90,14 @@ impl ResultData {
                     status: response_status.as_u16(),
                     body: data,
                 }),
-                Err(e) => {
-                    error!("response is not valid JSON: {}", e);
-                    None
+                Err(e) => { // TODO: add support for non JSON responses
+                    debug!("response is not valid JSON data: {}", e);
+                    debug!("{}", std::str::from_utf8(&resp_data).unwrap_or(""));
+                    Some(ResultData {
+                        headers,
+                        status: response_status.as_u16(),
+                        body: serde_json::Value::Null,
+                    })  
                 }
             },
             Err(e) => {
