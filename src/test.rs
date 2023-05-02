@@ -449,8 +449,8 @@ impl Definition {
                 }
             }
 
-            if let Some(request) = &self.cleanup.request {
-                Definition::update_request_variables(request, var_pattern.as_str());
+            if let Some(always) = &self.cleanup.always {
+                Definition::update_request_variables(always, var_pattern.as_str());
             }
 
             if let Some(onsuccess) = &self.cleanup.onsuccess {
@@ -603,7 +603,7 @@ impl Definition {
     }
 
     pub fn get_cleanup_request_headers(&self, iteration: u32) -> Vec<(String, String)> {
-        match &self.cleanup.request {
+        match &self.cleanup.always {
             Some(request) => self.get_headers(&request.headers, iteration),
             None => Vec::new(),
         }
