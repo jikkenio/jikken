@@ -385,8 +385,7 @@ async fn run(
     if let Some(test_telemetry) = &test {
         if !setup_result.1.is_empty() {
             let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, setup_result.1[0].clone())
-                    .await;
+                telemetry::complete_stage(test_telemetry, iteration, &setup_result.1[0]).await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
@@ -415,8 +414,7 @@ async fn run(
                 if let Some(test_telemetry) = &test {
                     for result in r.1.iter() {
                         let telemetry_result =
-                            telemetry::complete_stage(test_telemetry, iteration, result.clone())
-                                .await;
+                            telemetry::complete_stage(test_telemetry, iteration, &result).await;
                         if let Err(e) = telemetry_result {
                             debug!("telemetry stage completion failed: {}", e);
                         }
@@ -498,16 +496,16 @@ async fn validate_td(
 
         if let Some(test_telemetry) = &test {
             let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, stage_result.clone()).await;
+                telemetry::complete_stage(test_telemetry, iteration, &stage_result).await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
         }
 
-        let status = stage_result.status.clone();
+        let failed = stage_result.status == TestStatus::Failed;
         results.push(stage_result);
 
-        if status == TestStatus::Failed {
+        if failed {
             return Ok((false, results));
         }
     }
@@ -530,7 +528,7 @@ fn process_response(
         status: TestStatus::Passed,
     };
 
-    if let Some(resp) = details.actual {
+    if let Some(resp) = &details.actual {
         let header_match = if !details.expected.headers.is_empty() {
             // compare headers
             trace!("validating headers");
@@ -563,7 +561,7 @@ fn process_response(
         let mut status_compare_match = true;
         let mut body_compare_match = true;
 
-        if let Some(compare) = details.compare_actual {
+        if let Some(compare) = &details.compare_actual {
             trace!("validating compare status");
             status_compare_match = compare.status == resp.status;
 
@@ -692,7 +690,7 @@ async fn run_cleanup(
     let mut results = Vec::new();
     let mut counter = stage_count;
 
-    if td.cleanup.request.is_some()
+    if td.cleanup.always.is_some()
         || td.cleanup.onsuccess.is_some()
         || td.cleanup.onfailure.is_some()
     {
@@ -787,7 +785,7 @@ async fn run_cleanup(
         results.push(result);
     }
 
-    if let Some(request) = &td.cleanup.request {
+    if let Some(request) = &td.cleanup.always {
         debug!("execute cleanup request");
         let req_method = request.method.as_method();
         let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
@@ -1264,7 +1262,7 @@ fn validate_dry_run(
         }
     }
 
-    if let Some(request) = &td.cleanup.request {
+    if let Some(request) = &td.cleanup.always {
         info!("run cleanup requests:\n");
         let cleanup_method = request.method.as_method();
         let cleanup_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
