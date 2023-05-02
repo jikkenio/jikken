@@ -218,7 +218,7 @@ pub async fn create_test(
 pub async fn complete_stage(
     test: &Test,
     iteration: u32,
-    stage: executor::StageResult,
+    stage: &executor::StageResult,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let uri = format!("{}/tests/{}/completed", TELEMETRY_BASE_URL, test.test_id);
@@ -230,7 +230,7 @@ pub async fn complete_stage(
         }
     }
 
-    let details_json = serde_json::to_value(stage.details)?;
+    let details_json = serde_json::to_value(&stage.details)?;
     let post_data = TestCompletedPost {
         session_id: test.session.session_id.to_string(),
         iteration,
