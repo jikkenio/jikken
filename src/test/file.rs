@@ -94,9 +94,9 @@ pub struct UnvalidatedRequestResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedCleanup {
-    pub request: Option<UnvalidatedRequest>,
     pub onsuccess: Option<UnvalidatedRequest>,
     pub onfailure: Option<UnvalidatedRequest>,
+    pub always: Option<UnvalidatedRequest>,
 }
 
 pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> {
