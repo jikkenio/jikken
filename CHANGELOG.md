@@ -7,6 +7,8 @@ Bugfixes:
 
 Changes:
 * Adjusted cargo compiler flags for release, greatly reduces release binary size.
+* Update cleanup stage definition to use "always" for the always executing request.
+* Reduce excessive use of cloning.
 
 0.5.0
 =====

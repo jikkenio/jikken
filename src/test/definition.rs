@@ -383,7 +383,7 @@ impl ResolvedRequest {
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
     pub onfailure: Option<RequestDescriptor>,
-    pub request: Option<RequestDescriptor>,
+    pub always: Option<RequestDescriptor>,
 }
 
 impl CleanupDescriptor {
@@ -394,12 +394,12 @@ impl CleanupDescriptor {
             Some(cleanup) => Ok(CleanupDescriptor {
                 onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess)?,
                 onfailure: RequestDescriptor::new_opt(cleanup.onfailure)?,
-                request: RequestDescriptor::new_opt(cleanup.request)?,
+                always: RequestDescriptor::new_opt(cleanup.always)?,
             }),
             None => Ok(CleanupDescriptor {
                 onsuccess: None,
                 onfailure: None,
-                request: None,
+                always: None,
             }),
         }
     }

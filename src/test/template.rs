@@ -63,9 +63,9 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
 
 fn new_full_cleanup() -> Result<file::UnvalidatedCleanup, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedCleanup {
-        request: Some(new_full_request()?),
         onsuccess: Some(new_full_request()?),
         onfailure: Some(new_full_request()?),
+        always: Some(new_full_request()?),
     })
 }
 
