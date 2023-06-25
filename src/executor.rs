@@ -414,7 +414,7 @@ async fn run(
                 if let Some(test_telemetry) = &test {
                     for result in r.1.iter() {
                         let telemetry_result =
-                            telemetry::complete_stage(test_telemetry, iteration, &result).await;
+                            telemetry::complete_stage(test_telemetry, iteration, result).await;
                         if let Err(e) = telemetry_result {
                             debug!("telemetry stage completion failed: {}", e);
                         }
