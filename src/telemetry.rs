@@ -96,9 +96,9 @@ pub async fn create_session(
         }
     }
 
-    let args_json = serde_json::to_value(&cli)?;
+    let args_json = serde_json::to_value(cli)?;
     let validation_json = serde_json::json!({}); // todo: add validation report once validation is implemented
-    let config_json = serde_json::to_value(&config)?;
+    let config_json = serde_json::to_value(config)?;
 
     let m = machine::new();
     let machine_id = m.generate_machine_id();
@@ -235,8 +235,8 @@ pub async fn complete_stage(
         session_id: test.session.session_id.to_string(),
         iteration,
         stage: stage.stage,
-        stage_type: stage.stage_type as u32,
-        status: stage.status as u32,
+        stage_type: stage.stage_type.clone() as u32,
+        status: stage.status.clone() as u32,
         runtime: stage.runtime,
         details: details_json,
     };
