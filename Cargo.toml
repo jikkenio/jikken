@@ -27,7 +27,7 @@ hyper-tls = { version = "0.5" }
 tokio = { version = "1.32", features = ["full"] }
 # tokio-stream = { version = "0.1.14", features = ["fs"] }
 walkdir = { version = "2.3" }
-toml = { version = "0.5" }
+toml = { version = "0.7" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
@@ -40,9 +40,9 @@ url = { version = "2.4" }
 self_update = { version = "0.37", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 tempfile = { version = "3.8" }
 reqwest = { version = "0.11" }
-remove_dir_all = { version  = "0.7" }
+remove_dir_all = { version  = "0.8" }
 uuid = { version = "1.4", features = ["v4"] }
-dirs = { version = "4.0" }
+dirs = { version = "5.0" }
 hex = { version = "0.4" }
 sha2 = { version = "0.10" }
-sysinfo = { version = "0.28" }
+sysinfo = { version = "0.29" }
