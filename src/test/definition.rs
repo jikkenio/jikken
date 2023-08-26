@@ -327,7 +327,7 @@ impl StageDescriptor {
                 .params
                 .into_iter()
                 .filter(|p| !ignore_lookup.contains(&p.param))
-                .chain(c.add_params.clone().into_iter())
+                .chain(c.add_params.clone())
                 .collect();
         }
 

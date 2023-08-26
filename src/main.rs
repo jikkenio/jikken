@@ -57,6 +57,12 @@ pub enum Commands {
 
         #[arg(long, default_value_t = false)]
         tags_or: bool,
+
+        #[arg(short)]
+        recursive: bool,
+
+        #[arg(name = "path")]
+        paths: Vec<String>,
     },
 
     /// Process tests without calling api endpoints
@@ -67,6 +73,12 @@ pub enum Commands {
 
         #[arg(long, default_value_t = false)]
         tags_or: bool,
+
+        #[arg(short)]
+        recursive: bool,
+
+        #[arg(name = "path")]
+        paths: Vec<String>,
     },
     /// Jikken updates itself if a newer version exists
     Update,
@@ -98,29 +110,57 @@ fn is_jkt(entry: &walkdir::DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn get_files() -> Vec<String> {
+async fn get_files(paths: Vec<String>, recursive: bool) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let mut results = Vec::new();
 
-    walkdir::WalkDir::new(".")
-        .into_iter()
-        .filter_entry(is_jkt)
-        .filter_map(|v| v.ok())
-        .filter(|x| !x.file_type().is_dir())
-        .for_each(|x| results.push(String::from(x.path().to_str().unwrap())));
+    for path in paths {
+        let path_metadata = fs::metadata(&path).await?;
 
-    results
+        if path_metadata.is_dir() {
+            if recursive {
+                walkdir::WalkDir::new(&path)
+                    .into_iter()
+                    .filter_entry(is_jkt)
+                    .filter_map(|v| v.ok())
+                    .filter(|x| !x.file_type().is_dir())
+                    .for_each(|x| results.push(String::from(x.path().to_str().unwrap())));
+            } else {
+                let mut read_dir = tokio::fs::read_dir(&path).await?;
+                while let Some(entry) = read_dir.next_entry().await? {
+                  let md = fs::metadata(entry.path()).await?;
+                  if md.is_file() && entry.file_name().to_ascii_lowercase().into_string().unwrap().ends_with(".jkt") {
+                    results.push(String::from(entry.path().to_str().unwrap()));
+                  }
+                }
+            }
+        } else {
+            results.push(path);
+        }
+    }
+
+    for r in results.clone() {
+        info!("file: {}\n", r);
+    }
+
+    Ok(results)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli = Cli::parse();
-    let (cli_tags, cli_tag_mode) = match &cli.command {
-        Commands::Run { tags, tags_or } | Commands::DryRun { tags, tags_or } => (
+    let (cli_tags, cli_tag_mode, cli_recursive, mut cli_paths) = match &cli.command {
+        Commands::Run { tags, tags_or, recursive, paths } | Commands::DryRun { tags, tags_or, recursive, paths } => (
             tags.clone(),
             if *tags_or { TagMode::OR } else { TagMode::AND },
+            *recursive,
+            paths.clone(),
         ),
-        _ => (Vec::new(), TagMode::AND),
+        _ => (Vec::new(), TagMode::AND, false, Vec::new()),
     };
+
+    if cli_paths.is_empty() {
+        cli_paths.push(".".to_string())
+    }
 
     let log_level = if cli.verbose {
         Level::Debug
@@ -242,7 +282,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         std::process::exit(0);
     }
 
-    let files = get_files();
+    let files = get_files(cli_paths, cli_recursive).await?;
 
     let test_plurality = if files.len() != 1 { "s" } else { "" };
 
