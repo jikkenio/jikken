@@ -244,6 +244,8 @@ pub async fn execute_tests(
         Commands::DryRun {
             tags: _,
             tags_or: _,
+            recursive: _,
+            paths: _,
         }
     );
 
