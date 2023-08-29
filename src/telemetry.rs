@@ -83,7 +83,7 @@ struct TestResponse {
 pub async fn create_session(
     token: Uuid,
     test_count: u32,
-    cli: &crate::Cli,
+    args_json: Box<serde_json::Value>,
     config: &config::Config,
 ) -> Result<Session, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
@@ -96,7 +96,6 @@ pub async fn create_session(
         }
     }
 
-    let args_json = serde_json::to_value(cli)?;
     let validation_json = serde_json::json!({}); // todo: add validation report once validation is implemented
     let config_json = serde_json::to_value(config)?;
 
@@ -108,7 +107,7 @@ pub async fn create_session(
         os: env::consts::OS.to_string(),
         machine_id,
         tests: test_count,
-        args: args_json,
+        args: *args_json,
         validation: validation_json,
         config: config_json,
     };

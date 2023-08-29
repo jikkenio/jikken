@@ -4,18 +4,17 @@ mod executor;
 mod json;
 mod logger;
 mod machine;
+mod new;
 mod telemetry;
 mod test;
 mod updater;
 
 use clap::{Parser, Subcommand};
-use log::{debug, error, info, warn, Level, LevelFilter};
+use log::{error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use test::template;
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -110,7 +109,10 @@ fn is_jkt(entry: &walkdir::DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-async fn get_files(paths: Vec<String>, recursive: bool) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+async fn get_files(
+    paths: Vec<String>,
+    recursive: bool,
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let mut results = Vec::new();
 
     for path in paths {
@@ -127,10 +129,17 @@ async fn get_files(paths: Vec<String>, recursive: bool) -> Result<Vec<String>, B
             } else {
                 let mut read_dir = tokio::fs::read_dir(&path).await?;
                 while let Some(entry) = read_dir.next_entry().await? {
-                  let md = fs::metadata(entry.path()).await?;
-                  if md.is_file() && entry.file_name().to_ascii_lowercase().into_string().unwrap().ends_with(".jkt") {
-                    results.push(String::from(entry.path().to_str().unwrap()));
-                  }
+                    let md = fs::metadata(entry.path()).await?;
+                    if md.is_file()
+                        && entry
+                            .file_name()
+                            .to_ascii_lowercase()
+                            .into_string()
+                            .unwrap()
+                            .ends_with(".jkt")
+                    {
+                        results.push(String::from(entry.path().to_str().unwrap()));
+                    }
                 }
             }
         } else {
@@ -145,22 +154,46 @@ async fn get_files(paths: Vec<String>, recursive: bool) -> Result<Vec<String>, B
     Ok(results)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let cli = Cli::parse();
-    let (cli_tags, cli_tag_mode, cli_recursive, mut cli_paths) = match &cli.command {
-        Commands::Run { tags, tags_or, recursive, paths } | Commands::DryRun { tags, tags_or, recursive, paths } => (
-            tags.clone(),
-            if *tags_or { TagMode::OR } else { TagMode::AND },
-            *recursive,
-            paths.clone(),
-        ),
-        _ => (Vec::new(), TagMode::AND, false, Vec::new()),
-    };
+async fn run_tests(
+    paths: Vec<String>,
+    tags: Vec<String>,
+    tags_or: bool,
+    dryrun_mode: bool,
+    recursive: bool,
+    cli_args: Box<serde_json::Value>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut cli_paths = paths;
 
     if cli_paths.is_empty() {
         cli_paths.push(".".to_string())
     }
+
+    let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
+    let config = config::get_config().await;
+    let files = get_files(cli_paths, recursive).await?;
+    let test_plurality = if files.len() != 1 { "s" } else { "" };
+
+    info!(
+        "Jikken found {} test file{}.\n",
+        files.len(),
+        test_plurality
+    );
+
+    let report =
+        executor::execute_tests(config, files, dryrun_mode, tags, cli_tag_mode, cli_args).await;
+
+    info!(
+        "Jikken executed {} test{} with {} passed and {} failed.\n",
+        report.run, test_plurality, report.passed, report.failed
+    );
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let cli = Cli::parse();
+    let cli_args = Box::new(serde_json::to_value(&cli)?);
 
     let log_level = if cli.verbose {
         Level::Debug
@@ -182,122 +215,55 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     log::set_max_level(LevelFilter::Trace);
 
-    let config = config::get_config().await;
-    let latest_version_opt = updater::check_for_updates().await;
-
     match cli.command {
         Commands::Update => {
-            match latest_version_opt {
-                Ok(lv_opt) => {
-                    if let Some(lv) = lv_opt {
-                        match updater::update(&lv.url).await {
-                            Ok(_) => {
-                                info!("update completed\n");
-                                std::process::exit(0);
-                            }
-                            Err(error) => {
-                                error!(
-                                    "Jikken encountered an error when trying to update itself: {}",
-                                    error
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(error) => {
-                    debug!("error checking for updates: {}", error);
-                }
-            }
-
-            error!("Jikken was unable to find an update for this platform and release channel");
+            updater::try_updating().await;
             std::process::exit(0);
         }
-        _ => match latest_version_opt {
-            Ok(lv_opt) => {
-                if let Some(lv) = lv_opt {
-                    warn!(
-                        "Jikken found new version ({}), currently running version ({})",
-                        lv.version, VERSION
-                    );
-                    warn!("Run command: `jk update` to update jikken or update using your package manager");
-                }
-            }
-            Err(error) => {
-                debug!("error checking for updates: {}", error);
-            }
-        },
-    }
-
-    if let Commands::New {
-        full,
-        multistage,
-        output,
-        name,
-    } = &cli.command
-    {
-        let template = if *full {
-            serde_yaml::to_string(&template::template_full()?)?
-        } else if *multistage {
-            serde_yaml::to_string(&template::template_staged()?)?
-        } else {
-            serde_yaml::to_string(&template::template()?)?
-        };
-        let template = template.replace("''", "");
-        let mut result = "".to_string();
-
-        for line in template.lines() {
-            if !line.contains("null") {
-                result = format!("{}{}\n", result, line)
-            }
-        }
-
-        if *output {
-            info!("{}\n", result);
-        } else {
-            match name {
-                Some(n) => {
-                    let filename = if !n.ends_with(".jkt") {
-                        format!("{}.jkt", n)
-                    } else {
-                        n.clone()
-                    };
-
-                    if std::path::Path::new(&filename).exists() {
-                        error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
-                        std::process::exit(1);
-                    }
-
-                    let mut file = fs::File::create(&filename).await?;
-                    file.write_all(result.as_bytes()).await?;
-                    info!("Successfully created test (`{}`).\n", filename);
+        Commands::New {
+            full,
+            multistage,
+            output,
+            name,
+        } => {
+            updater::check_for_updates().await;
+            let created = new::create_test_template(full, multistage, output, name).await;
+            match created {
+                Ok(_) => {
                     std::process::exit(0);
                 }
-                None => {
-                    error!("<NAME> is required if not outputting to screen. `jk new <NAME>`");
+                Err(_) => {
                     std::process::exit(1);
                 }
             }
         }
-
-        std::process::exit(0);
+        Commands::DryRun {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+        } => {
+            updater::check_for_updates().await;
+            run_tests(
+                paths,
+                tags,
+                tags_or,
+                true,
+                recursive,
+                Box::new(serde_json::Value::Null),
+            )
+            .await?;
+        }
+        Commands::Run {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+        } => {
+            updater::check_for_updates().await;
+            run_tests(paths, tags, tags_or, false, recursive, cli_args).await?;
+        }
     }
-
-    let files = get_files(cli_paths, cli_recursive).await?;
-
-    let test_plurality = if files.len() != 1 { "s" } else { "" };
-
-    info!(
-        "Jikken found {} test file{}.\n",
-        files.len(),
-        test_plurality
-    );
-
-    let report = executor::execute_tests(config, files, &cli, cli_tags, cli_tag_mode).await;
-
-    info!(
-        "Jikken executed {} test{} with {} passed and {} failed.\n",
-        report.run, test_plurality, report.passed, report.failed
-    );
 
     Ok(())
 }
