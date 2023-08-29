@@ -1,6 +1,6 @@
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use log::{error, info};
+use log::{debug, error, info, warn};
 use remove_dir_all::remove_dir_all;
 use serde::Deserialize;
 use std::env;
@@ -9,6 +9,7 @@ use std::io::{stdout, Cursor, Write};
 use tokio::io::AsyncWriteExt;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Deserialize)]
 pub struct ReleaseResponse {
@@ -16,7 +17,7 @@ pub struct ReleaseResponse {
     pub url: String,
 }
 
-pub async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     info!("Jikken is updating to the latest version...");
     stdout().flush().unwrap();
 
@@ -88,7 +89,7 @@ fn has_newer_version(new_version: String) -> bool {
     false
 }
 
-pub async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
+pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let req = Request::builder()
         .uri(format!(
@@ -108,4 +109,49 @@ pub async fn check_for_updates() -> Result<Option<ReleaseResponse>, Box<dyn Erro
     }
 
     Ok(None)
+}
+
+pub async fn try_updating() {
+    let latest_version = get_latest_version().await;
+
+    match latest_version {
+        Ok(lv_opt) => {
+            if let Some(lv) = lv_opt {
+                match update(&lv.url).await {
+                    Ok(_) => {
+                        info!("update completed\n");
+                    }
+                    Err(error) => {
+                        error!(
+                            "Jikken encountered an error when trying to update itself: {}",
+                            error
+                        );
+                    }
+                }
+                return;
+            }
+        }
+        Err(error) => {
+            debug!("error checking for updates: {}", error);
+        }
+    }
+
+    error!("Jikken was unable to find an update for this platform and release channel");
+}
+
+pub async fn check_for_updates() {
+    match get_latest_version().await {
+        Ok(latest_version) => {
+            if let Some(latest) = latest_version {
+                warn!(
+                    "Jikken found new version ({}), currently running version ({})",
+                    latest.version, VERSION
+                );
+                warn!("Run command: `jk update` to update jikken or update using your package manager");
+            }
+        }
+        Err(error) => {
+            debug!("error checking for updates: {}", error);
+        }
+    }
 }

@@ -7,7 +7,6 @@ use crate::test;
 use crate::test::definition::ResponseDescriptor;
 use crate::test::http;
 use crate::test::{definition, validation};
-use crate::Commands;
 use crate::TagMode;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
@@ -138,9 +137,10 @@ pub struct StageResult {
 pub async fn execute_tests(
     config: config::Config,
     files: Vec<String>,
-    cli: &crate::Cli,
+    mode_dryrun: bool,
     tags: Vec<String>,
     tag_mode: TagMode,
+    cli_args: Box<serde_json::Value>,
 ) -> Report {
     let global_variables = config.generate_global_variables();
     let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
@@ -239,20 +239,10 @@ pub async fn execute_tests(
     let total_count = tests_to_run_with_dependencies.len();
     let mut session: Option<telemetry::Session> = None;
 
-    let mode_dryrun = matches!(
-        cli.command,
-        Commands::DryRun {
-            tags: _,
-            tags_or: _,
-            recursive: _,
-            paths: _,
-        }
-    );
-
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
             if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(t, total_count as u32, cli, &config).await {
+                match telemetry::create_session(t, total_count as u32, cli_args, &config).await {
                     Ok(sess) => {
                         session = Some(sess);
                     }
