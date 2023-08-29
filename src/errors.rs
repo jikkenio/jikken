@@ -50,3 +50,20 @@ impl fmt::Display for TelemetryError {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct GenericError {
+    pub reason: String,
+}
+
+impl std::error::Error for GenericError {}
+
+impl fmt::Display for GenericError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.reason.is_empty() {
+            write!(f, "generic error")
+        } else {
+            write!(f, "{}", self.reason)
+        }
+    }
+}
