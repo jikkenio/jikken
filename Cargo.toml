@@ -4,10 +4,10 @@ version = "0.5.0"
 edition = "2021"
 authors = ["Louis Russo <louis@jikken.io>"]
 description = """
-Jikken is a cli tool for automated API testing. It recursively
+Jikken is a CLI tool for automated API testing. It recursively
 searches directories for JKT files (Jikken Test Definitions)
-which will execute jobs for testing APIs. It has first class
-support on Windows, macOS, and Linux. jikken.io for more info
+which will execute jobs for testing APIs. It has first-class
+support on Windows, macOS, and Linux. Visit jikken.io for more info.
 """
 documentation = "https://github.com/jikkenio/jikken"
 homepage = "https://github.com/jikkenio/jikken"
