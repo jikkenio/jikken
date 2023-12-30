@@ -29,20 +29,20 @@ pub struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// The environment flag can be used to indicate which environment{n}the tests are executing against.
-    /// This is not used unless tests{n}are reporting to the Jikken.IO platform via an API Key{n}
+    /// Indicate which environment tests are executing against
+    /// {n}This is not used unless tests are reporting to the Jikken.IO platform via an API Key
     #[arg(short, long = "env", name = "env")]
     environment: Option<String>,
 
-    /// Quiet mode suppresses all console output
+    /// Enable quiet mode, suppresses all console output
     #[arg(short, long, default_value_t = false)]
     quiet: bool,
 
-    /// Verbose mode provides more detailed console output
+    /// Enable verbose mode, provides more detailed console output
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    /// Trace mode provides significant console output
+    /// Enable trace mode, provides exhaustive console output
     #[arg(long, default_value_t = false)]
     trace: bool,
 }
@@ -51,53 +51,67 @@ pub struct Cli {
 pub enum Commands {
     /// Execute tests
     Run {
-        #[arg(short, long = "tag", name = "tag")]
-        tags: Vec<String>,
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
 
-        #[arg(long, default_value_t = false)]
-        tags_or: bool,
-
+        /// Recursively search for test files
         #[arg(short)]
         recursive: bool,
 
-        #[arg(name = "path")]
-        paths: Vec<String>,
+        /// Select tests to run based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
     },
 
-    /// Process tests without calling api endpoints
+    /// Process tests without calling API endpoints
     #[command(name = "dryrun")]
     DryRun {
-        #[arg(short, long = "tag", name = "tag")]
-        tags: Vec<String>,
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
 
-        #[arg(long, default_value_t = false)]
-        tags_or: bool,
-
+        /// Recursively search for test files
         #[arg(short)]
         recursive: bool,
 
-        #[arg(name = "path")]
-        paths: Vec<String>,
+        /// Select tests to run based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
     },
-    /// Jikken updates itself if a newer version exists
-    Update,
+
     /// Create a new test
     New {
-        /// Generates a test template with all options
+        /// The name of the test file to be created
+        name: Option<String>,
+
+        /// Generate a test template with all available options
         #[arg(short, long = "full", name = "full")]
         full: bool,
 
-        /// Generates a multi-stage test template
+        /// Generate a multi-stage test template
         #[arg(short = 'm', long = "multistage", name = "multistage")]
         multistage: bool,
 
-        /// Output to console instead of saving to a file
+        /// Output template to the console instead of saving to a file
         #[arg(short = 'o')]
         output: bool,
-
-        /// The file name to create
-        name: Option<String>,
     },
+
+    /// Update Jikken, if a newer version exists
+    Update,
 }
 
 // TODO: Add ignore and filter out hidden etc
