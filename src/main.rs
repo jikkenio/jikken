@@ -145,9 +145,8 @@ fn create_top_level_filter(
         e
         .file_name()
         .to_str()
-        .map(|s| (
-                e.file_type().is_dir() || 
-                s.ends_with(".jkt")) &&
+        .map(|s| 
+                (e.file_type().is_dir() || s.ends_with(".jkt")) &&
                 satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, &s)
         )
         .unwrap_or(false)
@@ -194,8 +193,8 @@ async fn get_files(
             results.append(search_directory(path.as_str(), recursive, &None, &None)
                 .await
                 .unwrap_or(Vec::new())
-                .as_mut());
-            
+                .as_mut()
+            );
         }
         else
         {
