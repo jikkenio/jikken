@@ -318,15 +318,4 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests{
-    #[test]
-    fn darius_test() {
-        
-    }
-
-
-} // mod tests
-
-
 
