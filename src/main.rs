@@ -13,7 +13,7 @@ use clap::{Parser, Subcommand};
 use log::{error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+use std::{error::Error, ffi::OsStr};
 use tokio::fs;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -114,6 +114,12 @@ pub enum Commands {
     Update,
 }
 
+fn darius_is_jkt_test(entry: &walkdir::DirEntry) -> bool
+{
+    entry.metadata().map(|e|e.is_file()).unwrap_or(false) &&
+    entry.file_name().to_str().map(|s| s.ends_with(".jkt")).unwrap_or(false)
+}
+
 // TODO: Add ignore and filter out hidden etc
 fn is_jkt(entry: &walkdir::DirEntry) -> bool {
     entry
@@ -121,6 +127,59 @@ fn is_jkt(entry: &walkdir::DirEntry) -> bool {
         .to_str()
         .map(|s| entry.file_type().is_dir() || s.ends_with(".jkt"))
         .unwrap_or(false)
+}
+
+async fn search_directory(
+    path : &str,
+    recursive : bool,
+    ignorePattern : &Option<String>,
+    matchPattern : &Option<String>
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    let mut ret : Vec<String> = Vec::new();
+    walkdir::WalkDir::new(&path)
+        .max_depth(if recursive {::std::usize::MAX} else {0})
+        .into_iter()
+        //.filter_entry(|e| //e.metadata().map(|e|e.is_file()).unwrap_or(false) &&
+        //               darius_is_jkt_test(e.file_name()))
+        .filter_map(|e| e.ok())
+        .filter(darius_is_jkt_test)
+        .for_each(|e|match e.path().to_str() {
+            Some(s) => {ret.push(String::from(s))},
+            None => {},
+        });
+    
+    return Ok(ret);
+}
+
+async fn get_files_v2(
+    paths: Vec<String>,
+    recursive: bool,
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    let mut results : Vec<String> = Vec::new();
+
+    for path in paths {
+        let path_metadata = fs::metadata(&path).await?;
+
+        if (path_metadata.is_dir()) 
+        {
+            results.append(search_directory(path.as_str(), recursive, &None, &None)
+                .await
+                .unwrap_or(Vec::new())
+                .as_mut());
+            
+        }
+        else
+        {
+            results.push(path);
+        }
+    }
+
+    for r in results.clone() {
+        info!("file: {}\n", r);
+    }
+
+    Ok(results)
+
 }
 
 async fn get_files(
@@ -184,7 +243,7 @@ async fn run_tests(
 
     let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
     let config = config::get_config().await;
-    let files = get_files(cli_paths, recursive).await?;
+    let files = get_files_v2(cli_paths, recursive).await?;
     let test_plurality = if files.len() != 1 { "s" } else { "" };
 
     info!(
@@ -281,3 +340,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests{
+    #[test]
+    fn darius_test() {
+        
+    }
+
+
+} // mod tests
+
+
+
