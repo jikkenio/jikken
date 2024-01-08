@@ -15,6 +15,8 @@ use logger::SimpleLogger;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{error::Error};
+use std::fs::File;
+use tempfile::tempdir;
 use tokio::fs;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -131,6 +133,8 @@ fn satisfies_ignore_and_match_filters(
     }
 }
 
+// when we establish plumbing in args, throw error if parsing of regex fails
+// change this function to take Option<Regex>
 fn create_top_level_filter(
     ignore_pattern : &Option<String>,
     match_pattern : &Option<String>
@@ -153,7 +157,7 @@ fn create_top_level_filter(
     }
 }
 
-// TODO: Add ignore and filter out hidden etc
+// TODO: filter out hidden etc
 async fn search_directory(
     path : &str,
     recursive : bool,
@@ -166,7 +170,7 @@ async fn search_directory(
     };
 
     walkdir::WalkDir::new(&path)
-        .max_depth(if recursive {::std::usize::MAX} else {0})
+        .max_depth(if recursive {::std::usize::MAX} else {1})
         .into_iter()
         .filter_entry(create_top_level_filter(&ignore_pattern,&match_pattern))
         .filter_map(|e| e.ok())
@@ -323,5 +327,116 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     Ok(())
 }
+
+
+
+//------------------TESTS---------------------------------
+
+
+
+
+//mod file_capture{
+    #[cfg(test)]
+    mod tests {
+        // Note this useful idiom: importing names from outer (for mod tests) scope.
+        use super::*;
+        #[tokio::test]
+        async fn get_files_with_one_level_of_depth_recursively()
+        {
+            let tmp_dir = tempdir().unwrap();
+            let tmp_path = tmp_dir.path();
+            let tmp_path_str= tmp_path.to_str().unwrap();
+            { //Begin Scope
+                let _: Vec<std::fs::File> = 
+                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
+                        .iter()
+                        .map(|f| File::create(tmp_path.join(f)).unwrap())
+                        .collect();
+                let found_files = get_files(vec!(String::from(tmp_path_str)), true).await;
+                assert_eq!(2, found_files.unwrap().len());
+            } //End Scope
+            _ = tmp_dir.close();
+        }
+
+        #[tokio::test]
+        async fn get_files_with_one_level_of_depth_non_recursively()
+        {
+            let tmp_dir = tempdir().unwrap();
+            let tmp_path = tmp_dir.path();
+            let tmp_path_str= tmp_path.to_str().unwrap();
+            { //Begin Scope
+                let _: Vec<std::fs::File> = 
+                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
+                        .iter()
+                        .map(|f| File::create(tmp_path.join(f)).unwrap())
+                        .collect();
+                let found_files = get_files(vec!(String::from(tmp_path_str)), false).await;
+                assert_eq!(2, found_files.unwrap().len());
+            } //End Scope
+            _ = tmp_dir.close();
+        }
+
+        #[test]
+        fn satisfies_ignore_and_match_filters_testing_no_filters() {
+            assert!(
+                satisfies_ignore_and_match_filters(&None, &None, "sample_file_name")
+            );
+        }
+
+        #[test]
+        fn satisfies_ignore_and_match_filters_testing_match_filter_only() {
+            let regex = Some(Regex::new(r"bar(\d*)").unwrap());
+            //Does not satisfy the match filter
+            assert!(
+                !satisfies_ignore_and_match_filters(&None, &regex, "sample_file_name")
+            );
+
+            //Does satisfy the match filter
+            assert!(
+                satisfies_ignore_and_match_filters(&None, &regex, "bar123")
+            );
+        }
+
+        #[test]
+        fn satisfies_ignore_and_match_filters_testing_ignore_filter_only() {
+            let regex = Some(Regex::new(r"bar(\d*)").unwrap());
+            //Does not satisfy the ignore filter
+            assert!(
+                satisfies_ignore_and_match_filters(&regex, &None, "sample_file_name")
+            );
+
+            //Does satisfy the ignore filter
+            assert!(
+                !satisfies_ignore_and_match_filters(&regex, &None, "bar123")
+            );
+        }
+
+        #[test]
+        fn satisfies_ignore_and_match_filters_testing_both_filters_present() {
+            let ignore_regex = Some(Regex::new(r"bar(\d*)").unwrap());
+            let match_regex = Some(Regex::new(r"car(\d+)").unwrap());
+            //Satisfies match and not ignore
+            assert!(
+                satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "car1")
+            );
+
+            //Satisfies ignore and not match
+            assert!(
+                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "bar")
+            );
+
+            //Satisfies ignore and match
+            assert!(
+                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "barcar1")
+            );
+
+            //Does not satisfy match or ignore
+            assert!(
+                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "random")
+            );
+        }
+    } // mod tests
+    
+//}
 
 
