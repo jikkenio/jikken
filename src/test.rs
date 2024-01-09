@@ -132,7 +132,7 @@ impl Variable {
                 if v.contains('$') {
                     let mut modified_value = v.clone();
                     for variable in global_variables.iter() {
-                        let var_pattern = format!("${}$", variable.name.trim());
+                        let var_pattern = format!("${{{}}}", variable.name.trim());
                         if !modified_value.contains(&var_pattern) {
                             continue;
                         }
@@ -158,7 +158,7 @@ impl Variable {
                 if test_string.contains('$') {
                     let mut modified_value = test_string;
                     for variable in global_variables.iter() {
-                        let var_pattern = format!("${}$", variable.name.trim());
+                        let var_pattern = format!("${{{}}}", variable.name.trim());
                         if !modified_value.contains(&var_pattern) {
                             continue;
                         }
@@ -191,7 +191,7 @@ impl Variable {
                 let modified_value = if v.contains('$') {
                     let mut mv = v.clone();
                     for variable in global_variables.iter() {
-                        let var_pattern = format!("${}$", variable.name.trim());
+                        let var_pattern = format!("${{{}}}", variable.name.trim());
                         if !mv.contains(&var_pattern) {
                             continue;
                         }
@@ -270,7 +270,7 @@ impl Variable {
                 let modified_string = if test_string.contains('$') {
                     let mut modified_value: String = test_string.to_string();
                     for variable in global_variables.iter() {
-                        let var_pattern = format!("${}$", variable.name.trim());
+                        let var_pattern = format!("${{{}}}", variable.name.trim());
                         if !modified_value.contains(&var_pattern) {
                             continue;
                         }
@@ -438,7 +438,7 @@ impl Definition {
         trace!("scanning test definition for variable pattern matches");
 
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
-            let var_pattern = format!("${}$", variable.name.trim());
+            let var_pattern = format!("${{{}}}", variable.name.trim());
             // debug!("pattern: {}", var_pattern);
 
             if let Some(setup) = self.setup.as_ref() {
@@ -468,7 +468,7 @@ impl Definition {
                 .iter()
                 .chain(self.variables.iter().chain(self.global_variables.iter()))
             {
-                let var_pattern = format!("${}$", variable.name.trim());
+                let var_pattern = format!("${{{}}}", variable.name.trim());
                 // debug!("pattern: {}", var_pattern);
 
                 Definition::update_request_variables(&stage.request, var_pattern.as_str());
@@ -503,7 +503,7 @@ impl Definition {
             let mut replaced_url = url.to_string();
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${}$", variable.name);
+                let var_pattern = format!("${{{}}}", variable.name);
 
                 if !replaced_url.contains(var_pattern.as_str()) {
                     continue;
@@ -530,7 +530,7 @@ impl Definition {
     fn get_processed_param(&self, parameter: &http::Parameter, iteration: u32) -> (String, String) {
         if parameter.matches_variable.get() {
             for variable in self.variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${}$", variable.name);
+                let var_pattern = format!("${{{}}}", variable.name);
 
                 if !parameter.value.contains(var_pattern.as_str()) {
                     continue;
@@ -551,7 +551,7 @@ impl Definition {
 
     fn get_processed_header(&self, header: &http::Header, iteration: u32) -> (String, String) {
         for variable in self.variables.iter().chain(self.global_variables.iter()) {
-            let var_pattern = format!("${}$", variable.name);
+            let var_pattern = format!("${{{}}}", variable.name);
 
             if !header.value.contains(var_pattern.as_str()) {
                 continue;
@@ -674,7 +674,7 @@ impl Definition {
             };
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${}$", variable.name);
+                let var_pattern = format!("${{{}}}", variable.name);
 
                 if !body_str.contains(var_pattern.as_str()) {
                     continue;
@@ -710,7 +710,7 @@ impl Definition {
             };
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${}$", variable.name);
+                let var_pattern = format!("${{{}}}", variable.name);
 
                 if !body_str.contains(var_pattern.as_str()) {
                     continue;
