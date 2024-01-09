@@ -974,7 +974,7 @@ async fn process_request(
         let mut header_value: String = header.1;
 
         for gv in state.variables.iter() {
-            let key_search = format!("${}$", gv.0);
+            let key_search = format!("${{{}}}", gv.0);
             header_value = header_value.replace(&key_search, gv.1);
         }
 
@@ -1157,7 +1157,7 @@ fn validate_dry_run(
                 let mut header_value: String = header.1;
 
                 for gv in state.variables.iter() {
-                    let key_search = format!("${}$", gv.0);
+                    let key_search = format!("${{{}}}", gv.0);
                     header_value = header_value.replace(&key_search, gv.1);
                 }
 
