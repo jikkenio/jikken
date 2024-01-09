@@ -4,6 +4,6 @@ request:
   url: https://api.jikken.io/v1/test_status
   headers:
     - header: Authorization
-      value: $token$
+      value: ${token}
 response:
   status: 200

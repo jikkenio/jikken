@@ -18,14 +18,14 @@ stages:
       url: https://api.jikken.io/v1/test_status
       headers:
         - header: Authorization
-          value: $auth$
+          value: ${auth}
     response:
       status: 200
   - request:
       url: https://api.jikken.io/v2/test_status
       headers:
         - header: Authorization
-          value: $auth$
+          value: ${auth}
     compare:
       url: https://api.jikken.io/v1/test_status
     response:
