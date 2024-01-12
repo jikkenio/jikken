@@ -15,8 +15,11 @@ use log::{error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::{error::Error};
-use std::fs::File;
-use tempfile::tempdir;
+#[cfg(test)]
+use {
+    std::fs::File,
+    tempfile::tempdir,
+};
 use tokio::fs;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -137,25 +140,25 @@ fn glob_walk(
 }
 
 fn satisfies_potential_glob_filter(
-    match_pattern : &Option<glob::Pattern>,
+    glob_pattern : &Option<glob::Pattern>,
     file_name : &str
 ) -> bool
 {
-    return match &match_pattern {
-        Some(b) => {b.matches_with(file_name, MatchOptions::default())},
+    return match &glob_pattern {
+        Some(p) => {p.matches_with(file_name, MatchOptions::default())},
         None => {true},
     }
 }
 
-// when we establish plumbing in args, throw error if parsing of regex fails
-// change this function to take Option<Regex>
+// Consider how to approach feedback to user when supplied pattern
+// is invalid
 fn create_top_level_filter(
-    match_pattern : &Option<String>
+    glob_pattern : &Option<String>
 ) -> impl Fn(&walkdir::DirEntry) ->bool
 {
     let extract_pattern = 
         |s : &Option<String>| {s.clone().map(|s|glob::Pattern::new(s.as_str())).map(|r|r.ok()).unwrap_or(None)}; 
-    let pattern = extract_pattern(match_pattern);
+    let pattern = extract_pattern(glob_pattern);
     return move |e: &walkdir::DirEntry| -> bool{
         e
         .file_name()
@@ -401,7 +404,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         {
             let tmp_dir = tempdir().unwrap();
             let tmp_path = tmp_dir.path();
-            let tmp_path_str= tmp_path.to_str().unwrap();
             let glob_path = tmp_path.join("*_2*");
             let glob_path_str = glob_path.to_str().unwrap();
 
