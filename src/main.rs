@@ -168,7 +168,6 @@ fn create_top_level_filter(
     }
 }
 
-// TODO: filter out hidden etc
 async fn search_directory(
     path : &str,
     recursive : bool,
@@ -436,66 +435,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             } //End Scope
             _ = tmp_dir.close();
         }
-/* 
-        #[test]
-        fn satisfies_ignore_and_match_filters_testing_no_filters() {
-            assert!(
-                satisfies_ignore_and_match_filters(&None, &None, "sample_file_name")
-            );
-        }
-
-        #[test]
-        fn satisfies_ignore_and_match_filters_testing_match_filter_only() {
-            let regex = Some(Regex::new(r"bar(\d*)").unwrap());
-            //Does not satisfy the match filter
-            assert!(
-                !satisfies_ignore_and_match_filters(&None, &regex, "sample_file_name")
-            );
-
-            //Does satisfy the match filter
-            assert!(
-                satisfies_ignore_and_match_filters(&None, &regex, "bar123")
-            );
-        }
-
-        #[test]
-        fn satisfies_ignore_and_match_filters_testing_ignore_filter_only() {
-            let regex = Some(Regex::new(r"bar(\d*)").unwrap());
-            //Does not satisfy the ignore filter
-            assert!(
-                satisfies_ignore_and_match_filters(&regex, &None, "sample_file_name")
-            );
-
-            //Does satisfy the ignore filter
-            assert!(
-                !satisfies_ignore_and_match_filters(&regex, &None, "bar123")
-            );
-        }
-
-        #[test]
-        fn satisfies_ignore_and_match_filters_testing_both_filters_present() {
-            let ignore_regex = Some(Regex::new(r"bar(\d*)").unwrap());
-            let match_regex = Some(Regex::new(r"car(\d+)").unwrap());
-            //Satisfies match and not ignore
-            assert!(
-                satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "car1")
-            );
-
-            //Satisfies ignore and not match
-            assert!(
-                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "bar")
-            );
-
-            //Satisfies ignore and match
-            assert!(
-                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "barcar1")
-            );
-
-            //Does not satisfy match or ignore
-            assert!(
-                !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "random")
-            );
-        }*/
     } // mod tests
     
 //}
