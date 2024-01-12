@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq,Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub settings: Settings,
     pub globals: BTreeMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq,Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
@@ -61,13 +61,36 @@ impl Config {
     }
 }
 
+impl Default for Config
+{
+    fn default() -> Config {
+        Config {
+            settings: Settings {
+                continue_on_failure: false,
+                api_key: None,
+                environment: None,
+            },
+            globals: BTreeMap::new(),
+        }
+    }
+    
+}
+
 pub async fn get_config() -> Config {
-    let mut config = get_default_config();
+    let config_sources_ascending_priority = vec![
+        load_home_file().await,
+        load_config_file(".jikken").await
+    ];
 
-    config = apply_config_file(config, load_home_file().await);
-    config = apply_config_file(config, load_config_file(".jikken").await);
+    return get_config_impl(config_sources_ascending_priority);
+}
 
-    apply_envvars(config)
+fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Config {
+    let resolved_config  = config_sources_ascending_priority
+        .into_iter()
+        .fold(Config::default(),apply_config_file);
+
+    apply_envvars(resolved_config)
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
@@ -93,22 +116,10 @@ async fn load_config_file(file: &str) -> Option<File> {
     }
 }
 
-async fn load_home_file() -> Option<File> {
-    let home_dir_opt = dirs::home_dir();
-
-    if let Some(home_dir_path) = home_dir_opt {
-        if let Some(home_dir) = home_dir_path.to_str() {
-            let resolved_home_file = if home_dir.contains('/') {
-                format!("{}/.jikken", home_dir)
-            } else {
-                format!("{}\\.jikken", home_dir)
-            };
-
-            return load_config_file(&resolved_home_file).await;
-        }
-    }
-
-    None
+async fn load_home_file() -> Option<File>{
+    let cfg_file = dirs::home_dir()
+        .map(|pb| pb.join(".jikken"));
+    return load_config_file(cfg_file?.as_path().to_str()?).await;
 }
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
@@ -141,41 +152,20 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     config
 }
 
-fn get_default_config() -> Config {
-    Config {
-        settings: Settings {
-            continue_on_failure: false,
-            api_key: None,
-            environment: None,
-        },
-        globals: BTreeMap::new(),
-    }
-}
-
 fn apply_envvars(config: Config) -> Config {
-    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
-        if let Ok(b) = cof.parse::<bool>() {
-            Some(b)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let envvar_cof = 
+        env::var("JIKKEN_CONTINUE_ON_FAILURE")
+            .ok()
+            .and_then(|cfg| cfg.parse::<bool>().ok());
 
-    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
-        Some(key)
-    } else {
-        None
-    };
+    let envvar_apikey =
+        env::var("JIKKEN_API_KEY").ok();
 
-    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
-        Some(env)
-    } else {
-        None
-    };
-
+    let envvar_env = 
+        env::var("JIKKEN_ENVIRONMENT").ok();
+    
     let mut global_variables = config.globals.clone();
+    
     for (key, value) in env::vars() {
         if let Some(stripped) = key.strip_prefix("JIKKEN_GLOBAL_") {
             global_variables.insert(stripped.to_string(), value);
@@ -191,3 +181,18 @@ fn apply_envvars(config: Config) -> Config {
         globals: global_variables,
     }
 }
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn no_overrides_yields_default_config() {
+        let sources : Vec<Option<File>> = vec![None, None];
+        let actual = get_config_impl(sources);
+        assert_eq!(
+            Config::default(),
+            actual
+        );
+    }
+} // mod tests
