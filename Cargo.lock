@@ -829,7 +829,6 @@ dependencies = [
  "hyper-tls",
  "indicatif",
  "log",
- "regex",
  "remove_dir_all",
  "reqwest",
  "self_update",
