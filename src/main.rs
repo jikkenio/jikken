@@ -16,8 +16,6 @@ use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tokio::fs;
-#[cfg(test)]
-use {std::fs::File, tempfile::tempdir};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -349,6 +347,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use {std::fs::File, tempfile::tempdir};
+
     #[tokio::test]
     async fn get_files_with_one_level_of_depth_recursively() {
         let tmp_dir = tempdir().unwrap();
