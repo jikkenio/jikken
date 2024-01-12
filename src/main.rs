@@ -10,9 +10,9 @@ mod test;
 mod updater;
 
 use clap::{Parser, Subcommand};
+use glob::{MatchOptions, glob_with};
 use log::{error, info, Level, LevelFilter};
 use logger::SimpleLogger;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{error::Error};
 use std::fs::File;
@@ -117,41 +117,52 @@ pub enum Commands {
     Update,
 }
 
-fn satisfies_ignore_and_match_filters(
-    ignore_regex: &Option<Regex>,
-    match_regex : &Option<Regex>,
+fn glob_walk(
+    glob_string: &String
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
+{
+    let mut ret : Vec<String> = Vec::new();
+
+    for entry in glob_with(glob_string.as_str(), MatchOptions::default()).unwrap() {
+        if let Ok(path) = entry {
+            match path.to_str() {
+                Some(s) => {
+                    if s.ends_with(".jkt") {ret.push(String::from(s))}},
+                None => {},
+            }
+        }
+    }
+
+    return Ok(ret);
+}
+
+fn satisfies_potential_glob_filter(
+    match_pattern : &Option<glob::Pattern>,
     file_name : &str
 ) -> bool
 {
-    return match &match_regex {
-        Some(b) => {b.is_match(file_name)},
+    return match &match_pattern {
+        Some(b) => {b.matches_with(file_name, MatchOptions::default())},
         None => {true},
-    } &&
-    !match &ignore_regex {
-        Some(r) => {r.is_match(file_name)},
-        None => {false}
     }
 }
 
 // when we establish plumbing in args, throw error if parsing of regex fails
 // change this function to take Option<Regex>
 fn create_top_level_filter(
-    ignore_pattern : &Option<String>,
     match_pattern : &Option<String>
 ) -> impl Fn(&walkdir::DirEntry) ->bool
 {
-    let extract_regex = 
-        |s : &Option<String>| {s.clone().map(|s|Regex::new(s.as_str())).map(|r|r.ok()).unwrap_or(None)}; 
-    let match_regex = extract_regex(&match_pattern);
-    let ignore_regex = extract_regex(&ignore_pattern);
-    
+    let extract_pattern = 
+        |s : &Option<String>| {s.clone().map(|s|glob::Pattern::new(s.as_str())).map(|r|r.ok()).unwrap_or(None)}; 
+    let pattern = extract_pattern(match_pattern);
     return move |e: &walkdir::DirEntry| -> bool{
         e
         .file_name()
         .to_str()
         .map(|s| 
-                (e.file_type().is_dir() || s.ends_with(".jkt")) &&
-                satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, &s)
+                (e.file_type().is_file() && s.ends_with(".jkt") && satisfies_potential_glob_filter(&pattern, &s)) ||
+                e.file_type().is_dir()
         )
         .unwrap_or(false)
     }
@@ -161,8 +172,7 @@ fn create_top_level_filter(
 async fn search_directory(
     path : &str,
     recursive : bool,
-    ignore_pattern : &Option<String>,
-    match_pattern : &Option<String>
+    glob_pattern : Option<String>
 ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let mut ret : Vec<String> = Vec::new();
     let entry_is_file = |e: &walkdir::DirEntry|{
@@ -172,7 +182,7 @@ async fn search_directory(
     walkdir::WalkDir::new(&path)
         .max_depth(if recursive {::std::usize::MAX} else {1})
         .into_iter()
-        .filter_entry(create_top_level_filter(&ignore_pattern,&match_pattern))
+        .filter_entry(create_top_level_filter(&glob_pattern))
         .filter_map(|e| e.ok())
         .filter(entry_is_file)
         .for_each(|e|match e.path().to_str() {
@@ -190,19 +200,30 @@ async fn get_files(
     let mut results : Vec<String> = Vec::new();
 
     for path in paths {
-        let path_metadata = fs::metadata(&path).await?;
-
-        if path_metadata.is_dir()
-        {
-            results.append(search_directory(path.as_str(), recursive, &None, &None)
-                .await
+        let exists = fs::try_exists(&path).await.unwrap_or(false);
+        let is_file = exists && fs::metadata(&path).await?.is_file();
+        let glob_pattern = if !exists {Some(String::from(path.as_str()))} else {None};
+    
+        if is_file {
+            results.push(path);
+        }
+        else if !exists && !recursive {
+            results.append(
+                glob_walk(&path)
                 .unwrap_or(Vec::new())
                 .as_mut()
             );
-        }
-        else
-        {
-            results.push(path);
+        } 
+        else {
+            results.append(
+                search_directory(
+                    if exists {path.as_str()} else {"."}, 
+                    recursive, 
+                    glob_pattern
+                ).await
+                 .unwrap_or(Vec::new())
+                 .as_mut()
+            );
         }
     }
 
@@ -376,6 +397,46 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             _ = tmp_dir.close();
         }
 
+        #[tokio::test]
+        async fn get_files_with_one_level_of_depth_non_recursively_globbing()
+        {
+            let tmp_dir = tempdir().unwrap();
+            let tmp_path = tmp_dir.path();
+            let tmp_path_str= tmp_path.to_str().unwrap();
+            let glob_path = tmp_path.join("*_2*");
+            let glob_path_str = glob_path.to_str().unwrap();
+
+            { //Begin Scope
+                let _: Vec<std::fs::File> = 
+                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
+                        .iter()
+                        .map(|f| File::create(tmp_path.join(f)).unwrap())
+                        .collect();
+                let found_files = get_files(vec!(String::from(glob_path_str)), false).await;
+                assert_eq!(1, found_files.unwrap().len());
+            } //End Scope
+            _ = tmp_dir.close();
+        }
+
+        #[tokio::test]
+        async fn get_files_with_recursive_globbing()
+        {
+            let tmp_dir = tempdir().unwrap();
+            let tmp_path = tmp_dir.path();
+            let glob_path_str = "*_2*";
+            _ = std::env::set_current_dir(tmp_path);
+            { //Begin Scope
+                let _: Vec<std::fs::File> = 
+                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
+                        .iter()
+                        .map(|f| File::create(tmp_path.join(f)).unwrap())
+                        .collect();
+                let found_files = get_files(vec!(String::from(glob_path_str)), true).await;
+                assert_eq!(1, found_files.unwrap().len());
+            } //End Scope
+            _ = tmp_dir.close();
+        }
+/* 
         #[test]
         fn satisfies_ignore_and_match_filters_testing_no_filters() {
             assert!(
@@ -434,7 +495,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             assert!(
                 !satisfies_ignore_and_match_filters(&ignore_regex, &match_regex, "random")
             );
-        }
+        }*/
     } // mod tests
     
 //}
