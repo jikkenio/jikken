@@ -10,17 +10,14 @@ mod test;
 mod updater;
 
 use clap::{Parser, Subcommand};
-use glob::{MatchOptions, glob_with};
+use glob::{glob_with, MatchOptions};
 use log::{error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
-use std::{error::Error};
-#[cfg(test)]
-use {
-    std::fs::File,
-    tempfile::tempdir,
-};
+use std::error::Error;
 use tokio::fs;
+#[cfg(test)]
+use {std::fs::File, tempfile::tempdir};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -120,18 +117,18 @@ pub enum Commands {
     Update,
 }
 
-fn glob_walk(
-    glob_string: &String
-) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
-{
-    let mut ret : Vec<String> = Vec::new();
+fn glob_walk(glob_string: &String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    let mut ret: Vec<String> = Vec::new();
 
     for entry in glob_with(glob_string.as_str(), MatchOptions::default()).unwrap() {
         if let Ok(path) = entry {
             match path.to_str() {
                 Some(s) => {
-                    if s.ends_with(".jkt") {ret.push(String::from(s))}},
-                None => {},
+                    if s.ends_with(".jkt") {
+                        ret.push(String::from(s))
+                    }
+                }
+                None => {}
             }
         }
     }
@@ -139,59 +136,55 @@ fn glob_walk(
     return Ok(ret);
 }
 
-fn satisfies_potential_glob_filter(
-    glob_pattern : &Option<glob::Pattern>,
-    file_name : &str
-) -> bool
-{
+fn satisfies_potential_glob_filter(glob_pattern: &Option<glob::Pattern>, file_name: &str) -> bool {
     return match &glob_pattern {
-        Some(p) => {p.matches_with(file_name, MatchOptions::default())},
-        None => {true},
-    }
+        Some(p) => p.matches_with(file_name, MatchOptions::default()),
+        None => true,
+    };
 }
 
 // Consider how to approach feedback to user when supplied pattern
 // is invalid
-fn create_top_level_filter(
-    glob_pattern : &Option<String>
-) -> impl Fn(&walkdir::DirEntry) ->bool
-{
-    let extract_pattern = 
-        |s : &Option<String>| {s.clone().map(|s|glob::Pattern::new(s.as_str())).map(|r|r.ok()).unwrap_or(None)}; 
+fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::DirEntry) -> bool {
+    let extract_pattern = |s: &Option<String>| {
+        s.clone()
+            .map(|s| glob::Pattern::new(s.as_str()))
+            .map(|r| r.ok())
+            .unwrap_or(None)
+    };
     let pattern = extract_pattern(glob_pattern);
-    return move |e: &walkdir::DirEntry| -> bool{
-        e
-        .file_name()
-        .to_str()
-        .map(|s| 
-                (e.file_type().is_file() && s.ends_with(".jkt") && satisfies_potential_glob_filter(&pattern, &s)) ||
-                e.file_type().is_dir()
-        )
-        .unwrap_or(false)
-    }
+    return move |e: &walkdir::DirEntry| -> bool {
+        e.file_name()
+            .to_str()
+            .map(|s| {
+                (e.file_type().is_file()
+                    && s.ends_with(".jkt")
+                    && satisfies_potential_glob_filter(&pattern, &s))
+                    || e.file_type().is_dir()
+            })
+            .unwrap_or(false)
+    };
 }
 
 async fn search_directory(
-    path : &str,
-    recursive : bool,
-    glob_pattern : Option<String>
+    path: &str,
+    recursive: bool,
+    glob_pattern: Option<String>,
 ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-    let mut ret : Vec<String> = Vec::new();
-    let entry_is_file = |e: &walkdir::DirEntry|{
-        e.metadata().map(|e|e.is_file()).unwrap_or(false)
-    };
+    let mut ret: Vec<String> = Vec::new();
+    let entry_is_file = |e: &walkdir::DirEntry| e.metadata().map(|e| e.is_file()).unwrap_or(false);
 
     walkdir::WalkDir::new(&path)
-        .max_depth(if recursive {::std::usize::MAX} else {1})
+        .max_depth(if recursive { ::std::usize::MAX } else { 1 })
         .into_iter()
         .filter_entry(create_top_level_filter(&glob_pattern))
         .filter_map(|e| e.ok())
         .filter(entry_is_file)
-        .for_each(|e|match e.path().to_str() {
-            Some(s) => {ret.push(String::from(s))},
-            None => {},
+        .for_each(|e| match e.path().to_str() {
+            Some(s) => ret.push(String::from(s)),
+            None => {}
         });
-    
+
     return Ok(ret);
 }
 
@@ -199,32 +192,31 @@ async fn get_files(
     paths: Vec<String>,
     recursive: bool,
 ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-    let mut results : Vec<String> = Vec::new();
+    let mut results: Vec<String> = Vec::new();
 
     for path in paths {
         let exists = fs::try_exists(&path).await.unwrap_or(false);
         let is_file = exists && fs::metadata(&path).await?.is_file();
-        let glob_pattern = if !exists {Some(String::from(path.as_str()))} else {None};
-    
+        let glob_pattern = if !exists {
+            Some(String::from(path.as_str()))
+        } else {
+            None
+        };
+
         if is_file {
             results.push(path);
-        }
-        else if !exists && !recursive {
-            results.append(
-                glob_walk(&path)
-                .unwrap_or(Vec::new())
-                .as_mut()
-            );
-        } 
-        else {
+        } else if !exists && !recursive {
+            results.append(glob_walk(&path).unwrap_or(Vec::new()).as_mut());
+        } else {
             results.append(
                 search_directory(
-                    if exists {path.as_str()} else {"."}, 
-                    recursive, 
-                    glob_pattern
-                ).await
-                 .unwrap_or(Vec::new())
-                 .as_mut()
+                    if exists { path.as_str() } else { "." },
+                    recursive,
+                    glob_pattern,
+                )
+                .await
+                .unwrap_or(Vec::new())
+                .as_mut(),
             );
         }
     }
@@ -234,7 +226,6 @@ async fn get_files(
     }
 
     Ok(results)
-
 }
 
 async fn run_tests(
@@ -351,94 +342,103 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-
-
 //------------------TESTS---------------------------------
 
-
-
-
 //mod file_capture{
-    #[cfg(test)]
-    mod tests {
-        // Note this useful idiom: importing names from outer (for mod tests) scope.
-        use super::*;
-        #[tokio::test]
-        async fn get_files_with_one_level_of_depth_recursively()
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    #[tokio::test]
+    async fn get_files_with_one_level_of_depth_recursively() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let tmp_path_str = tmp_path.to_str().unwrap();
         {
-            let tmp_dir = tempdir().unwrap();
-            let tmp_path = tmp_dir.path();
-            let tmp_path_str= tmp_path.to_str().unwrap();
-            { //Begin Scope
-                let _: Vec<std::fs::File> = 
-                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
-                        .iter()
-                        .map(|f| File::create(tmp_path.join(f)).unwrap())
-                        .collect();
-                let found_files = get_files(vec!(String::from(tmp_path_str)), true).await;
-                assert_eq!(2, found_files.unwrap().len());
-            } //End Scope
-            _ = tmp_dir.close();
-        }
+            //Begin Scope
+            let _: Vec<std::fs::File> = vec![
+                "random_file",
+                "my_test.jkt",
+                "something_else",
+                "my_test_2.jkt",
+            ]
+            .iter()
+            .map(|f| File::create(tmp_path.join(f)).unwrap())
+            .collect();
+            let found_files = get_files(vec![String::from(tmp_path_str)], true).await;
+            assert_eq!(2, found_files.unwrap().len());
+        } //End Scope
+        _ = tmp_dir.close();
+    }
 
-        #[tokio::test]
-        async fn get_files_with_one_level_of_depth_non_recursively()
+    #[tokio::test]
+    async fn get_files_with_one_level_of_depth_non_recursively() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let tmp_path_str = tmp_path.to_str().unwrap();
         {
-            let tmp_dir = tempdir().unwrap();
-            let tmp_path = tmp_dir.path();
-            let tmp_path_str= tmp_path.to_str().unwrap();
-            { //Begin Scope
-                let _: Vec<std::fs::File> = 
-                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
-                        .iter()
-                        .map(|f| File::create(tmp_path.join(f)).unwrap())
-                        .collect();
-                let found_files = get_files(vec!(String::from(tmp_path_str)), false).await;
-                assert_eq!(2, found_files.unwrap().len());
-            } //End Scope
-            _ = tmp_dir.close();
-        }
+            //Begin Scope
+            let _: Vec<std::fs::File> = vec![
+                "random_file",
+                "my_test.jkt",
+                "something_else",
+                "my_test_2.jkt",
+            ]
+            .iter()
+            .map(|f| File::create(tmp_path.join(f)).unwrap())
+            .collect();
+            let found_files = get_files(vec![String::from(tmp_path_str)], false).await;
+            assert_eq!(2, found_files.unwrap().len());
+        } //End Scope
+        _ = tmp_dir.close();
+    }
 
-        #[tokio::test]
-        async fn get_files_with_one_level_of_depth_non_recursively_globbing()
+    #[tokio::test]
+    async fn get_files_with_one_level_of_depth_non_recursively_globbing() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let glob_path = tmp_path.join("*_2*");
+        let glob_path_str = glob_path.to_str().unwrap();
+
         {
-            let tmp_dir = tempdir().unwrap();
-            let tmp_path = tmp_dir.path();
-            let glob_path = tmp_path.join("*_2*");
-            let glob_path_str = glob_path.to_str().unwrap();
+            //Begin Scope
+            let _: Vec<std::fs::File> = vec![
+                "random_file",
+                "my_test.jkt",
+                "something_else",
+                "my_test_2.jkt",
+            ]
+            .iter()
+            .map(|f| File::create(tmp_path.join(f)).unwrap())
+            .collect();
+            let found_files = get_files(vec![String::from(glob_path_str)], false).await;
+            assert_eq!(1, found_files.unwrap().len());
+        } //End Scope
+        _ = tmp_dir.close();
+    }
 
-            { //Begin Scope
-                let _: Vec<std::fs::File> = 
-                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
-                        .iter()
-                        .map(|f| File::create(tmp_path.join(f)).unwrap())
-                        .collect();
-                let found_files = get_files(vec!(String::from(glob_path_str)), false).await;
-                assert_eq!(1, found_files.unwrap().len());
-            } //End Scope
-            _ = tmp_dir.close();
-        }
-
-        #[tokio::test]
-        async fn get_files_with_recursive_globbing()
+    #[tokio::test]
+    async fn get_files_with_recursive_globbing() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let glob_path_str = "*_2*";
+        _ = std::env::set_current_dir(tmp_path);
         {
-            let tmp_dir = tempdir().unwrap();
-            let tmp_path = tmp_dir.path();
-            let glob_path_str = "*_2*";
-            _ = std::env::set_current_dir(tmp_path);
-            { //Begin Scope
-                let _: Vec<std::fs::File> = 
-                    vec!("random_file", "my_test.jkt", "something_else", "my_test_2.jkt")
-                        .iter()
-                        .map(|f| File::create(tmp_path.join(f)).unwrap())
-                        .collect();
-                let found_files = get_files(vec!(String::from(glob_path_str)), true).await;
-                assert_eq!(1, found_files.unwrap().len());
-            } //End Scope
-            _ = tmp_dir.close();
-        }
-    } // mod tests
-    
+            //Begin Scope
+            let _: Vec<std::fs::File> = vec![
+                "random_file",
+                "my_test.jkt",
+                "something_else",
+                "my_test_2.jkt",
+            ]
+            .iter()
+            .map(|f| File::create(tmp_path.join(f)).unwrap())
+            .collect();
+            let found_files = get_files(vec![String::from(glob_path_str)], true).await;
+            assert_eq!(1, found_files.unwrap().len());
+        } //End Scope
+        _ = tmp_dir.close();
+    }
+} // mod tests
+
 //}
-
-
