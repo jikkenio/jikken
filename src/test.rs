@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
@@ -49,10 +50,14 @@ pub struct Variable {
     pub modifier: Option<variable::Modifier>,
     pub format: Option<String>,
     pub file: Option<String>,
+    pub source_path: String,
 }
 
 impl Variable {
-    pub fn new(variable: file::UnvalidatedVariable) -> Result<Variable, validation::Error> {
+    pub fn new(
+        variable: file::UnvalidatedVariable,
+        source_path: &str,
+    ) -> Result<Variable, validation::Error> {
         // TODO: Add validation errors
         Ok(Variable {
             name: variable.name.clone(),
@@ -64,11 +69,13 @@ impl Variable {
             modifier: variable.modifier.clone(),
             format: variable.format,
             file: variable.file,
+            source_path: source_path.to_string(),
         })
     }
 
     pub fn validate_variables_opt(
         variables: Option<Vec<file::UnvalidatedVariable>>,
+        source_path: &str,
     ) -> Result<Vec<Variable>, validation::Error> {
         match variables {
             None => Ok(Vec::new()),
@@ -76,7 +83,7 @@ impl Variable {
                 let count = vars.len();
                 let results = vars
                     .into_iter()
-                    .map(Variable::new)
+                    .map(|f| Variable::new(f, source_path))
                     .filter_map(|v| match v {
                         Ok(x) => Some(x),
                         Err(_) => None,
@@ -131,14 +138,22 @@ impl Variable {
 
     fn generate_string_value(&self, iteration: u32, global_variables: Vec<Variable>) -> String {
         match &self.file {
-            Some(f) => match std::fs::read_to_string(f) {
-                Ok(file_data) => file_data.trim().to_string(),
-                Err(e) => {
-                    error!("error loading file ({}) content: {}", f, e);
+            Some(f) => {
+                let file = if Path::new(f).exists() {
+                    f.clone()
+                } else {
+                    format!("{}{}", self.source_path, f)
+                };
 
-                    "".to_string()
+                match std::fs::read_to_string(&file) {
+                    Ok(file_data) => file_data.trim().to_string(),
+                    Err(e) => {
+                        error!("error loading file ({}) content: {}", file, e);
+
+                        "".to_string()
+                    }
                 }
-            },
+            }
             None => match &self.value {
                 serde_yaml::Value::String(v) => {
                     debug!("string expression: {:?}", v);
