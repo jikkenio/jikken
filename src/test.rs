@@ -48,6 +48,7 @@ pub struct Variable {
     pub value: serde_yaml::Value,
     pub modifier: Option<variable::Modifier>,
     pub format: Option<String>,
+    pub file: Option<String>,
 }
 
 impl Variable {
@@ -55,10 +56,14 @@ impl Variable {
         // TODO: Add validation errors
         Ok(Variable {
             name: variable.name.clone(),
-            data_type: variable.data_type.clone(),
-            value: variable.value.clone(),
+            data_type: variable.data_type.unwrap_or(variable::Type::String).clone(),
+            value: variable
+                .value
+                .unwrap_or(serde_yaml::from_str("{}").unwrap())
+                .clone(),
             modifier: variable.modifier.clone(),
             format: variable.format,
+            file: variable.file,
         })
     }
 
@@ -125,59 +130,69 @@ impl Variable {
     }
 
     fn generate_string_value(&self, iteration: u32, global_variables: Vec<Variable>) -> String {
-        match &self.value {
-            serde_yaml::Value::String(v) => {
-                debug!("string expression: {:?}", v);
+        match &self.file {
+            Some(f) => match std::fs::read_to_string(f) {
+                Ok(file_data) => file_data.trim().to_string(),
+                Err(e) => {
+                    error!("error loading file ({}) content: {}", f, e);
 
-                if v.contains('$') {
-                    let mut modified_value = v.clone();
-                    for variable in global_variables.iter() {
-                        let var_pattern = format!("${{{}}}", variable.name.trim());
-                        if !modified_value.contains(&var_pattern) {
-                            continue;
+                    "".to_string()
+                }
+            },
+            None => match &self.value {
+                serde_yaml::Value::String(v) => {
+                    debug!("string expression: {:?}", v);
+
+                    if v.contains('$') {
+                        let mut modified_value = v.clone();
+                        for variable in global_variables.iter() {
+                            let var_pattern = format!("${{{}}}", variable.name.trim());
+                            if !modified_value.contains(&var_pattern) {
+                                continue;
+                            }
+
+                            if let serde_yaml::Value::String(s) = &variable.value {
+                                modified_value = modified_value.replace(&var_pattern, s);
+                            }
                         }
 
-                        if let serde_yaml::Value::String(s) = &variable.value {
-                            modified_value = modified_value.replace(&var_pattern, s);
-                        }
+                        return modified_value;
                     }
 
-                    return modified_value;
+                    v.to_string()
                 }
+                serde_yaml::Value::Sequence(seq) => {
+                    debug!("sequence expression: {:?}", seq);
+                    let test = &seq[iteration as usize];
+                    let test_string = match test {
+                        serde_yaml::Value::String(st) => st.to_string(),
+                        _ => "".to_string(),
+                    };
 
-                v.to_string()
-            }
-            serde_yaml::Value::Sequence(seq) => {
-                debug!("sequence expression: {:?}", seq);
-                let test = &seq[iteration as usize];
-                let test_string = match test {
-                    serde_yaml::Value::String(st) => st.to_string(),
-                    _ => "".to_string(),
-                };
+                    if test_string.contains('$') {
+                        let mut modified_value = test_string;
+                        for variable in global_variables.iter() {
+                            let var_pattern = format!("${{{}}}", variable.name.trim());
+                            if !modified_value.contains(&var_pattern) {
+                                continue;
+                            }
 
-                if test_string.contains('$') {
-                    let mut modified_value = test_string;
-                    for variable in global_variables.iter() {
-                        let var_pattern = format!("${{{}}}", variable.name.trim());
-                        if !modified_value.contains(&var_pattern) {
-                            continue;
+                            if let serde_yaml::Value::String(s) = &variable.value {
+                                modified_value = modified_value.replace(&var_pattern, s);
+                            }
                         }
 
-                        if let serde_yaml::Value::String(s) = &variable.value {
-                            modified_value = modified_value.replace(&var_pattern, s);
-                        }
+                        return modified_value;
                     }
 
-                    return modified_value;
+                    test_string
                 }
-
-                test_string
-            }
-            serde_yaml::Value::Mapping(map) => {
-                debug!("map expression: {:?}", map);
-                String::from("")
-            }
-            _ => String::from(""),
+                serde_yaml::Value::Mapping(map) => {
+                    debug!("map expression: {:?}", map);
+                    String::from("")
+                }
+                _ => String::from(""),
+            },
         }
     }
 
@@ -680,13 +695,23 @@ impl Definition {
                     continue;
                 }
 
+                if body_str.starts_with("\"") && body_str.ends_with("\"") {
+                    body_str = body_str[1..body_str.len() - 1].to_string();
+                }
+
                 let replacement = variable.generate_value(iteration, self.global_variables.clone());
-                body_str = body_str.replace(var_pattern.as_str(), replacement.as_str());
+                body_str = body_str
+                    .replace(var_pattern.as_str(), replacement.as_str())
+                    .trim()
+                    .to_string();
             }
 
-            return match serde_json::from_str(body_str.as_str()) {
+            return match serde_json::from_str(&body_str) {
                 Ok(result) => Some(result),
-                Err(_) => None,
+                Err(e) => {
+                    error!("error formatting value: {}", e);
+                    None
+                }
             };
         }
 

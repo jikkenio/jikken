@@ -54,6 +54,7 @@ impl Config {
                 data_type: test::variable::Type::String,
                 modifier: None,
                 format: None,
+                file: None,
             })
             .collect()
     }
