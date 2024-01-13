@@ -11,7 +11,7 @@ mod updater;
 
 use clap::{Parser, Subcommand};
 use glob::{glob_with, MatchOptions};
-use log::{error, info, Level, LevelFilter};
+use log::{debug, error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -220,7 +220,7 @@ async fn get_files(
     }
 
     for r in results.clone() {
-        info!("file: {}\n", r);
+        debug!("file: {}", r);
     }
 
     Ok(results)
