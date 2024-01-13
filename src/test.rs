@@ -50,6 +50,8 @@ pub struct Variable {
     pub modifier: Option<variable::Modifier>,
     pub format: Option<String>,
     pub file: Option<String>,
+
+    #[serde(skip_serializing)]
     pub source_path: String,
 }
 
