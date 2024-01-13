@@ -1,5 +1,6 @@
 use crate::test;
 use crate::test::definition;
+use crate::test::variable;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -51,13 +52,17 @@ pub fn validate_file(
         requires: file.requires,
         tags: new_tags,
         iterate: file.iterate.unwrap_or(1),
-        variables: test::Variable::validate_variables_opt(file.variables)?,
+        variables: test::Variable::validate_variables_opt(
+            file.variables,
+            &variable::parse_source_path(&file.filename),
+        )?,
         global_variables: global_variables.to_vec(),
         stages: definition::StageDescriptor::validate_stages_opt(
             file.request,
             file.compare,
             file.response,
             file.stages,
+            &variable::parse_source_path(&file.filename),
         )?,
         setup: definition::RequestResponseDescriptor::new_opt(file.setup)?,
         cleanup: definition::CleanupDescriptor::new(file.cleanup)?,

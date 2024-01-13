@@ -55,6 +55,7 @@ impl Config {
                 modifier: None,
                 format: None,
                 file: None,
+                source_path: "./".to_string(),
             })
             .collect()
     }

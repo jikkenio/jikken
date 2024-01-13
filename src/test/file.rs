@@ -105,6 +105,7 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
     let result: Result<test::File, serde_yaml::Error> = serde_yaml::from_str(&file_data);
     match result {
         Ok(mut file) => {
+            println!("filename: {}", filename);
             file.filename = String::from(filename);
             Ok(file)
         }
