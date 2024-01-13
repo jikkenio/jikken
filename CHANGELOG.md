@@ -31,6 +31,7 @@ Changes:
 * Update help contents printed to the console.
 * We've changed the format for VARIABLE injection. You now must follow the `${var}` pattern instead of the `$var$` pattern.
 * Additional unit tests and some code clean-up/refactoring. More to come.
+* Added support for HTTP Verbs to be case insensitive (all lower, all upper, or capitalized).
 
 0.5.0
 =====
