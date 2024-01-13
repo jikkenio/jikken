@@ -1,14 +1,36 @@
 Next (Version determined when release is cut)
 =====
 
+0.6.0
+=====
+
+**BREAKING CHANGE**
+In agreement with user feedback, we've decided to make our first breaking change to the test format.
+Variables are no longer injected based on the `$var$` convention. They now follow similar
+patterns to JavaScript and Bash: `${var}`. Based on discussions and usage we felt it best
+to make this change before the number of tests in the wild using variables grows too large.
+As always we aim to minimize breaking changes, and since usage is increasing, in the future we'll
+likely support backwards compatibility or automated tooling to migrate tests.
+
+We don't forsee any additional breaking changes on the horizon. 
+
 Bugfixes:
 * If a test is not checking response bodies, the test will no longer fail if the response body is not valid JSON.
 * If test runs are configured to exit early on failure, the telemetry session completion and console status messages now properly trigger.
+
+Features:
+* Glob support for matching test files.
+* Variables now support loading data from files.
+* Our website is now public, which includes a new and improved docs page. Lots of documentation is on the way.
 
 Changes:
 * Adjusted cargo compiler flags for release, greatly reduces release binary size.
 * Update cleanup stage definition to use "always" for the always executing request.
 * Reduce excessive use of cloning.
+* Jikken no longer scans for test files recursively by default. You can now accomplish this via GLOB or with the `-r` CLI argument.
+* Update help contents printed to the console.
+* We've changed the format for VARIABLE injection. You now must follow the `${var}` pattern instead of the `$var$` pattern.
+* Additional unit tests and some code clean-up/refactoring. More to come.
 
 0.5.0
 =====
