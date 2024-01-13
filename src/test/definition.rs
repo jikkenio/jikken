@@ -258,6 +258,8 @@ pub struct StageDescriptor {
     pub compare: Option<CompareDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<test::Variable>,
+
+    #[serde(skip_serializing)]
     pub source_path: String,
 }
 
