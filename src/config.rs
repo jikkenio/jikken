@@ -78,7 +78,7 @@ pub async fn get_config() -> Config {
     let config_sources_ascending_priority = vec![
         load_home_file().await,
         load_config_file(".jikken").await,
-        Some(load_config_from_environment_variables()),
+        Some(load_config_from_environment_variables_as_file()),
     ];
 
     return get_config_impl(config_sources_ascending_priority);
@@ -118,8 +118,7 @@ async fn load_home_file() -> Option<File> {
     return load_config_file(cfg_file?.as_path().to_str()?).await;
 }
 
-//Treat environment as just another config file
-fn load_config_from_environment_variables() -> File {
+fn load_config_from_environment_variables_as_file() -> File {
     let envvar_cof = env::var("JIKKEN_CONTINUE_ON_FAILURE")
         .ok()
         .and_then(|cfg| cfg.parse::<bool>().ok());
