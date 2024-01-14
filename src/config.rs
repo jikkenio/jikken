@@ -97,7 +97,7 @@ async fn load_config_file(file: &str) -> Option<File> {
     if !Path::new(file).exists() {
         return None;
     }
-
+    
     match tokio::fs::read_to_string(file).await {
         Ok(data) => {
             let config_result: Result<File, _> = toml::from_str(&data);
@@ -185,6 +185,7 @@ fn apply_envvars(config: Config) -> Config {
 #[cfg(test)]
 mod tests{
     use super::*;
+    use {std::fs::OpenOptions, std::io::Write, tempfile::tempdir};
 
     #[test]
     fn no_overrides_yields_default_config() {
@@ -192,6 +193,98 @@ mod tests{
         let actual = get_config_impl(sources);
         assert_eq!(
             Config::default(),
+            actual
+        );
+    }
+
+    #[tokio::test]
+    async fn one_overrides_yields_correct_combination() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let override_file_path = tmp_path.join("foo.jikken");
+        let override_file_path_str = override_file_path.to_str().unwrap();
+        _ = std::fs::File::create(override_file_path_str);
+        let mut f = OpenOptions::new().write(true).open(override_file_path_str).expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=true
+            
+            [globals]
+            my_override_global="foo"
+            "#.as_bytes()
+        ).unwrap();
+        let sources : Vec<Option<File>> = 
+            vec![load_config_file(override_file_path.to_str().unwrap()).await , None];
+        let actual = get_config_impl(sources);
+        assert_eq!(
+            Config{
+                settings: Settings {
+                    continue_on_failure: true,
+                    api_key: None,
+                    environment: None,
+                },
+                globals: BTreeMap::from([
+                    (String::from("my_override_global"), String::from("foo"))
+                ])
+            },
+            actual
+        );
+    }
+
+    #[tokio::test]
+    async fn two_overrides_yields_correct_combination() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let override_file_path = tmp_path.join("foo.jikken");
+        let override_file_path_str = override_file_path.to_str().unwrap();
+        let override_file_path2 = tmp_path.join("foo2.jikken");
+        let override_file_path_str2 = override_file_path2.to_str().unwrap();
+
+        _ = std::fs::File::create(override_file_path_str);
+        let mut f = OpenOptions::new().write(true).open(override_file_path_str).expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=true
+            apiKey="key"
+            
+            [globals]
+            my_override_global="foo"
+            my_override_global2="bar"
+            "#.as_bytes()
+        ).unwrap();
+
+        _ = std::fs::File::create(override_file_path_str2);
+        f = OpenOptions::new().write(true).open(override_file_path_str2).expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=false
+            environment="magic"
+
+            [globals]
+            my_override_global="bar"
+            my_override_global3="car"
+            "#.as_bytes()
+        ).unwrap();
+         
+        let sources : Vec<Option<File>> = 
+            vec![load_config_file(override_file_path_str).await , load_config_file(override_file_path_str2).await];
+        let actual = get_config_impl(sources);
+        assert_eq!(
+            Config{
+                settings: Settings {
+                    continue_on_failure: false,
+                    api_key: Some(String::from("key")),
+                    environment: Some(String::from("magic")),
+                },
+                globals: BTreeMap::from([
+                    (String::from("my_override_global"), String::from("bar")),
+                    (String::from("my_override_global2"), String::from("bar")),
+                    (String::from("my_override_global3"), String::from("car"))
+                ]),
+            },
             actual
         );
     }
