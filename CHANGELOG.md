@@ -1,6 +1,12 @@
 Next (Version determined when release is cut)
 =====
 
+0.6.1
+=====
+
+Bugfixes:
+* A println! used for local testing was incorrectly merged into the 0.6.0 release. It has been removed.
+
 0.6.0
 =====
 
