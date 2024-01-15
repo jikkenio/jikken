@@ -1,4 +1,4 @@
-OutFile "jikken-v0.6.0-x86_64-windows.exe"
+OutFile "jikken-v0.6.1-x86_64-windows.exe"
 InstallDir $PROFILE\.jikken
 
 !include "LogicLib.nsh"
