@@ -7,6 +7,9 @@ Next (Version determined when release is cut)
 Bugfixes:
 * A println! used for local testing was incorrectly merged into the 0.6.0 release. It has been removed.
 
+Changes:
+* Added unit tests for Config system.
+
 0.6.0
 =====
 
