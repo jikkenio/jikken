@@ -33,7 +33,7 @@ jobs:
       
   build-macosx:
     name: macosx build
-    runs-on: macosx-latest
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
     - name: Build
