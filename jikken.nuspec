@@ -3,7 +3,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>jikken</id>
-    <version>0.6.0</version>
+    <version>0.6.1</version>
     <packageSourceUrl>https://github.com/jikkenio/jikken</packageSourceUrl>
     <owners>Jikken LLC</owners>
     <title>jikken (jk)</title>
@@ -15,7 +15,12 @@
     <docsUrl>https://jikken.io/docs/</docsUrl>
     <tags>jikken tools testing api developer</tags>
     <summary>a powerful cli tool for automated API testing</summary>
-    <description>jikken is a cli tool for automated API testing. it recursively searches directories for JKT files (Jikken Test Definitions) which will execute jobs for testing APIs. It has first class support on Windows, macOS, and Linux.</description>
+    <description>
+        Jikken is a CLI tool for automated API testing.
+        It utilizes JKT files (Jikken Test Definitions) to execute jobs for testing REST APIs.
+        It has first-class support on Windows, macOS, and Linux.
+        Visit jikken.io for more info.
+    </description>
   </metadata>
   <files>
     <file src=".choco\VERIFICATION.txt" target="VERIFICATION.txt" />
