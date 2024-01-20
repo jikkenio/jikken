@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub settings: Settings,
     pub globals: BTreeMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
@@ -54,18 +54,40 @@ impl Config {
                 data_type: test::variable::Type::String,
                 modifier: None,
                 format: None,
+                file: None,
+                source_path: "./".to_string(),
             })
             .collect()
     }
 }
 
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            settings: Settings {
+                continue_on_failure: false,
+                api_key: None,
+                environment: None,
+            },
+            globals: BTreeMap::new(),
+        }
+    }
+}
+
 pub async fn get_config() -> Config {
-    let mut config = get_default_config();
+    let config_sources_ascending_priority = vec![
+        load_home_file().await,
+        load_config_file(".jikken").await,
+        Some(load_config_from_environment_variables_as_file()),
+    ];
 
-    config = apply_config_file(config, load_home_file().await);
-    config = apply_config_file(config, load_config_file(".jikken").await);
+    return get_config_impl(config_sources_ascending_priority);
+}
 
-    apply_envvars(config)
+fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Config {
+    return config_sources_ascending_priority
+        .into_iter()
+        .fold(Config::default(), apply_config_file);
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
@@ -92,21 +114,35 @@ async fn load_config_file(file: &str) -> Option<File> {
 }
 
 async fn load_home_file() -> Option<File> {
-    let home_dir_opt = dirs::home_dir();
+    let cfg_file = dirs::home_dir().map(|pb| pb.join(".jikken"));
+    return load_config_file(cfg_file?.as_path().to_str()?).await;
+}
 
-    if let Some(home_dir_path) = home_dir_opt {
-        if let Some(home_dir) = home_dir_path.to_str() {
-            let resolved_home_file = if home_dir.contains('/') {
-                format!("{}/.jikken", home_dir)
-            } else {
-                format!("{}\\.jikken", home_dir)
-            };
+fn load_config_from_environment_variables_as_file() -> File {
+    let envvar_cof = env::var("JIKKEN_CONTINUE_ON_FAILURE")
+        .ok()
+        .and_then(|cfg| cfg.parse::<bool>().ok());
 
-            return load_config_file(&resolved_home_file).await;
+    let envvar_apikey = env::var("JIKKEN_API_KEY").ok();
+
+    let envvar_env = env::var("JIKKEN_ENVIRONMENT").ok();
+
+    let mut global_variables = BTreeMap::new();
+
+    for (key, value) in env::vars() {
+        if let Some(stripped) = key.strip_prefix("JIKKEN_GLOBAL_") {
+            global_variables.insert(stripped.to_string(), value);
         }
     }
 
-    None
+    return File {
+        settings: Some(FileSettings {
+            api_key: envvar_apikey,
+            continue_on_failure: envvar_cof,
+            environment: envvar_env,
+        }),
+        globals: Some(global_variables),
+    };
 }
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
@@ -139,53 +175,127 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     config
 }
 
-fn get_default_config() -> Config {
-    Config {
-        settings: Settings {
-            continue_on_failure: false,
-            api_key: None,
-            environment: None,
-        },
-        globals: BTreeMap::new(),
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use {std::fs::OpenOptions, std::io::Write, tempfile::tempdir};
 
-fn apply_envvars(config: Config) -> Config {
-    let envvar_cof = if let Ok(cof) = env::var("JIKKEN_CONTINUE_ON_FAILURE") {
-        if let Ok(b) = cof.parse::<bool>() {
-            Some(b)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let envvar_apikey = if let Ok(key) = env::var("JIKKEN_API_KEY") {
-        Some(key)
-    } else {
-        None
-    };
-
-    let envvar_env = if let Ok(env) = env::var("JIKKEN_ENVIRONMENT") {
-        Some(env)
-    } else {
-        None
-    };
-
-    let mut global_variables = config.globals.clone();
-    for (key, value) in env::vars() {
-        if let Some(stripped) = key.strip_prefix("JIKKEN_GLOBAL_") {
-            global_variables.insert(stripped.to_string(), value);
-        }
+    #[test]
+    fn no_overrides_yields_default_config() {
+        let sources: Vec<Option<File>> = vec![None, None];
+        let actual = get_config_impl(sources);
+        assert_eq!(Config::default(), actual);
     }
 
-    Config {
-        settings: Settings {
-            continue_on_failure: envvar_cof.unwrap_or(config.settings.continue_on_failure),
-            api_key: envvar_apikey.or(config.settings.api_key),
-            environment: envvar_env.or(config.settings.environment),
-        },
-        globals: global_variables,
+    #[tokio::test]
+    async fn one_overrides_yields_correct_combination() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let override_file_path = tmp_path.join("foo.jikken");
+        let override_file_path_str = override_file_path.to_str().unwrap();
+        _ = std::fs::File::create(override_file_path_str);
+        let mut f = OpenOptions::new()
+            .write(true)
+            .open(override_file_path_str)
+            .expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=true
+            
+            [globals]
+            my_override_global="foo"
+            "#
+            .as_bytes(),
+        )
+        .unwrap();
+        let sources: Vec<Option<File>> = vec![
+            load_config_file(override_file_path.to_str().unwrap()).await,
+            None,
+        ];
+        let actual = get_config_impl(sources);
+        assert_eq!(
+            Config {
+                settings: Settings {
+                    continue_on_failure: true,
+                    api_key: None,
+                    environment: None,
+                },
+                globals: BTreeMap::from([(
+                    String::from("my_override_global"),
+                    String::from("foo")
+                )])
+            },
+            actual
+        );
     }
-}
+
+    #[tokio::test]
+    async fn two_overrides_yields_correct_combination() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let override_file_path = tmp_path.join("foo.jikken");
+        let override_file_path_str = override_file_path.to_str().unwrap();
+        let override_file_path2 = tmp_path.join("foo2.jikken");
+        let override_file_path_str2 = override_file_path2.to_str().unwrap();
+
+        _ = std::fs::File::create(override_file_path_str);
+        let mut f = OpenOptions::new()
+            .write(true)
+            .open(override_file_path_str)
+            .expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=true
+            apiKey="key"
+            
+            [globals]
+            my_override_global="foo"
+            my_override_global2="bar"
+            "#
+            .as_bytes(),
+        )
+        .unwrap();
+
+        _ = std::fs::File::create(override_file_path_str2);
+        f = OpenOptions::new()
+            .write(true)
+            .open(override_file_path_str2)
+            .expect("create failed");
+        f.write_all(
+            r#"
+            [settings]
+            continueOnFailure=false
+            environment="magic"
+
+            [globals]
+            my_override_global="bar"
+            my_override_global3="car"
+            "#
+            .as_bytes(),
+        )
+        .unwrap();
+
+        let sources: Vec<Option<File>> = vec![
+            load_config_file(override_file_path_str).await,
+            load_config_file(override_file_path_str2).await,
+        ];
+        let actual = get_config_impl(sources);
+        assert_eq!(
+            Config {
+                settings: Settings {
+                    continue_on_failure: false,
+                    api_key: Some(String::from("key")),
+                    environment: Some(String::from("magic")),
+                },
+                globals: BTreeMap::from([
+                    (String::from("my_override_global"), String::from("bar")),
+                    (String::from("my_override_global2"), String::from("bar")),
+                    (String::from("my_override_global3"), String::from("car"))
+                ]),
+            },
+            actual
+        );
+    }
+} // mod tests

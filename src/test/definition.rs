@@ -258,15 +258,22 @@ pub struct StageDescriptor {
     pub compare: Option<CompareDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<test::Variable>,
+
+    #[serde(skip_serializing)]
+    pub source_path: String,
 }
 
 impl StageDescriptor {
-    pub fn new(stage: file::UnvalidatedStage) -> Result<StageDescriptor, validation::Error> {
+    pub fn new(
+        stage: file::UnvalidatedStage,
+        source_path: &str,
+    ) -> Result<StageDescriptor, validation::Error> {
         Ok(StageDescriptor {
             request: RequestDescriptor::new(stage.request)?,
             compare: CompareDescriptor::new_opt(stage.compare)?,
             response: ResponseDescriptor::new_opt(stage.response)?,
-            variables: test::Variable::validate_variables_opt(stage.variables)?,
+            variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
+            source_path: source_path.to_string(),
         })
     }
 
@@ -275,6 +282,7 @@ impl StageDescriptor {
         compare_opt: Option<file::UnvalidatedCompareRequest>,
         response_opt: Option<file::UnvalidatedResponse>,
         stages_opt: Option<Vec<file::UnvalidatedStage>>,
+        source_path: &str,
     ) -> Result<Vec<StageDescriptor>, validation::Error> {
         let mut results = Vec::new();
         let mut count = 0;
@@ -285,6 +293,7 @@ impl StageDescriptor {
                 compare: CompareDescriptor::new_opt(compare_opt)?,
                 response: ResponseDescriptor::new_opt(response_opt)?,
                 variables: Vec::new(),
+                source_path: source_path.to_string(),
             });
             count += 1;
         }
@@ -296,7 +305,7 @@ impl StageDescriptor {
                 results.append(
                     &mut stages
                         .into_iter()
-                        .map(StageDescriptor::new)
+                        .map(|s| StageDescriptor::new(s, source_path))
                         .filter_map(|v| match v {
                             Ok(x) => Some(x),
                             Err(_) => None,

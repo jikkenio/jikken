@@ -72,10 +72,11 @@ impl Hash for UnvalidatedResponse {
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedVariable {
     pub name: String,
-    pub data_type: variable::Type,
-    pub value: serde_yaml::Value,
+    pub data_type: Option<variable::Type>,
+    pub value: Option<serde_yaml::Value>,
     pub modifier: Option<variable::Modifier>,
     pub format: Option<String>,
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
