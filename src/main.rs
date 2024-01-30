@@ -150,6 +150,11 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
             .map(|r| r.ok())
             .unwrap_or(None)
     };
+
+    let jikken_ignore_exists_in_dir = |d: &walkdir::DirEntry| {
+        return d.path().join(".jikkenignore").try_exists().unwrap_or(false);
+    };
+
     let pattern = extract_pattern(glob_pattern);
     return move |e: &walkdir::DirEntry| -> bool {
         e.file_name()
@@ -158,7 +163,7 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
                 (e.file_type().is_file()
                     && s.ends_with(".jkt")
                     && satisfies_potential_glob_filter(&pattern, &s))
-                    || e.file_type().is_dir()
+                    || (e.file_type().is_dir() && !jikken_ignore_exists_in_dir(e))
             })
             .unwrap_or(false)
     };
@@ -367,6 +372,28 @@ mod tests {
             .collect();
             let found_files = get_files(vec![String::from(tmp_path_str)], true).await;
             assert_eq!(2, found_files.unwrap().len());
+        } //End Scope
+        _ = tmp_dir.close();
+    }
+    #[tokio::test]
+    async fn get_files_with_one_level_of_depth_recursively_with_jkignore() {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let tmp_path_str = tmp_path.to_str().unwrap();
+        {
+            //Begin Scope
+            let _: Vec<std::fs::File> = vec![
+                "random_file",
+                "my_test.jkt",
+                "something_else",
+                "my_test_2.jkt",
+                ".jikkenignore",
+            ]
+            .iter()
+            .map(|f| File::create(tmp_path.join(f)).unwrap())
+            .collect();
+            let found_files = get_files(vec![String::from(tmp_path_str)], true).await;
+            assert_eq!(0, found_files.unwrap().len());
         } //End Scope
         _ = tmp_dir.close();
     }
