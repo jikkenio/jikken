@@ -16,8 +16,8 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::io::{self, Write};
 use std::time::Instant;
+use std::vec;
 use url::Url;
 
 pub struct Report {
@@ -25,6 +25,166 @@ pub struct Report {
     pub passed: u16,
     pub failed: u16,
 }
+
+trait ExecutionPolicy {
+    fn name(&self) -> String;
+    async fn execute(
+        &mut self,
+        state: &mut State,
+        telemtry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        iteration: u32,
+    ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>;
+}
+
+struct DryRunExecutionPolicy;
+
+impl ExecutionPolicy for DryRunExecutionPolicy {
+    fn name(&self) -> String {
+        "Dry Run".to_string()
+    }
+
+    async fn execute(
+        &mut self,
+        state: &mut State,
+        _telemtry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        iteration: u32,
+    ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+        dry_run(&state, &test, iteration)
+            .await
+            .map(|passed| (passed, vec![] as Vec<StageResult>))
+    }
+}
+
+struct ActualRunExecutionPolicy;
+
+impl ExecutionPolicy for ActualRunExecutionPolicy {
+    fn name(&self) -> String {
+        "Running".to_string()
+    }
+
+    async fn execute(
+        &mut self,
+        state: &mut State,
+        telemtry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        iteration: u32,
+    ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+        let telemetry_test = if let Some(s) = &telemtry {
+            match telemetry::create_test(s, &test).await {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    debug!("telemetry failed: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        run(state, &test, iteration, telemetry_test).await
+    }
+}
+
+struct FailurePolicy<T: ExecutionPolicy> {
+    wrapped_policy: T,
+    fail_fast: bool,
+    failed: bool,
+}
+
+impl<T: ExecutionPolicy> FailurePolicy<T> {
+    fn new(policy: T, fast_failure: bool) -> FailurePolicy<T> {
+        FailurePolicy {
+            wrapped_policy: policy,
+            fail_fast: fast_failure,
+            failed: false,
+        }
+    }
+}
+
+impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
+    fn name(&self) -> String {
+        self.wrapped_policy.name()
+    }
+
+    async fn execute(
+        &mut self,
+        state: &mut State,
+        telemtry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        iteration: u32,
+    ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
+        if self.failed && self.fail_fast {
+            return Err(Box::from("Abandoned due to failure policy".to_string()));
+        }
+        let ret = self
+            .wrapped_policy
+            .execute(state, telemtry, &test, iteration)
+            .await;
+        let passed = ret.as_ref().map(|(passed, _)| *passed).unwrap_or_default();
+        self.failed = !passed;
+        return ret;
+    }
+}
+
+async fn run_tests<T: ExecutionPolicy>(
+    tests: Vec<test::Definition>,
+    telemetry: Option<telemetry::Session>,
+    mut exec_policy: T,
+) -> Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> {
+    let total_count = tests.len();
+    let mut results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
+        Vec::new();
+
+    let mut state = State {
+        variables: HashMap::new(),
+    };
+    let start_time = Instant::now();
+
+    for (i, test) in tests.into_iter().enumerate() {
+        for iteration in 0..test.iterate {
+            info!(
+                "{} Test ({}\\{}) `{}` Iteration({}\\{})\n",
+                exec_policy.name(),
+                i + 1,
+                total_count,
+                test.name.clone().unwrap_or(format!("Test {}", i + 1)),
+                iteration + 1,
+                test.iterate,
+            );
+
+            let result = exec_policy
+                .execute(&mut state, &telemetry, &test, iteration)
+                .await;
+
+            match &result {
+                Ok(p) => {
+                    if p.0 {
+                        info!("\x1b[32mPASSED\x1b[0m\n");
+                    } else {
+                        info!("\x1b[31mFAILED\x1b[0m\n");
+                    }
+                }
+                Err(e) => {
+                    info!("\x1b[31mFAILED\x1b[0m\n");
+                    error!("{}", e);
+                }
+            }
+
+            results.push(result);
+        }
+    }
+
+    let runtime = start_time.elapsed().as_millis() as u32;
+
+    if let Some(s) = &telemetry {
+        _ = telemetry::complete_session(s, runtime, 1).await;
+    }
+
+    return results;
+}
+//---------------------------------------
 
 struct State {
     variables: HashMap<String, String>,
@@ -50,15 +210,17 @@ pub struct ResultData {
     body: serde_json::Value,
 }
 
-impl ResultData {
-    fn default() -> ResultData {
-        ResultData {
+impl Default for ResultData {
+    fn default() -> Self {
+        Self {
             headers: Vec::new(),
             status: 0,
             body: serde_json::Value::Null,
         }
     }
+}
 
+impl ResultData {
     pub fn from_request(req: Option<ResponseDescriptor>) -> ResultData {
         if let Some(r) = req {
             return ResultData {
@@ -134,80 +296,78 @@ pub struct StageResult {
     pub details: ResultDetails,
 }
 
-pub async fn execute_tests(
-    config: config::Config,
-    files: Vec<String>,
-    mode_dryrun: bool,
-    tags: Vec<String>,
-    tag_mode: TagMode,
-    cli_args: Box<serde_json::Value>,
-) -> Report {
-    let global_variables = config.generate_global_variables();
-    let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
-    let mut tests_to_run: Vec<test::Definition> = files
-        .iter()
-        .filter_map(|filename| {
-            let result = test::file::load(filename);
-            match result {
-                Ok(file) => Some(file),
-                Err(e) => {
-                    error!("unable to load test file ({}) data: {}", filename, e);
-                    None
+fn load_test_from_path(filename: &String) -> Option<test::File> {
+    let load_result = test::file::load(filename);
+    return match load_result {
+        Ok(file) => Some(file),
+        Err(e) => {
+            error!("unable to load test file ({}) data: {}", filename, e);
+            None
+        }
+    };
+}
+
+fn validate_test_file(
+    test_file: test::File,
+    global_variables: &Vec<test::Variable>,
+) -> Option<test::Definition> {
+    let name = test_file
+        .name
+        .clone()
+        .unwrap_or_else(|| test_file.filename.clone());
+    let res = validation::validate_file(test_file, &global_variables);
+    return match res {
+        Ok(file) => Some(file),
+        Err(e) => {
+            error!("test ({}) failed validation: {}", name, e);
+            None
+        }
+    };
+}
+
+//consider using a set for tags and leverage set operations
+//insted of raw loops
+fn ignored_due_to_tag_filter(
+    test_definition: &test::Definition,
+    tags: &Vec<String>,
+    tag_mode: &TagMode,
+) -> bool {
+    let test_name = test_definition
+        .name
+        .clone()
+        .unwrap_or("UKNOWN_NAME".to_string());
+
+    match tag_mode {
+        TagMode::OR => {
+            for t in tags.iter() {
+                if test_definition.tags.contains(t) {
+                    return false;
                 }
             }
-        })
-        .filter_map(|f| {
-            let name = f.name.clone().unwrap_or_else(|| f.filename.clone());
-            let result = validation::validate_file(f, &global_variables);
-            match result {
-                Ok(td) => {
-                    if !tags.is_empty() {
-                        let td_tags: HashSet<String> = HashSet::from_iter(td.clone().tags);
-                        match tag_mode {
-                            TagMode::OR => {
-                                for t in tags.iter() {
-                                    if td_tags.contains(t) {
-                                        return Some(td);
-                                    }
-                                }
 
-                                tests_to_ignore.push(td);
-
-                                debug!(
-                                    "test `{}` doesn't match any tags: {}",
-                                    name,
-                                    tags.join(", ")
-                                );
-
-                                return None;
-                            }
-                            TagMode::AND => {
-                                for t in tags.iter() {
-                                    if !td_tags.contains(t) {
-                                        tests_to_ignore.push(td);
-
-                                        debug!("test `{}` is missing tag: {}", name, t);
-                                        return None;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Some(td)
-                }
-                Err(e) => {
-                    error!("test ({}) failed validation: {}", name, e);
-                    None
+            debug!(
+                "test `{}` doesn't match any tags: {}",
+                test_name,
+                tags.join(", ")
+            );
+            return true;
+        }
+        TagMode::AND => {
+            for t in tags.iter() {
+                if !test_definition.tags.contains(t) {
+                    debug!("test `{}` is missing tag: {}", test_name, t);
+                    return true;
                 }
             }
-        })
-        .collect();
-
-    if !tests_to_ignore.is_empty() {
-        trace!("filtering out tests which don't match the tag pattern")
+            return false;
+        }
     }
+}
 
+fn construct_test_execution_graph(
+    mut tests_to_run: Vec<test::Definition>,
+    tests_to_ignore: Vec<test::Definition>,
+) -> Vec<test::Definition> {
     let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
@@ -222,27 +382,69 @@ pub async fn execute_tests(
 
     trace!("determine test execution order based on dependency graph");
 
-    for td in tests_to_run.into_iter() {
+    for td in tests_to_run.iter() {
         if let Some(req) = &td.requires {
             if tests_by_id.contains_key(req) && !duplicate_filter.contains(req) {
                 duplicate_filter.insert(req.clone());
-                tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().to_owned());
+                tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().clone())
             }
         }
 
         if !duplicate_filter.contains(&td.id) {
             duplicate_filter.insert(td.id.clone());
-            tests_to_run_with_dependencies.push(td);
+            tests_to_run_with_dependencies.push(td.clone());
         }
     }
 
-    let total_count = tests_to_run_with_dependencies.len();
+    return tests_to_run_with_dependencies;
+}
+
+pub async fn execute_tests(
+    config: config::Config,
+    files: Vec<String>,
+    mode_dryrun: bool,
+    tags: Vec<String>,
+    tag_mode: TagMode,
+    cli_args: Box<serde_json::Value>,
+) -> Report {
+    let global_variables = config.generate_global_variables();
+    let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
+    let tests_to_run: Vec<test::Definition> = files
+        .iter()
+        .filter_map(load_test_from_path)
+        .filter_map(|f| validate_test_file(f, &global_variables))
+        .filter_map(|f| {
+            if !ignored_due_to_tag_filter(&f, &tags, &tag_mode) {
+                Some(f)
+            } else {
+                tests_to_ignore.push(f);
+                None
+            }
+        })
+        .collect();
+
+    if !tests_to_ignore.is_empty() {
+        trace!("filtering out tests which don't match the tag pattern")
+    }
+
+    trace!("determine test execution order based on dependency graph");
+
+    let tests_to_run_with_dependencies =
+        construct_test_execution_graph(tests_to_run, tests_to_ignore);
+
     let mut session: Option<telemetry::Session> = None;
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
             if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(t, total_count as u32, cli_args, &config).await {
+                match telemetry::create_session(
+                    t,
+                    tests_to_run_with_dependencies.len() as u32,
+                    cli_args,
+                    &config,
+                )
+                .await
+                {
                     Ok(sess) => {
                         session = Some(sess);
                     }
@@ -256,114 +458,40 @@ pub async fn execute_tests(
         }
     }
 
-    let mut state = State {
-        variables: HashMap::new(),
+    let results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>;
+
+    if mode_dryrun {
+        results = run_tests(
+            tests_to_run_with_dependencies,
+            session,
+            FailurePolicy::new(DryRunExecutionPolicy, config.settings.continue_on_failure),
+        )
+        .await;
+    } else {
+        results = run_tests(
+            tests_to_run_with_dependencies,
+            session,
+            FailurePolicy::new(
+                ActualRunExecutionPolicy,
+                config.settings.continue_on_failure,
+            ),
+        )
+        .await;
+    }
+
+    let run = results.len();
+    let totals = results
+        .into_iter()
+        .fold((0, 0), |(passed, failed), result| {
+            let fail = result.is_err() || !result.unwrap().0;
+            return (passed + 1 * (!fail as u16), failed + 1 * fail as u16);
+        });
+
+    return Report {
+        failed: totals.1,
+        passed: totals.0,
+        run: run as u16,
     };
-
-    let mut run_count: u16 = 0;
-    let mut passed_count: u16 = 0;
-    let mut failed_count: u16 = 0;
-
-    let start_time = Instant::now();
-    let mut break_early = false;
-
-    for (i, td) in tests_to_run_with_dependencies.into_iter().enumerate() {
-        if break_early {
-            break;
-        }
-
-        for iteration in 0..td.iterate {
-            run_count += 1;
-
-            let mut passed = true;
-
-            if mode_dryrun {
-                info!(
-                    "Dry Run Test ({}\\{}) `{}` Iteration({}\\{})\n",
-                    i + 1,
-                    total_count,
-                    td.name.clone().unwrap_or(format!("Test {}", i + 1)),
-                    iteration + 1,
-                    td.iterate,
-                );
-
-                let result = dry_run(&state, &td, iteration).await;
-
-                if let Err(e) = result {
-                    passed = false;
-                    error!("{}", e);
-                }
-            } else {
-                info!(
-                    "Running Test ({}\\{}) `{}` Iteration ({}\\{})...",
-                    i + 1,
-                    total_count,
-                    td.name.clone().unwrap_or(format!("Test {}", i + 1)),
-                    iteration + 1,
-                    td.iterate,
-                );
-                io::stdout().flush().unwrap();
-                debug!(""); // print a new line if we're in debug | trace mode
-
-                let test = if let Some(s) = &session {
-                    match telemetry::create_test(s, &td).await {
-                        Ok(t) => Some(t),
-                        Err(e) => {
-                            debug!("telemetry failed: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let result = run(&mut state, &td, iteration, test).await;
-
-                match result {
-                    Ok(p) => {
-                        if p.0 {
-                            info!("\x1b[32mPASSED\x1b[0m\n");
-                        } else {
-                            info!("\x1b[31mFAILED\x1b[0m\n");
-                            passed = false;
-                        }
-                    }
-                    Err(e) => {
-                        info!("\x1b[31mFAILED\x1b[0m\n");
-                        error!("{}", e);
-                        passed = false;
-                    }
-                }
-            };
-
-            if passed {
-                passed_count += 1;
-            } else {
-                failed_count += 1;
-            }
-
-            if !config.settings.continue_on_failure && !passed {
-                if let Some(s) = &session {
-                    let runtime = start_time.elapsed().as_millis() as u32;
-                    _ = telemetry::complete_session(s, runtime, 2).await;
-                }
-
-                break_early = true;
-                break;
-            }
-        }
-    }
-
-    if let Some(s) = &session {
-        let runtime = start_time.elapsed().as_millis() as u32;
-        _ = telemetry::complete_session(s, runtime, 1).await;
-    }
-
-    Report {
-        run: run_count,
-        passed: passed_count,
-        failed: failed_count,
-    }
 }
 
 async fn run(
@@ -1275,3 +1403,96 @@ fn validate_dry_run(
 
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // \todo tests for construct_test_execution_graph
+
+    fn default_definition_for_filtering() -> test::Definition {
+        test::Definition {
+            name: None,
+            id: String::from("id"),
+            environment: None,
+            requires: None,
+            tags: vec![String::from("myTag"), String::from("myTag2")],
+            iterate: 0,
+            variables: Vec::new(),
+            global_variables: Vec::new(),
+            stages: Vec::new(),
+            setup: None,
+            cleanup: definition::CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                always: None,
+            },
+        }
+    }
+
+    #[test]
+    fn or_filter_not_exists() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("nonexistant")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            true,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+
+    #[test]
+    fn or_filter_exists() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("myTag")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            false,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+
+    #[test]
+    fn and_filter_not_exists() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("nonexistant")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            true,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+
+    #[test]
+    fn and_filter_partial_match() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("myTag"), String::from("nonexistant")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            true,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+
+    #[test]
+    fn and_filter_match() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("myTag"), String::from("myTag2")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            false,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+
+    #[test]
+    fn and_filter_exists() {
+        let test_definition = default_definition_for_filtering();
+        let tags = vec![String::from("myTag")];
+        let tag_mode = TagMode::AND;
+        assert_eq!(
+            false,
+            ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
+        );
+    }
+} //mod tests
