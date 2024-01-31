@@ -6,6 +6,7 @@ use crate::telemetry;
 use crate::test;
 use crate::test::definition::ResponseDescriptor;
 use crate::test::http;
+use crate::test::Definition;
 use crate::test::{definition, validation};
 use crate::TagMode;
 use hyper::header::HeaderValue;
@@ -16,6 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::fmt;
 use std::time::Instant;
 use std::vec;
 use url::Url;
@@ -24,6 +26,104 @@ pub struct Report {
     pub run: u16,
     pub passed: u16,
     pub failed: u16,
+}
+
+pub struct TestResult {
+    pub test_name: String,
+    pub iteration_results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>,
+}
+
+pub struct ExecutionResult {
+    //Elapsed Time?
+    //Start Time?
+    pub test_results: Vec<TestResult>,
+}
+
+struct FormattedExecutionResult(String);
+
+impl fmt::Display for FormattedExecutionResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+trait ExecutionResultFormatter {
+    fn format(&self, res: &ExecutionResult) -> FormattedExecutionResult;
+}
+
+struct JunitResultFormatter;
+
+//Find a way to
+//Treat it more like an accumulator for more efficient generation
+//of multiple formats
+impl ExecutionResultFormatter for JunitResultFormatter {
+    fn format(&self, res: &ExecutionResult) -> FormattedExecutionResult {
+        let mut lines: Vec<String> = Vec::new();
+
+        lines.push(r#"<?xml version="1.0" encoding="UTF-8"?>"#.to_string());
+        lines.push(r#"<testsuites>"#.to_string());
+        for test in res.test_results.iter() {
+            lines.push(format!(r#"<testsuite name="{}">"#, test.test_name));
+            for (it_num, it) in test.iteration_results.iter().enumerate() {
+                let test_iteration_name =
+                    format!("{}.Iterations.{}", test.test_name.as_str(), it_num + 1);
+                lines.push(format!(
+                    r#"<testsuite name="{}">"#,
+                    test_iteration_name.as_str(),
+                ));
+
+                match &it {
+                    Ok((_passed, stage_results)) => {
+                        for (stage_number, stage_result) in stage_results.iter().enumerate() {
+                            if stage_result.status == TestStatus::Passed {
+                                lines.push(format!(
+                                    r#"<testcase name="stage_{}" classname="{}"/>"#,
+                                    stage_number + 1,
+                                    test_iteration_name.as_str()
+                                ));
+                            } else {
+                                lines.push(format!(
+                                    r#"<testcase name="stage_{}" classname="{}">"#,
+                                    stage_number + 1,
+                                    test_iteration_name.as_str()
+                                ));
+
+                                lines.push(
+                                    r#"<failure message="Assertion error message" type="AssertionError"/>"#.to_string()
+                                );
+
+                                lines.push(r#"</testcase>"#.to_string());
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        lines
+                            .push(r#"<testcase name="Initial" classname="Initial" />"#.to_string());
+                    }
+                }
+
+                lines.push("</testsuite>".to_string());
+            }
+            lines.push("</testsuite>".to_string());
+        }
+        lines.push("</testsuites>".to_string());
+
+        return FormattedExecutionResult {
+            0: lines.join("\n"),
+        };
+    }
+}
+
+trait ExecutionResultReporter {
+    fn report(&self, res: &FormattedExecutionResult);
+}
+
+struct ConsoleReporter;
+
+impl ExecutionResultReporter for ConsoleReporter {
+    fn report(&self, res: &FormattedExecutionResult) {
+        print!("{res}\n");
+    }
 }
 
 trait ExecutionPolicy {
@@ -116,7 +216,7 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         if self.failed && self.fail_fast {
-            return Err(Box::from("Abandoned due to failure policy".to_string()));
+            return Err(Box::from("Not ran due to failure policy".to_string()));
         }
         let ret = self
             .wrapped_policy
@@ -129,27 +229,29 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
 }
 
 async fn run_tests<T: ExecutionPolicy>(
-    tests: Vec<test::Definition>,
+    tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
-) -> Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> {
+) -> Vec<TestResult> {
     let total_count = tests.len();
-    let mut results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
-        Vec::new();
+    let mut results: Vec<TestResult> = Vec::new();
 
     let mut state = State {
         variables: HashMap::new(),
     };
     let start_time = Instant::now();
 
-    for (i, test) in tests.into_iter().enumerate() {
+    for (i, test) in tests.into_iter().flatten().enumerate() {
+        let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
+            Vec::new();
+        let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
             info!(
                 "{} Test ({}\\{}) `{}` Iteration({}\\{})\n",
                 exec_policy.name(),
                 i + 1,
                 total_count,
-                test.name.clone().unwrap_or(format!("Test {}", i + 1)),
+                &test_name,
                 iteration + 1,
                 test.iterate,
             );
@@ -172,8 +274,12 @@ async fn run_tests<T: ExecutionPolicy>(
                 }
             }
 
-            results.push(result);
+            test_result.push(result);
         }
+        results.push(TestResult {
+            test_name: test_name,
+            iteration_results: test_result,
+        });
     }
 
     let runtime = start_time.elapsed().as_millis() as u32;
@@ -184,7 +290,6 @@ async fn run_tests<T: ExecutionPolicy>(
 
     return results;
 }
-//---------------------------------------
 
 struct State {
     variables: HashMap<String, String>,
@@ -364,39 +469,96 @@ fn ignored_due_to_tag_filter(
     }
 }
 
-fn construct_test_execution_graph(
-    mut tests_to_run: Vec<test::Definition>,
+fn schedule_impl(
+    graph: &HashMap<String, HashSet<String>>,
+    scheduled_nodes: &HashSet<String>,
+) -> HashSet<String> {
+    let mut ignore: HashSet<String> = HashSet::new();
+    ignore.clone_from(&scheduled_nodes);
+
+    //Is there a way to do in 1 iteration?
+    graph
+        .iter()
+        .filter(|(node, _)| !scheduled_nodes.contains(*node))
+        .for_each(|(_, edges)| {
+            edges.iter().for_each(|e| _ = ignore.insert(e.clone()));
+        });
+    return graph
+        .keys()
+        .filter(|s| !ignore.contains(*s))
+        .map(|s| s.clone())
+        .collect();
+}
+
+fn construct_test_execution_graph_v2(
+    tests_to_run: Vec<test::Definition>,
     tests_to_ignore: Vec<test::Definition>,
-) -> Vec<test::Definition> {
+) -> Vec<Vec<Definition>> {
     let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
-        .map(|td| (td.id.clone(), td))
+        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
         .collect();
-
-    tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-
-    let mut duplicate_filter: HashSet<String> = HashSet::new();
-    let mut tests_to_run_with_dependencies: Vec<test::Definition> = Vec::new();
 
     trace!("determine test execution order based on dependency graph");
 
-    for td in tests_to_run.iter() {
-        if let Some(req) = &td.requires {
-            if tests_by_id.contains_key(req) && !duplicate_filter.contains(req) {
-                duplicate_filter.insert(req.clone());
-                tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().clone())
-            }
-        }
+    //Nodes are IDs ; Directed edges imply ordering; i.e. A -> B; B depends on A
+    let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
+    tests_to_run
+        .iter()
+        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
+        .for_each(|(name, definition)| {
+            match definition.requires.as_ref() {
+                Some(req) => {
+                    if !tests_by_id.contains_key(req) {
+                        return;
+                    }
 
-        if !duplicate_filter.contains(&td.id) {
-            duplicate_filter.insert(td.id.clone());
-            tests_to_run_with_dependencies.push(td.clone());
-        }
+                    if let Some(edges) = graph.get_mut(req) {
+                        edges.insert(name.clone());
+                    } else {
+                        graph.insert(req.clone(), HashSet::from([name.clone()]));
+                    }
+                }
+                None => {}
+            }
+
+            if !graph.contains_key(&name) {
+                graph.insert(name.clone(), HashSet::new());
+            }
+        });
+
+    let mut jobs: Vec<HashSet<String>> = Vec::new();
+    let mut scheduled_nodes: HashSet<String> = HashSet::new();
+    while graph.len() != scheduled_nodes.len() {
+        let job = schedule_impl(&graph, &scheduled_nodes);
+        job.iter()
+            .for_each(|n| _ = scheduled_nodes.insert(n.clone()));
+        jobs.push(job);
     }
 
-    return tests_to_run_with_dependencies;
+    let job_definitions: Vec<Vec<Definition>> = jobs
+        .into_iter()
+        .map(|hs| {
+            hs.into_iter()
+                .map(|id| tests_by_id.get(&id).unwrap().clone())
+                .collect::<Vec<Definition>>()
+        })
+        .collect();
+
+    for (count, job) in job_definitions.iter().enumerate() {
+        trace!(
+            "Job {count}, Tests: {}",
+            job.iter().fold("".to_string(), |acc, x| format!(
+                "{},{}",
+                acc,
+                x.name.as_ref().unwrap_or(&x.id)
+            ))
+        )
+    }
+
+    return job_definitions;
 }
 
 pub async fn execute_tests(
@@ -430,21 +592,18 @@ pub async fn execute_tests(
     trace!("determine test execution order based on dependency graph");
 
     let tests_to_run_with_dependencies =
-        construct_test_execution_graph(tests_to_run, tests_to_ignore);
+        construct_test_execution_graph_v2(tests_to_run.clone(), tests_to_ignore.clone());
+
+    let total_tests = tests_to_run_with_dependencies
+        .iter()
+        .fold(0, |acc, x| acc + x.len());
 
     let mut session: Option<telemetry::Session> = None;
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
             if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(
-                    t,
-                    tests_to_run_with_dependencies.len() as u32,
-                    cli_args,
-                    &config,
-                )
-                .await
-                {
+                match telemetry::create_session(t, total_tests as u32, cli_args, &config).await {
                     Ok(sess) => {
                         session = Some(sess);
                     }
@@ -458,17 +617,15 @@ pub async fn execute_tests(
         }
     }
 
-    let results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>;
-
-    if mode_dryrun {
-        results = run_tests(
+    let results: Vec<TestResult> = if mode_dryrun {
+        run_tests(
             tests_to_run_with_dependencies,
             session,
             FailurePolicy::new(DryRunExecutionPolicy, config.settings.continue_on_failure),
         )
-        .await;
+        .await
     } else {
-        results = run_tests(
+        run_tests(
             tests_to_run_with_dependencies,
             session,
             FailurePolicy::new(
@@ -476,12 +633,22 @@ pub async fn execute_tests(
                 config.settings.continue_on_failure,
             ),
         )
-        .await;
-    }
+        .await
+    };
 
-    let run = results.len();
-    let totals = results
+    let execution_res = ExecutionResult {
+        test_results: results,
+    };
+    /*
+        let summary = JunitResultFormatter.format(&execution_res);
+        ConsoleReporter.report(&summary);
+    */
+    let run = execution_res.test_results.len();
+    let totals = execution_res
+        .test_results
         .into_iter()
+        .map(|tr| tr.iteration_results)
+        .flatten()
         .fold((0, 0), |(passed, failed), result| {
             let fail = result.is_err() || !result.unwrap().0;
             return (passed + 1 * (!fail as u16), failed + 1 * fail as u16);
