@@ -6,6 +6,7 @@ use crate::telemetry;
 use crate::test;
 use crate::test::definition::ResponseDescriptor;
 use crate::test::http;
+use crate::test::Definition;
 use crate::test::{definition, validation};
 use crate::TagMode;
 use hyper::header::HeaderValue;
@@ -61,7 +62,7 @@ impl ExecutionResultFormatter for JunitResultFormatter {
 
         lines.push(r#"<?xml version="1.0" encoding="UTF-8"?>"#.to_string());
         lines.push(r#"<testsuites>"#.to_string());
-        for (_test_num, test) in res.test_results.iter().enumerate() {
+        for test in res.test_results.iter() {
             lines.push(format!(r#"<testsuite name="{}">"#, test.test_name));
             for (it_num, it) in test.iteration_results.iter().enumerate() {
                 let test_iteration_name =
@@ -228,7 +229,7 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
 }
 
 async fn run_tests<T: ExecutionPolicy>(
-    tests: Vec<test::Definition>,
+    tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
 ) -> Vec<TestResult> {
@@ -240,7 +241,7 @@ async fn run_tests<T: ExecutionPolicy>(
     };
     let start_time = Instant::now();
 
-    for (i, test) in tests.into_iter().enumerate() {
+    for (i, test) in tests.into_iter().flatten().enumerate() {
         let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
             Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
@@ -468,39 +469,96 @@ fn ignored_due_to_tag_filter(
     }
 }
 
-fn construct_test_execution_graph(
-    mut tests_to_run: Vec<test::Definition>,
+fn schedule_impl(
+    graph: &HashMap<String, HashSet<String>>,
+    scheduled_nodes: &HashSet<String>,
+) -> HashSet<String> {
+    let mut ignore: HashSet<String> = HashSet::new();
+    ignore.clone_from(&scheduled_nodes);
+
+    //Is there a way to do in 1 iteration?
+    graph
+        .iter()
+        .filter(|(node, _)| !scheduled_nodes.contains(*node))
+        .for_each(|(_, edges)| {
+            edges.iter().for_each(|e| _ = ignore.insert(e.clone()));
+        });
+    return graph
+        .keys()
+        .filter(|s| !ignore.contains(*s))
+        .map(|s| s.clone())
+        .collect();
+}
+
+fn construct_test_execution_graph_v2(
+    tests_to_run: Vec<test::Definition>,
     tests_to_ignore: Vec<test::Definition>,
-) -> Vec<test::Definition> {
+) -> Vec<Vec<Definition>> {
     let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
-        .map(|td| (td.id.clone(), td))
+        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
         .collect();
-
-    tests_to_run.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-
-    let mut duplicate_filter: HashSet<String> = HashSet::new();
-    let mut tests_to_run_with_dependencies: Vec<test::Definition> = Vec::new();
 
     trace!("determine test execution order based on dependency graph");
 
-    for td in tests_to_run.iter() {
-        if let Some(req) = &td.requires {
-            if tests_by_id.contains_key(req) && !duplicate_filter.contains(req) {
-                duplicate_filter.insert(req.clone());
-                tests_to_run_with_dependencies.push(tests_by_id.get(req).unwrap().clone())
-            }
-        }
+    //Nodes are IDs ; Directed edges imply ordering; i.e. A -> B; B depends on A
+    let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
+    tests_to_run
+        .iter()
+        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
+        .for_each(|(name, definition)| {
+            match definition.requires.as_ref() {
+                Some(req) => {
+                    if !tests_by_id.contains_key(req) {
+                        return;
+                    }
 
-        if !duplicate_filter.contains(&td.id) {
-            duplicate_filter.insert(td.id.clone());
-            tests_to_run_with_dependencies.push(td.clone());
-        }
+                    if let Some(edges) = graph.get_mut(req) {
+                        edges.insert(name.clone());
+                    } else {
+                        graph.insert(req.clone(), HashSet::from([name.clone()]));
+                    }
+                }
+                None => {}
+            }
+
+            if !graph.contains_key(&name) {
+                graph.insert(name.clone(), HashSet::new());
+            }
+        });
+
+    let mut jobs: Vec<HashSet<String>> = Vec::new();
+    let mut scheduled_nodes: HashSet<String> = HashSet::new();
+    while graph.len() != scheduled_nodes.len() {
+        let job = schedule_impl(&graph, &scheduled_nodes);
+        job.iter()
+            .for_each(|n| _ = scheduled_nodes.insert(n.clone()));
+        jobs.push(job);
     }
 
-    return tests_to_run_with_dependencies;
+    let job_definitions: Vec<Vec<Definition>> = jobs
+        .into_iter()
+        .map(|hs| {
+            hs.into_iter()
+                .map(|id| tests_by_id.get(&id).unwrap().clone())
+                .collect::<Vec<Definition>>()
+        })
+        .collect();
+
+    for (count, job) in job_definitions.iter().enumerate() {
+        trace!(
+            "Job {count}, Tests: {}",
+            job.iter().fold("".to_string(), |acc, x| format!(
+                "{},{}",
+                acc,
+                x.name.as_ref().unwrap_or(&x.id)
+            ))
+        )
+    }
+
+    return job_definitions;
 }
 
 pub async fn execute_tests(
@@ -534,21 +592,18 @@ pub async fn execute_tests(
     trace!("determine test execution order based on dependency graph");
 
     let tests_to_run_with_dependencies =
-        construct_test_execution_graph(tests_to_run, tests_to_ignore);
+        construct_test_execution_graph_v2(tests_to_run.clone(), tests_to_ignore.clone());
+
+    let total_tests = tests_to_run_with_dependencies
+        .iter()
+        .fold(0, |acc, x| acc + x.len());
 
     let mut session: Option<telemetry::Session> = None;
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
             if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(
-                    t,
-                    tests_to_run_with_dependencies.len() as u32,
-                    cli_args,
-                    &config,
-                )
-                .await
-                {
+                match telemetry::create_session(t, total_tests as u32, cli_args, &config).await {
                     Ok(sess) => {
                         session = Some(sess);
                     }
@@ -585,10 +640,10 @@ pub async fn execute_tests(
         test_results: results,
     };
     /*
-        TODO : integrate this kind of behavior once CLI args
-        are formulated:
-        let summary = JunitResultFormatter.format(&execution_res);
-        ConsoleReporter.report(&summary);
+            TODO : integrate this kind of behavior once CLI args
+            are formulated:
+            let summary = JunitResultFormatter.format(&execution_res);
+            ConsoleReporter.report(&summary);
     */
     let run = execution_res.test_results.len();
     let totals = execution_res
