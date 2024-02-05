@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+Changes:
+* Changed the field name for variable definitions from `dataType` to just `type`.
+
 0.6.1
 =====
 
