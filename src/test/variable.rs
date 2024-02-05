@@ -2,9 +2,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Type {
+    #[serde(alias = "int", alias = "INT")]
     Int,
+    #[serde(alias = "string", alias = "STRING")]
     String,
+    #[serde(alias = "date", alias = "DATE")]
     Date,
+    #[serde(alias = "datetime", alias = "DATETIME")]
     Datetime,
 }
 
