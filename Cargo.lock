@@ -12,6 +12,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "adjacent-pair-iterator"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2093cd186f4823b32952a607fd37ade78f7c46f54a33374d08f9923c45752883"
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -807,6 +813,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 name = "jikken"
 version = "0.6.1"
 dependencies = [
+ "adjacent-pair-iterator",
  "assert-json-diff",
  "chrono",
  "clap",

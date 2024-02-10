@@ -1576,8 +1576,95 @@ fn validate_dry_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adjacent_pair_iterator::AdjacentPairIterator;
 
-    // \todo tests for construct_test_execution_graph
+    fn construct_definition_for_dependency_graph(
+        name: &str,
+        requires: Option<String>
+    ) -> test::Definition {
+        test::Definition {
+            name: Some(name.to_string()),
+            id: String::from("id"),
+            environment: None,
+            requires: requires,
+            tags: vec![String::from("myTag"), String::from("myTag2")],
+            iterate: 0,
+            variables: Vec::new(),
+            global_variables: Vec::new(),
+            stages: Vec::new(),
+            setup: None,
+            cleanup: definition::CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                always: None,
+            },
+        }
+    }
+
+    #[test]
+    fn no_dependencies_is_one_execution_node() {
+        let defs  = 
+            vec!["A", "B","C", "D"]
+                .into_iter()
+                .map(|name|construct_definition_for_dependency_graph(name, None))
+                .collect();
+        
+        let actual = 
+            construct_test_execution_graph_v2(defs, vec![construct_definition_for_dependency_graph("E", None)]); 
+        assert_eq!(1, actual.len());
+        assert_eq!(4, actual.get(0).unwrap().len());
+    }
+
+    #[test]
+    fn one_root_dependency_is_two_execution_nodes() {
+        let mut defs = 
+            vec!["A", "B","C", "D"]
+                .into_iter()
+                .map(|name|construct_definition_for_dependency_graph(name, Some("Parent".to_string())))
+                .collect::<Vec<Definition>>();
+        
+        defs.push(construct_definition_for_dependency_graph("Parent", None));
+        
+        let actual = 
+            construct_test_execution_graph_v2(
+                defs, 
+                vec![construct_definition_for_dependency_graph("E", None)]
+            ); 
+        
+        assert_eq!(2, actual.len());
+        assert_eq!(1, actual.get(0).unwrap().len());
+        assert_eq!("Parent", actual.get(0).unwrap().get(0).unwrap().name.clone().unwrap());
+        assert_eq!(4, actual.get(1).unwrap().len());
+    }
+
+    #[test]
+    fn straight_line_dependency_is_node_chain() {
+        let defs = 
+            vec!["A", "B","C", "D"]
+                .adjacent_pairs()
+                .into_iter()
+                .enumerate()
+                .map(|(pos, (fst, snd))| {
+                    let mut res : Vec<Definition> = Vec::new();
+                    if pos == 0 {
+                        res.push(construct_definition_for_dependency_graph(fst, None));
+                    }
+                    
+                    res.push(construct_definition_for_dependency_graph(snd, Some(fst.to_string())));
+                    
+                    return res;
+                })
+                .flatten()
+                .collect::<Vec<Definition>>();
+
+        let actual = 
+            construct_test_execution_graph_v2(
+                defs, 
+                Vec::new()
+            ); 
+        
+        assert_eq!(4, actual.len());
+    }
 
     fn default_definition_for_filtering() -> test::Definition {
         test::Definition {
