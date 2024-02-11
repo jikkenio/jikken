@@ -246,7 +246,7 @@ async fn run_tests<T: ExecutionPolicy>(
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
             info!(
-                "{} Test ({}\\{}) `{}` Iteration({}\\{})\n",
+                "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
                 exec_policy.name(),
                 i + 1,
                 total_count,
