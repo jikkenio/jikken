@@ -1297,7 +1297,7 @@ fn http_request_from_test_spec(
 async fn process_request(
     state: &State,
     resolved_request: test::definition::ResolvedRequest,
-) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
+)-> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     debug!("url({})", resolved_request.url);
 
