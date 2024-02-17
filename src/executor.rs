@@ -233,7 +233,8 @@ async fn run_tests<T: ExecutionPolicy>(
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
 ) -> Vec<TestResult> {
-    let total_count = tests.len();
+    let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
+    let total_count = flattened_tests.len();
     let mut results: Vec<TestResult> = Vec::new();
 
     let mut state = State {
@@ -241,7 +242,7 @@ async fn run_tests<T: ExecutionPolicy>(
     };
     let start_time = Instant::now();
 
-    for (i, test) in tests.into_iter().flatten().enumerate() {
+    for (i, test) in flattened_tests.into_iter().enumerate() {
         let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
             Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
@@ -1580,7 +1581,7 @@ mod tests {
 
     fn construct_definition_for_dependency_graph(
         name: &str,
-        requires: Option<String>
+        requires: Option<String>,
     ) -> test::Definition {
         test::Definition {
             name: Some(name.to_string()),
@@ -1603,66 +1604,66 @@ mod tests {
 
     #[test]
     fn no_dependencies_is_one_execution_node() {
-        let defs  = 
-            vec!["A", "B","C", "D"]
-                .into_iter()
-                .map(|name|construct_definition_for_dependency_graph(name, None))
-                .collect();
-        
-        let actual = 
-            construct_test_execution_graph_v2(defs, vec![construct_definition_for_dependency_graph("E", None)]); 
+        let defs = vec!["A", "B", "C", "D"]
+            .into_iter()
+            .map(|name| construct_definition_for_dependency_graph(name, None))
+            .collect();
+
+        let actual = construct_test_execution_graph_v2(
+            defs,
+            vec![construct_definition_for_dependency_graph("E", None)],
+        );
         assert_eq!(1, actual.len());
         assert_eq!(4, actual.get(0).unwrap().len());
     }
 
     #[test]
     fn one_root_dependency_is_two_execution_nodes() {
-        let mut defs = 
-            vec!["A", "B","C", "D"]
-                .into_iter()
-                .map(|name|construct_definition_for_dependency_graph(name, Some("Parent".to_string())))
-                .collect::<Vec<Definition>>();
-        
+        let mut defs = vec!["A", "B", "C", "D"]
+            .into_iter()
+            .map(|name| construct_definition_for_dependency_graph(name, Some("Parent".to_string())))
+            .collect::<Vec<Definition>>();
+
         defs.push(construct_definition_for_dependency_graph("Parent", None));
-        
-        let actual = 
-            construct_test_execution_graph_v2(
-                defs, 
-                vec![construct_definition_for_dependency_graph("E", None)]
-            ); 
-        
+
+        let actual = construct_test_execution_graph_v2(
+            defs,
+            vec![construct_definition_for_dependency_graph("E", None)],
+        );
+
         assert_eq!(2, actual.len());
         assert_eq!(1, actual.get(0).unwrap().len());
-        assert_eq!("Parent", actual.get(0).unwrap().get(0).unwrap().name.clone().unwrap());
+        assert_eq!(
+            "Parent",
+            actual.get(0).unwrap().get(0).unwrap().name.clone().unwrap()
+        );
         assert_eq!(4, actual.get(1).unwrap().len());
     }
 
     #[test]
     fn straight_line_dependency_is_node_chain() {
-        let defs = 
-            vec!["A", "B","C", "D"]
-                .adjacent_pairs()
-                .into_iter()
-                .enumerate()
-                .map(|(pos, (fst, snd))| {
-                    let mut res : Vec<Definition> = Vec::new();
-                    if pos == 0 {
-                        res.push(construct_definition_for_dependency_graph(fst, None));
-                    }
-                    
-                    res.push(construct_definition_for_dependency_graph(snd, Some(fst.to_string())));
-                    
-                    return res;
-                })
-                .flatten()
-                .collect::<Vec<Definition>>();
+        let defs = vec!["A", "B", "C", "D"]
+            .adjacent_pairs()
+            .into_iter()
+            .enumerate()
+            .map(|(pos, (fst, snd))| {
+                let mut res: Vec<Definition> = Vec::new();
+                if pos == 0 {
+                    res.push(construct_definition_for_dependency_graph(fst, None));
+                }
 
-        let actual = 
-            construct_test_execution_graph_v2(
-                defs, 
-                Vec::new()
-            ); 
-        
+                res.push(construct_definition_for_dependency_graph(
+                    snd,
+                    Some(fst.to_string()),
+                ));
+
+                return res;
+            })
+            .flatten()
+            .collect::<Vec<Definition>>();
+
+        let actual = construct_test_execution_graph_v2(defs, Vec::new());
+
         assert_eq!(4, actual.len());
     }
 
