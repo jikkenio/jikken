@@ -1297,7 +1297,7 @@ fn http_request_from_test_spec(
 async fn process_request(
     state: &State,
     resolved_request: test::definition::ResolvedRequest,
-)-> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
+) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     debug!("url({})", resolved_request.url);
 
@@ -1587,13 +1587,66 @@ fn validate_dry_run(
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
-
     use self::test::definition::ResolvedRequest;
+    use hyper::Response;
+    use std::any::Any;
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
-    use hyper::Method;
+    use hyper::StatusCode;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn from_bad_response() {
+        let rep = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::empty());
+
+        let result = ResultData::from_response(rep.unwrap()).await;
+        assert_eq!(400, result.as_ref().unwrap().status);
+    }
+
+    #[tokio::test]
+    async fn from_response_object_body() {
+        let val = json!({
+            "name": "John Doe",
+            "age": 43
+        });
+
+        let rep = Response::builder()
+            .status(StatusCode::OK)
+            .body(Body::from(val.to_string()));
+
+        let result = ResultData::from_response(rep.unwrap()).await;
+        assert_eq!(200, result.as_ref().unwrap().status);
+        assert_eq!(val.to_string(), result.as_ref().unwrap().body.to_string());
+    }
+
+    #[tokio::test]
+    async fn from_response_string_body() {
+        let rep = Response::builder()
+            .status(StatusCode::OK)
+            //notice, serde will only capture it if its quoted
+            //could we detect this and possibly account for it?
+            .body(Body::from("\"ok;\""));
+
+        let result = ResultData::from_response(rep.unwrap()).await;
+        assert_eq!(200, result.as_ref().unwrap().status);
+        assert_eq!("ok;", result.as_ref().unwrap().body.as_str().unwrap());
+    }
+
+    #[tokio::test]
+    async fn from_response_empty_body() {
+        let rep = Response::builder()
+            .header("foo", "bar")
+            .status(StatusCode::OK)
+            .body(Body::empty());
+
+        let result = ResultData::from_response(rep.unwrap()).await;
+        assert_eq!(200, result.as_ref().unwrap().status);
+        assert_eq!(1, result.as_ref().unwrap().headers.len());
+        assert!(result.as_ref().unwrap().body.is_null());
+    }
 
     #[test]
     fn http_request_from_test_spec_post() {
