@@ -1256,58 +1256,54 @@ async fn validate_stage(
 }
 
 fn http_request_from_test_spec(
-    variables: &HashMap<String,String>,
+    variables: &HashMap<String, String>,
     resolved_request: test::definition::ResolvedRequest,
-)-> Result<Request<Body>, Box<dyn Error + Send + Sync>> {
-            
-    let vars : Vec<(String,&String)> = 
-        variables.iter().map(
-            |(k,v)| (format!("${{{}}}", k) , v) 
-        ).collect();
-    
+) -> Result<Request<Body>, Box<dyn Error + Send + Sync>> {
+    let vars: Vec<(String, &String)> = variables
+        .iter()
+        .map(|(k, v)| (format!("${{{}}}", k), v))
+        .collect();
+
     //Where all can we resolve variables? May be worth making an external function
-    let variable_resolver = |variable : String| -> String{
-        vars.iter().fold(
-            variable,
-            |acc, (var_name, var_value)|acc.replace(var_name, *var_value)
-        )
+    let variable_resolver = |variable: String| -> String {
+        vars.iter().fold(variable, |acc, (var_name, var_value)| {
+            acc.replace(var_name, *var_value)
+        })
     };
-    
-    return  Url::parse(&resolved_request.url)
+
+    return Url::parse(&resolved_request.url)
         .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("invalid request url: {}", e)))
-        .and_then(|url|{
+        .and_then(|url| {
             let builder = Request::builder()
                 .uri(url.as_str())
                 .method(resolved_request.method.to_hyper())
                 .header("Content-Type", HeaderValue::from_static("application/json"));
-            return 
-                resolved_request.headers.iter()
-                    .fold(builder,
-                        |builder, (k, v)|
-                                builder.header( 
-                                    k, 
-                                    variable_resolver(v.clone())
-                                )
-                    )     
-                    .body(
-                            resolved_request.body.map(
-                                |b|Body::from(serde_json::to_string(&b).unwrap())
-                            ).unwrap_or(Body::empty())
-                    )
-                    .map_err(|e|Box::from(format!("bad request result: {}", e)));
+            return resolved_request
+                .headers
+                .iter()
+                .fold(builder, |builder, (k, v)| {
+                    builder.header(k, variable_resolver(v.clone()))
+                })
+                .body(
+                    resolved_request
+                        .body
+                        .map(|b| Body::from(serde_json::to_string(&b).unwrap()))
+                        .unwrap_or(Body::empty()),
+                )
+                .map_err(|e| Box::from(format!("bad request result: {}", e)));
         });
 }
 
 async fn process_request(
     state: &State,
     resolved_request: test::definition::ResolvedRequest,
-)-> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
+) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     debug!("url({})", resolved_request.url);
 
     return match http_request_from_test_spec(&state.variables, resolved_request) {
         Ok(req) => Ok(client.request(req).await?),
-        Err(error) => Err(Box::from(format!("bad request result: {}", error)))
+        Err(error) => Err(Box::from(format!("bad request result: {}", error))),
     };
 }
 
@@ -1600,32 +1596,28 @@ mod tests {
     use hyper::Method;
 
     #[test]
-    fn http_request_from_test_spec_post(){
+    fn http_request_from_test_spec_post() {
         let mut vars = HashMap::new();
         vars.insert("MY_VARIABLE".to_string(), "foo".to_string());
         vars.insert("MY_VARIABLE2".to_string(), "bar".to_string());
-        
-        let body = serde_json::json!({ "an": "object" });
-        let res = 
-            http_request_from_test_spec(
-                &vars, 
-                ResolvedRequest::new(
-                    "https://google.com".to_string(), 
-                    http::Verb::Post.as_method(),
-                    vec![("header".to_string(),"${MY_VARIABLE}-${MY_VARIABLE2}".to_string())], 
-                    Some(body)
-                )
-            );
-        let expected : Request<()> = Request::default(); 
-        assert_ne!( 
-             expected.type_id(),
-            res.as_ref().unwrap().body().type_id()
-        );
 
-        assert_eq!(
-            2,
-            res.as_ref().unwrap().headers().len()
+        let body = serde_json::json!({ "an": "object" });
+        let res = http_request_from_test_spec(
+            &vars,
+            ResolvedRequest::new(
+                "https://google.com".to_string(),
+                http::Verb::Post.as_method(),
+                vec![(
+                    "header".to_string(),
+                    "${MY_VARIABLE}-${MY_VARIABLE2}".to_string(),
+                )],
+                Some(body),
+            ),
         );
+        let expected: Request<()> = Request::default();
+        assert_ne!(expected.type_id(), res.as_ref().unwrap().body().type_id());
+
+        assert_eq!(2, res.as_ref().unwrap().headers().len());
 
         assert_eq!(
             "foo-bar",
