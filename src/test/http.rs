@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Header {
     pub header: String,
     pub value: String,
