@@ -655,8 +655,7 @@ pub async fn execute_tests(
             let summary = JunitResultFormatter.format(&execution_res);
             ConsoleReporter.report(&summary);
     */
-    let summary = JunitResultFormatter.format(&execution_res);
-            ConsoleReporter.report(&summary);
+    
     let run = execution_res.test_results.len();
     let totals = execution_res
         .test_results
