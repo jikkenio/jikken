@@ -832,7 +832,7 @@ fn process_response(
 
     let validate_headers = 
         |validation_type: &str, _expected: &Vec<Header>, _actual: &Vec<Header>| -> Validated<(), String>{
-            if _expected.is_empty(){
+            if ! _expected.is_empty(){
                 //no logic currently
                 trace!("validating {}headers", validation_type);
             }
