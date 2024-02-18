@@ -303,13 +303,13 @@ pub enum StageType {
     Cleanup = 3,
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TestStatus {
     Passed = 1,
     Failed = 2,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, PartialEq, Eq)]
 pub struct ResultData {
     headers: Vec<http::Header>,
     status: u16,
@@ -875,11 +875,10 @@ fn process_response(
         {
             result.status = TestStatus::Failed;
         }
-    } else if !details.expected.headers.is_empty()
-        || details.expected.status > 0
-        || details.expected.body != serde_json::Value::Null
+    } else if details.expected != ResultData::default()
     {
-        // failed
+        // a result was specified, 
+        //and we failed to get an actual response
         result.status = TestStatus::Failed;
     }
 
@@ -1585,14 +1584,189 @@ fn validate_dry_run(
 
 #[cfg(test)]
 mod tests {
-    use self::test::definition::ResolvedRequest;
-    use hyper::Response;
+    use self::test::{definition::ResolvedRequest};
+    use hyper::{Response};
     use std::any::Any;
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
     use hyper::StatusCode;
     use serde_json::json;
+
+    #[test]
+    fn process_response_no_result(){
+        let expected = ResultData{
+            status: 1, //bc we coalesce status to 0 in ResultData::from_request 
+            body: serde_json::Value::default(),
+            headers: Vec::default()
+        }; 
+
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: None,
+                    compare_request : None,
+                    compare_actual : None
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Failed);        
+    }
+
+    //note : no test for headers, we don't currently support it
+    #[test]
+    fn process_response_body_mismatch(){
+        let expected = ResultData{
+            status: 200, 
+            body: json!({
+                "Name" : "Bob"
+            }),
+            headers: Vec::default()
+        }; 
+
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: Option::from(ResultData{
+                        body: serde_json::Value::default(),
+                        ..expected.clone()
+                    }),
+                    compare_request : None,
+                    compare_actual : None
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Failed);        
+    }
+    
+    #[test]
+    fn process_response_body_match(){
+        
+        let expected = ResultData{
+            status: 200, 
+            body: json!({
+                "Name" : "Bob"
+            }),
+            headers: Vec::default()
+        }; 
+
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: Option::from(ResultData{
+                        ..expected.clone()
+                    }),
+                    compare_request : None,
+                    compare_actual : None
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Passed);        
+    }
+
+    #[test]
+    fn process_response_status_match(){
+        let expected = ResultData{
+            status: 200, 
+            body: serde_json::Value::default(),
+            headers: Vec::default()
+        }; 
+        
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: Option::from(ResultData{
+                        ..expected.clone()
+                    }),
+                    compare_request : None,
+                    compare_actual : None
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Passed);
+            
+        
+    }
+
+    #[test]
+    fn process_response_status_mismatch(){
+        let expected = ResultData{
+            status: 200, 
+            body: serde_json::Value::default(),
+            headers: Vec::default()
+        }; 
+        
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: Option::from(ResultData{
+                        status: 500,
+                        ..expected.clone()
+                    }),
+                    compare_request : None,
+                    compare_actual : None
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Failed);
+            
+        
+    }
 
     #[tokio::test]
     async fn from_bad_response() {
