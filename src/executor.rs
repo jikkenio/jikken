@@ -1623,7 +1623,7 @@ mod tests {
     use adjacent_pair_iterator::AdjacentPairIterator;
     use hyper::StatusCode;
     use serde_json::json;
-    use validated::Validated::{self, Good, Fail};
+    use validated::Validated::{self};
     use nonempty_collections::*;
     
     #[test]
