@@ -1,6 +1,10 @@
 Next (Version determined when release is cut)
 =====
 
+Changes:
+* Changed the field name for variable definitions from `dataType` to just `type`.
+* The `type` value for Variable definitions now supports other cases (String, string, STRING... etc).
+
 0.6.1
 =====
 

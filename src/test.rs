@@ -45,6 +45,7 @@ impl File {
 #[serde(rename_all = "camelCase")]
 pub struct Variable {
     pub name: String,
+    #[serde(rename = "type")]
     pub data_type: variable::Type,
     pub value: serde_yaml::Value,
     pub modifier: Option<variable::Modifier>,

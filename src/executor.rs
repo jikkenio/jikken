@@ -16,10 +16,8 @@ use log::{debug, error, info, trace};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::env::var;
 use std::error::Error;
 use std::fmt;
-use std::ops::Deref;
 use std::time::Instant;
 use std::vec;
 use url::Url;
@@ -235,7 +233,8 @@ async fn run_tests<T: ExecutionPolicy>(
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
 ) -> Vec<TestResult> {
-    let total_count = tests.len();
+    let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
+    let total_count = flattened_tests.len();
     let mut results: Vec<TestResult> = Vec::new();
 
     let mut state = State {
@@ -243,13 +242,13 @@ async fn run_tests<T: ExecutionPolicy>(
     };
     let start_time = Instant::now();
 
-    for (i, test) in tests.into_iter().flatten().enumerate() {
+    for (i, test) in flattened_tests.into_iter().enumerate() {
         let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
             Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
             info!(
-                "{} Test ({}\\{}) `{}` Iteration({}\\{})\n",
+                "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
                 exec_policy.name(),
                 i + 1,
                 total_count,
@@ -1592,7 +1591,6 @@ mod tests {
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
-    use hyper::Method;
 
     #[test]
     fn http_request_from_test_spec_post() {
