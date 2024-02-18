@@ -824,6 +824,7 @@ dependencies = [
  "hyper-tls",
  "indicatif",
  "log",
+ "nonempty-collections",
  "remove_dir_all",
  "reqwest",
  "self_update",
@@ -837,6 +838,7 @@ dependencies = [
  "toml",
  "url",
  "uuid",
+ "validated",
  "walkdir",
 ]
 
@@ -953,6 +955,12 @@ dependencies = [
  "libc",
  "static_assertions",
 ]
+
+[[package]]
+name = "nonempty-collections"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e43b402eeca61e02116e70f2e70a60005ded2d8025c425788feb6e8fd36ddf60"
 
 [[package]]
 name = "normpath"
@@ -1813,6 +1821,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "validated"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "734f0065f244a3a8db90f1fff5680274f853ad36170c4675d3880f6f992840a9"
+dependencies = [
+ "nonempty-collections",
 ]
 
 [[package]]

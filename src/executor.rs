@@ -6,6 +6,7 @@ use crate::telemetry;
 use crate::test;
 use crate::test::definition::ResponseDescriptor;
 use crate::test::http;
+use crate::test::http::Header;
 use crate::test::Definition;
 use crate::test::{definition, validation};
 use crate::TagMode;
@@ -21,6 +22,7 @@ use std::fmt;
 use std::time::Instant;
 use std::vec;
 use url::Url;
+use validated::Validated::{self, Good};
 
 pub struct Report {
     pub run: u16,
@@ -88,9 +90,15 @@ impl ExecutionResultFormatter for JunitResultFormatter {
                                     test_iteration_name.as_str()
                                 ));
 
-                                lines.push(
-                                    r#"<failure message="Assertion error message" type="AssertionError"/>"#.to_string()
-                                );
+                                match &stage_result.validation{
+                                    validated::Validated::Fail(nec) => 
+                                        for i in nec{
+                                            lines.push(
+                                                format!(r#"<failure message="{}" type="AssertionError"/>"#, i)
+                                            );
+                                        }
+                                    _ => ()
+                                }
 
                                 lines.push(r#"</testcase>"#.to_string());
                             }
@@ -400,6 +408,7 @@ pub struct StageResult {
     pub runtime: u32,
     pub status: TestStatus,
     pub details: ResultDetails,
+    pub validation: Validated<Vec<()>, String>
 }
 
 fn load_test_from_path(filename: &String) -> Option<test::File> {
@@ -646,6 +655,8 @@ pub async fn execute_tests(
             let summary = JunitResultFormatter.format(&execution_res);
             ConsoleReporter.report(&summary);
     */
+    let summary = JunitResultFormatter.format(&execution_res);
+            ConsoleReporter.report(&summary);
     let run = execution_res.test_results.len();
     let totals = execution_res
         .test_results
@@ -817,68 +828,89 @@ fn process_response(
         runtime,
         details: details.clone(),
         status: TestStatus::Passed,
+        validation: Validated::Good(vec![()])
     };
 
-    if let Some(resp) = &details.actual {
-        let header_match = if !details.expected.headers.is_empty() {
-            // compare headers
-            trace!("validating headers");
-            true
-        } else {
-            true
-        };
-
-        let status_match = if details.expected.status > 0 {
-            trace!("validating status codes");
-            details.expected.status == resp.status
-        } else {
-            true
-        };
-
-        let body_match = if details.expected.body != serde_json::Value::Null {
-            trace!("validating body");
-            let body_result = validate_body(&resp.body, &details.expected.body, ignore_body);
-            match body_result {
-                Ok(passed) => passed,
-                Err(e) => {
-                    error!("{}", e);
-                    false
-                }
+    let validate_headers = 
+        |validation_type: &str, _expected: &Vec<Header>, _actual: &Vec<Header>| -> Validated<(), String>{
+            if _expected.is_empty(){
+                //no logic currently
+                trace!("validating {}headers", validation_type);
             }
-        } else {
-            true
+            return Good(());
         };
 
-        let mut status_compare_match = true;
-        let mut body_compare_match = true;
+    let validate_status_code = 
+        |validation_type: &str, expected : u16, actual: u16| -> Validated<(), String>{
+            if expected == 0 {
+                return Good(());
+            } 
+            
+            trace!("validating {}status codes", validation_type);
+            
+            if expected == actual { 
+                Good(())
+            } else { 
+                Validated::fail(format!("Expected status code {} but received {}", expected, actual))
+            }
+        };
 
-        if let Some(compare) = &details.compare_actual {
-            trace!("validating compare status");
-            status_compare_match = compare.status == resp.status;
-
-            trace!("validating compare body");
-            let body_result = validate_body(&resp.body, &compare.body, ignore_body);
-            body_compare_match = match body_result {
-                Ok(passed) => passed,
-                Err(e) => {
-                    error!("{}", e);
-                    false
+    let validate_body =
+        | validation_type: &str, expected: &serde_json::Value, actual: &serde_json::Value, ignore_body: &[String]| 
+            -> Validated<(), String>{
+                if details.expected.body == serde_json::Value::Null{
+                    return Good(());
                 }
-            };
-        }
+                trace!("validating {}body", validation_type);
+                match validate_body(&actual, &expected, ignore_body){
+                    Ok(passed) => if passed { Good(()) } else { Validated::fail(format!("Expected {}body did not match actual body", validation_type))}
+                    Err(e) => Validated::fail(format!("{}{}", validation_type, e.to_string()))
+                }
+        };
 
-        if !header_match
-            || !status_match
-            || !body_match
-            || !status_compare_match
-            || !body_compare_match
-        {
-            result.status = TestStatus::Failed;
-        }
+    if let Some(resp) = &details.actual{
+        let mut validation = vec![
+            validate_headers(
+                "",
+                &details.expected.headers,
+                &resp.headers
+            ),
+            validate_status_code(
+                "",
+                details.expected.status,
+                resp.status
+            ),
+            validate_body(
+                "",
+                &details.expected.body,
+                &resp.body,
+                ignore_body
+            )
+        ];
+        validation.append(
+            //if a compare request was specified, validate it
+            details.compare_actual.map(
+                |compare_request_result| { 
+                    vec![ 
+                        validate_status_code("compare ", details.expected.status, compare_request_result.status),
+                        validate_body("compare ", &details.expected.body, &compare_request_result.body, ignore_body)
+                    ]
+                }
+            ).unwrap_or(vec![Good(())]).as_mut()
+        );
+        
+        result.validation = validation.into_iter().collect();
+        result.status = 
+        if result.validation.is_fail(){
+            TestStatus::Failed
+        } else {
+            TestStatus::Passed
+        };
     } else if details.expected != ResultData::default()
     {
         // a result was specified, 
         //and we failed to get an actual response
+        result.validation = Validated::fail("failed to get response".to_string());
         result.status = TestStatus::Failed;
     }
 
@@ -1592,6 +1624,56 @@ mod tests {
     use adjacent_pair_iterator::AdjacentPairIterator;
     use hyper::StatusCode;
     use serde_json::json;
+    use validated::Validated::{self, Good, Fail};
+    use nonempty_collections::*;
+    
+    #[test]
+    fn process_response_multiple_failures(){
+        let expected = ResultData{
+            status: 200, 
+            body: json!({
+                "Name" : "Bob"
+            }),
+            headers: Vec::default()
+        }; 
+
+        let ignore_body : [String;0] = [];
+        let actual = 
+            process_response(
+                0,
+                StageType::Normal,
+                0,
+                ResultDetails{
+                    request: RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    },
+                    expected: expected.clone(),
+                    actual: Option::from(ResultData{
+                        body: serde_json::Value::default(),
+                        ..expected.clone()
+                    }),
+                    compare_request : Some(RequestDetails{
+                        body: serde_json::Value::default(),
+                        headers: Vec::default(),
+                        method: http::Verb::Post.as_method(),
+                        url: "".to_string()
+                    }),
+                    compare_actual : Option::from(ResultData{
+                        body: serde_json::Value::default(),
+                        ..expected.clone()
+                    })
+                },
+                &ignore_body
+            );
+        assert_eq!(actual.status, TestStatus::Failed);
+        assert_eq!(actual.validation, Validated::Fail(nev![
+            String::from("response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"),
+            String::from("compare response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }")
+        ]));
+    }
 
     #[test]
     fn process_response_no_result(){
@@ -1621,7 +1703,9 @@ mod tests {
                 },
                 &ignore_body
             );
-        assert_eq!(actual.status, TestStatus::Failed);        
+        assert_eq!(actual.status, TestStatus::Failed);
+        assert!(actual.validation.is_fail());
+        assert_eq!(actual.validation, Validated::fail( "failed to get response".to_string()));
     }
 
     //note : no test for headers, we don't currently support it
@@ -1658,7 +1742,10 @@ mod tests {
                 },
                 &ignore_body
             );
-        assert_eq!(actual.status, TestStatus::Failed);        
+        assert_eq!(actual.status, TestStatus::Failed);
+        assert_eq!(actual.validation, Validated::fail(
+            String::from("response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
+        )));
     }
     
     #[test]
@@ -1694,7 +1781,8 @@ mod tests {
                 },
                 &ignore_body
             );
-        assert_eq!(actual.status, TestStatus::Passed);        
+        assert_eq!(actual.status, TestStatus::Passed);     
+        assert!(actual.validation.is_good());   
     }
 
     #[test]
@@ -1728,8 +1816,7 @@ mod tests {
                 &ignore_body
             );
         assert_eq!(actual.status, TestStatus::Passed);
-            
-        
+        assert!(actual.validation.is_good());
     }
 
     #[test]
@@ -1764,6 +1851,7 @@ mod tests {
                 &ignore_body
             );
         assert_eq!(actual.status, TestStatus::Failed);
+        assert_eq!(actual.validation, Validated::fail("Expected status code 200 but received 500".to_string()));
             
         
     }
