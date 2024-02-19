@@ -74,6 +74,8 @@ pub enum Verb {
     Put,
     #[serde(alias = "patch", alias = "PATCH")]
     Patch,
+    #[serde(alias = "delete", alias = "DELETE")]
+    Delete,
     Undefined,
 }
 
@@ -81,8 +83,9 @@ impl Verb {
     pub fn as_method(&self) -> Method {
         match &self {
             Verb::Post => Method(hyper::Method::POST),
-            Verb::Patch => Method(hyper::Method::PATCH),
             Verb::Put => Method(hyper::Method::PUT),
+            Verb::Patch => Method(hyper::Method::PATCH),
+            Verb::Delete => Method(hyper::Method::DELETE),
             _ => Method(hyper::Method::GET),
         }
     }
