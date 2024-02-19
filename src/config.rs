@@ -1,5 +1,5 @@
 use crate::test;
-use chrono::Local;
+use chrono::{Local, Utc};
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -43,6 +43,11 @@ impl Config {
         global_variables.insert(
             "TODAY".to_string(),
             format!("{}", Local::now().format("%Y-%m-%d")),
+        );
+
+        global_variables.insert(
+            "TODAY_UTC".to_string(),
+            format!("{}", Utc::now().format("%Y-%m-%d")),
         );
 
         global_variables
