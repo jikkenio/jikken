@@ -243,12 +243,15 @@ async fn run_tests(
     let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
     let config = config::get_config().await;
     let files = get_files(cli_paths, recursive).await?;
-    let test_plurality = if files.len() != 1 { "s" } else { "" };
+    let plurality_policy = |count: usize| match count {
+        1 => "",
+        _ => "s",
+    };
 
     info!(
         "Jikken found {} test file{}.\n",
         files.len(),
-        test_plurality
+        plurality_policy(files.len())
     );
 
     let report =
@@ -256,7 +259,10 @@ async fn run_tests(
 
     info!(
         "Jikken executed {} test{} with {} passed and {} failed.\n",
-        report.run, test_plurality, report.passed, report.failed
+        report.run,
+        plurality_policy(report.run.into()),
+        report.passed,
+        report.failed
     );
 
     Ok(())
