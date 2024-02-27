@@ -350,6 +350,8 @@ impl ResultData {
     }
 
     pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
+        trace!("Received response : {resp:?}");
+
         let response_status = resp.status();
         // TODO: We'll have to revisit this to support non-ASCII headers
         let headers = resp
@@ -362,11 +364,14 @@ impl ResultData {
 
         match response_bytes {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
-                Ok(data) => Some(ResultData {
-                    headers,
-                    status: response_status.as_u16(),
-                    body: data,
-                }),
+                Ok(data) => {
+                    trace!("Body is {data}");
+                    return Some(ResultData {
+                        headers,
+                        status: response_status.as_u16(),
+                        body: data,
+                    });
+                }
                 Err(e) => {
                     // TODO: add support for non JSON responses
                     debug!("response is not valid JSON data: {}", e);
@@ -955,6 +960,15 @@ fn process_response(
         result.status = TestStatus::Failed;
     }
 
+    if let validated::Validated::Fail(nec) = &result.validation {
+        let error_str = nec
+            .into_iter()
+            .fold("Response Validation Error(s):".to_string(), |acc, curr| {
+                format!("{acc}\n{curr}")
+            });
+        error!("{error_str}\n");
+    }
+
     result
 }
 
@@ -1341,25 +1355,29 @@ fn http_request_from_test_spec(
         })
     };
 
+    let maybe_body = resolved_request
+        .body
+        .as_ref()
+        .map(|b| serde_json::to_string(&b).unwrap());
+
     return Url::parse(&resolved_request.url)
         .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("invalid request url: {}", e)))
         .and_then(|url| {
             let builder = Request::builder()
                 .uri(url.as_str())
                 .method(resolved_request.method.to_hyper())
-                .header("Content-Type", HeaderValue::from_static("application/json"));
+                .header("Content-Type", HeaderValue::from_static("application/json"))
+                .header(
+                    "Content-Length",
+                    HeaderValue::from(maybe_body.as_ref().map(|s| s.len()).unwrap_or_default()),
+                );
             return resolved_request
                 .headers
                 .iter()
                 .fold(builder, |builder, (k, v)| {
                     builder.header(k, variable_resolver(v.clone()))
                 })
-                .body(
-                    resolved_request
-                        .body
-                        .map(|b| Body::from(serde_json::to_string(&b).unwrap()))
-                        .unwrap_or(Body::empty()),
-                )
+                .body(maybe_body.map(|b| Body::from(b)).unwrap_or(Body::empty()))
                 .map_err(|e| Box::from(format!("bad request result: {}", e)));
         });
 }
@@ -1372,7 +1390,10 @@ async fn process_request(
     debug!("url({})", resolved_request.url);
 
     return match http_request_from_test_spec(&state.variables, resolved_request) {
-        Ok(req) => Ok(client.request(req).await?),
+        Ok(req) => {
+            trace!("sending request: {req:?}");
+            return Ok(client.request(req).await?);
+        }
         Err(error) => Err(Box::from(format!("bad request result: {}", error))),
     };
 }
@@ -1964,7 +1985,7 @@ mod tests {
         let expected: Request<()> = Request::default();
         assert_ne!(expected.type_id(), res.as_ref().unwrap().body().type_id());
 
-        assert_eq!(2, res.as_ref().unwrap().headers().len());
+        assert_eq!(3, res.as_ref().unwrap().headers().len());
 
         assert_eq!(
             "foo-bar",
