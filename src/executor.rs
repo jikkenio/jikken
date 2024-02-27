@@ -350,7 +350,7 @@ impl ResultData {
     }
 
     pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
-        trace!("Received response : {resp:?}");
+        debug!("Received response : {resp:?}");
 
         let response_status = resp.status();
         // TODO: We'll have to revisit this to support non-ASCII headers
@@ -365,7 +365,7 @@ impl ResultData {
         match response_bytes {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
                 Ok(data) => {
-                    trace!("Body is {data}");
+                    debug!("Body is {data}");
                     return Some(ResultData {
                         headers,
                         status: response_status.as_u16(),
@@ -1391,7 +1391,7 @@ async fn process_request(
 
     return match http_request_from_test_spec(&state.variables, resolved_request) {
         Ok(req) => {
-            trace!("sending request: {req:?}");
+            debug!("sending request: {req:?}");
             return Ok(client.request(req).await?);
         }
         Err(error) => Err(Box::from(format!("bad request result: {}", error))),
