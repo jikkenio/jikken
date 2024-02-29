@@ -4,6 +4,14 @@ InstallDir $PROFILE\.jk
 !include "LogicLib.nsh"
 !include "WinMessages.nsh"
 
+/*
+Function RefreshShellIcons
+  ; By jerome tremblay - april 2003
+  System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v \
+  (${SHCNE_ASSOCCHANGED}, ${SHCNF_IDLIST}, 0, 0)'
+FunctionEnd
+*/
+
 Section
 
 SetOutPath $INSTDIR
@@ -12,10 +20,20 @@ WriteUninstaller $INSTDIR\uninstaller.exe
 Push "$INSTDIR"
 Call AddToPath
 
+
+WriteRegStr HKCR ".jkt" "" "Jikken Test"
+WriteRegStr HKCR "Jikken Test" "" "Jikken Test"
+/*
+  We need an icon...
+FILE icon.ico
+WriteRegStr HKCR "Jikken Test\DefaultIcon" "" "$INSTDIR\icon.ico,0"
+Call RefreshShellIcons
+*/
 SectionEnd
 
 Section "Uninstall"
-
+DeleteRegKey HKCR ".jkt"
+DeleteRegKey HKCR "Jikken Test"
 Delete $INSTDIR\jk.exe
 Delete $INSTDIR\uninstaller.exe
 RMDir $INSTDIR
@@ -40,6 +58,9 @@ SectionEnd
   Pop `${ResultVar}`
 !macroend
   
+!define SHCNE_ASSOCCHANGED 0x08000000
+!define SHCNF_IDLIST 0
+ 
 Function StrStr
 /*After this point:
   ------------------------------------------
