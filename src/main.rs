@@ -270,6 +270,8 @@ async fn run_tests(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let _ = enable_ansi_support::enable_ansi_support();
+
     let cli = Cli::parse();
     let cli_args = Box::new(serde_json::to_value(&cli)?);
 

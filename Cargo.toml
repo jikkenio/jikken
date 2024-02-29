@@ -49,6 +49,7 @@ sha2 = { version = "0.10" }
 sysinfo = { version = "0.29" }
 glob = { version = "0.3.1" }
 validated ={ version = "0.4.0" }
+enable-ansi-support = "0.2.1"
 
 [dev-dependencies]
 nonempty-collections = { version="0.1.5" }
