@@ -96,7 +96,7 @@ fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Conf
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
-    if !Path::new(file).exists() {
+    if !Path::new(file).exists() || !Path::new(file).is_file() {
         return None;
     }
 
