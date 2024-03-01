@@ -17,6 +17,7 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
+    pub project: Option<String>,
     pub environment: Option<String>,
     #[serde(skip_serializing)]
     pub api_key: Option<String>,
@@ -34,6 +35,7 @@ struct File {
 struct FileSettings {
     pub continue_on_failure: Option<bool>,
     pub api_key: Option<String>,
+    pub project: Option<String>,
     pub environment: Option<String>,
 }
 
@@ -72,6 +74,7 @@ impl Default for Config {
             settings: Settings {
                 continue_on_failure: false,
                 api_key: None,
+                project: None,
                 environment: None,
             },
             globals: BTreeMap::new(),
@@ -130,6 +133,7 @@ fn load_config_from_environment_variables_as_file() -> File {
 
     let envvar_apikey = env::var("JIKKEN_API_KEY").ok();
 
+    let envvar_project = env::var("JIKKEN_PROJECT").ok();
     let envvar_env = env::var("JIKKEN_ENVIRONMENT").ok();
 
     let mut global_variables = BTreeMap::new();
@@ -144,6 +148,7 @@ fn load_config_from_environment_variables_as_file() -> File {
         settings: Some(FileSettings {
             api_key: envvar_apikey,
             continue_on_failure: envvar_cof,
+            project: envvar_project,
             environment: envvar_env,
         }),
         globals: Some(global_variables),
@@ -165,6 +170,7 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                         .continue_on_failure
                         .unwrap_or(config.settings.continue_on_failure),
                     api_key: settings.api_key.or(config.settings.api_key),
+                    project: settings.project.or(config.settings.project),
                     environment: settings.environment.or(config.settings.environment),
                 },
                 globals: merged_globals,
@@ -224,6 +230,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: true,
                     api_key: None,
+                    project: None,
                     environment: None,
                 },
                 globals: BTreeMap::from([(
@@ -272,6 +279,7 @@ mod tests {
             r#"
             [settings]
             continueOnFailure=false
+            project="my_proj"
             environment="magic"
 
             [globals]
@@ -292,6 +300,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: false,
                     api_key: Some(String::from("key")),
+                    project: Some(String::from("my_proj")),
                     environment: Some(String::from("magic")),
                 },
                 globals: BTreeMap::from([

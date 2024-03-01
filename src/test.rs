@@ -17,6 +17,7 @@ use std::path::Path;
 pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
+    pub project: Option<String>,
     pub env: Option<String>,
     pub tags: Option<String>,
     pub requires: Option<String>,
@@ -350,6 +351,7 @@ impl Variable {
 pub struct Definition {
     pub name: Option<String>,
     pub id: String,
+    pub project: Option<String>,
     pub environment: Option<String>,
     pub requires: Option<String>,
     pub tags: Vec<String>,
