@@ -86,6 +86,7 @@ pub struct UnvalidatedStage {
     pub compare: Option<UnvalidatedCompareRequest>,
     pub response: Option<UnvalidatedResponse>,
     pub variables: Option<Vec<UnvalidatedVariable>>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]

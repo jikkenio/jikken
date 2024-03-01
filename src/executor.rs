@@ -1213,7 +1213,8 @@ async fn validate_stage(
     stage_index: usize,
     iteration: u32,
 ) -> Result<StageResult, Box<dyn Error + Send + Sync>> {
-    debug!("execute stage request");
+    let stage_name = stage.name.clone().unwrap_or((stage_index + 1).to_string());
+    debug!("execute stage {stage_name}");
 
     let req_method = stage.request.method.as_method();
     let req_url = &td.get_url(
@@ -1235,7 +1236,7 @@ async fn validate_stage(
         req_headers.clone(),
         req_body.clone(),
     );
-    debug!("executing test stage: {}", req_url);
+    debug!("executing test stage {stage_name}: {req_url}");
     let expected = ResultData::from_request(stage.response.clone());
     let request = RequestDetails {
         headers: req_headers
@@ -1253,7 +1254,7 @@ async fn validate_stage(
     let req_response = process_request(state, resolved_request).await?;
 
     if let Some(compare) = &stage.compare {
-        debug!("execute stage comparison");
+        debug!("execute stage {stage_name} comparison");
         let params = stage.get_compare_parameters();
 
         let compare_method = compare.method.as_method();
