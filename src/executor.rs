@@ -515,7 +515,7 @@ fn construct_test_execution_graph_v2(
         .clone()
         .into_iter()
         .chain(tests_to_ignore.into_iter())
-        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
+        .map(|td| (td.id.clone(), td))
         .collect();
 
     trace!("determine test execution order based on dependency graph");
@@ -524,8 +524,8 @@ fn construct_test_execution_graph_v2(
     let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
     tests_to_run
         .iter()
-        .map(|td| (td.name.clone().unwrap_or(td.id.clone()), td))
-        .for_each(|(name, definition)| {
+        .map(|td| (td.id.clone(), td))
+        .for_each(|(id, definition)| {
             match definition.requires.as_ref() {
                 Some(req) => {
                     if !tests_by_id.contains_key(req) {
@@ -533,16 +533,16 @@ fn construct_test_execution_graph_v2(
                     }
 
                     if let Some(edges) = graph.get_mut(req) {
-                        edges.insert(name.clone());
+                        edges.insert(id.clone());
                     } else {
-                        graph.insert(req.clone(), HashSet::from([name.clone()]));
+                        graph.insert(req.clone(), HashSet::from([id.clone()]));
                     }
                 }
                 None => {}
             }
 
-            if !graph.contains_key(&name) {
-                graph.insert(name.clone(), HashSet::new());
+            if !graph.contains_key(&id) {
+                graph.insert(id.clone(), HashSet::new());
             }
         });
 
@@ -573,11 +573,11 @@ fn construct_test_execution_graph_v2(
         //not smart enough on rust to write generic lambda in order to not repeat myself here
         let s1: HashSet<String> = tests_to_run
             .iter()
-            .map(|td| td.name.clone().unwrap_or_default())
+            .map(|td| td.name.clone().unwrap_or(td.id.clone()))
             .collect();
         let s2: HashSet<String> = flattened_jobs
             .iter()
-            .map(|td| td.name.clone().unwrap_or_default())
+            .map(|td| td.name.clone().unwrap_or(td.id.clone()))
             .collect();
         let missing_tests = (&s1 - &s2)
             .into_iter()
@@ -1994,12 +1994,12 @@ mod tests {
     }
 
     fn construct_definition_for_dependency_graph(
-        name: &str,
+        id: &str,
         requires: Option<String>,
     ) -> test::Definition {
         test::Definition {
-            name: Some(name.to_string()),
-            id: String::from("id"),
+            name: None, //Some(name.to_string()),
+            id: String::from(id),
             environment: None,
             requires: requires,
             tags: vec![String::from("myTag"), String::from("myTag2")],
@@ -2020,7 +2020,7 @@ mod tests {
     fn no_dependencies_is_one_execution_node() {
         let defs = vec!["A", "B", "C", "D"]
             .into_iter()
-            .map(|name| construct_definition_for_dependency_graph(name, None))
+            .map(|id| construct_definition_for_dependency_graph(id, None))
             .collect();
 
         let actual = construct_test_execution_graph_v2(
@@ -2035,7 +2035,7 @@ mod tests {
     fn one_root_dependency_is_two_execution_nodes() {
         let mut defs = vec!["A", "B", "C", "D"]
             .into_iter()
-            .map(|name| construct_definition_for_dependency_graph(name, Some("Parent".to_string())))
+            .map(|id| construct_definition_for_dependency_graph(id, Some("Parent".to_string())))
             .collect::<Vec<Definition>>();
 
         defs.push(construct_definition_for_dependency_graph("Parent", None));
@@ -2047,10 +2047,7 @@ mod tests {
 
         assert_eq!(2, actual.len());
         assert_eq!(1, actual.get(0).unwrap().len());
-        assert_eq!(
-            "Parent",
-            actual.get(0).unwrap().get(0).unwrap().name.clone().unwrap()
-        );
+        assert_eq!("Parent", actual.get(0).unwrap().get(0).unwrap().id);
         assert_eq!(4, actual.get(1).unwrap().len());
     }
 
