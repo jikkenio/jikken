@@ -141,7 +141,7 @@ trait ExecutionPolicy {
     async fn execute(
         &mut self,
         state: &mut State,
-        telemtry: &Option<telemetry::Session>,
+        telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>;
@@ -157,7 +157,7 @@ impl ExecutionPolicy for DryRunExecutionPolicy {
     async fn execute(
         &mut self,
         state: &mut State,
-        _telemtry: &Option<telemetry::Session>,
+        _telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
@@ -177,11 +177,11 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
     async fn execute(
         &mut self,
         state: &mut State,
-        telemtry: &Option<telemetry::Session>,
+        telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
-        let telemetry_test = if let Some(s) = &telemtry {
+        let telemetry_test = if let Some(s) = &telemetry {
             match telemetry::create_test(s, &test).await {
                 Ok(t) => Some(t),
                 Err(e) => {
@@ -221,7 +221,7 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
     async fn execute(
         &mut self,
         state: &mut State,
-        telemtry: &Option<telemetry::Session>,
+        telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
@@ -230,7 +230,7 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         }
         let ret = self
             .wrapped_policy
-            .execute(state, telemtry, &test, iteration)
+            .execute(state, telemetry, &test, iteration)
             .await;
         let passed = ret.as_ref().map(|(passed, _)| *passed).unwrap_or_default();
         self.failed = !passed;
@@ -416,6 +416,8 @@ pub struct StageResult {
     pub status: TestStatus,
     pub details: ResultDetails,
     pub validation: Validated<Vec<()>, String>,
+    pub project: Option<String>,
+    pub environment: Option<String>,
 }
 
 fn load_test_from_path(filename: &String) -> Option<test::File> {
@@ -855,6 +857,8 @@ fn process_response(
     runtime: u32,
     details: ResultDetails,
     ignore_body: &[String],
+    project: Option<String>,
+    environment: Option<String>,
 ) -> StageResult {
     let mut result = StageResult {
         stage,
@@ -863,6 +867,8 @@ fn process_response(
         details: details.clone(),
         status: TestStatus::Passed,
         validation: Validated::Good(vec![()]),
+        project,
+        environment,
     };
 
     let validate_headers = |validation_type: &str,
@@ -1027,6 +1033,8 @@ async fn validate_setup(
             runtime,
             details,
             &setup.response.clone().map_or(Vec::new(), |r| r.ignore),
+            td.project.clone(),
+            td.environment.clone(),
         );
 
         // extract variables and add them to the state
@@ -1116,7 +1124,7 @@ async fn run_cleanup(
             };
 
             let result =
-                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
             counter += 1;
             results.push(result);
         }
@@ -1157,7 +1165,7 @@ async fn run_cleanup(
             compare_actual: None,
         };
 
-        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
         counter += 1;
         results.push(result);
     }
@@ -1199,7 +1207,7 @@ async fn run_cleanup(
             compare_actual: None,
         };
 
-        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new());
+        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
         results.push(result);
     }
 
@@ -1313,6 +1321,8 @@ async fn validate_stage(
         runtime,
         details,
         &stage.response.clone().map_or(Vec::new(), |r| r.ignore),
+        td.project.clone(),
+        td.environment.clone(),
     );
 
     // extract variables and add them to the state

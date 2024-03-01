@@ -48,6 +48,7 @@ pub fn validate_file(
     let td = test::Definition {
         name: file.name,
         id: file.id.unwrap_or(generated_id).to_lowercase(),
+        project: file.project,
         environment: file.env,
         requires: file.requires,
         tags: new_tags,
