@@ -83,6 +83,7 @@ fn new_stage() -> file::UnvalidatedStage {
         compare: None,
         response: Some(new_response()),
         variables: None,
+        name: None,
     }
 }
 
@@ -92,6 +93,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
         compare: Some(new_full_compare()?),
         response: Some(new_full_response()?),
         variables: Some(vec![new_full_variable()?]),
+        name: None,
     })
 }
 

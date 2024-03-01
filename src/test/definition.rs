@@ -258,6 +258,7 @@ pub struct StageDescriptor {
     pub compare: Option<CompareDescriptor>,
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<test::Variable>,
+    pub name: Option<String>,
 
     #[serde(skip_serializing)]
     pub source_path: String,
@@ -274,6 +275,7 @@ impl StageDescriptor {
             response: ResponseDescriptor::new_opt(stage.response)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             source_path: source_path.to_string(),
+            name: stage.name,
         })
     }
 
@@ -294,6 +296,7 @@ impl StageDescriptor {
                 response: ResponseDescriptor::new_opt(response_opt)?,
                 variables: Vec::new(),
                 source_path: source_path.to_string(),
+                name: Some("request".to_string()),
             });
             count += 1;
         }
