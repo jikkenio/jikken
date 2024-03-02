@@ -90,16 +90,13 @@ impl ExecutionResultFormatter for JunitResultFormatter {
                                     test_iteration_name.as_str()
                                 ));
 
-                                match &stage_result.validation {
-                                    validated::Validated::Fail(nec) => {
-                                        for i in nec {
-                                            lines.push(format!(
-                                                r#"<failure message="{}" type="AssertionError"/>"#,
-                                                i
-                                            ));
-                                        }
+                                if let validated::Validated::Fail(nec) = &stage_result.validation {
+                                    for i in nec {
+                                        lines.push(format!(
+                                            r#"<failure message="{}" type="AssertionError"/>"#,
+                                            i
+                                        ));
                                     }
-                                    _ => (),
                                 }
 
                                 lines.push(r#"</testcase>"#.to_string());
@@ -118,9 +115,7 @@ impl ExecutionResultFormatter for JunitResultFormatter {
         }
         lines.push("</testsuites>".to_string());
 
-        return FormattedExecutionResult {
-            0: lines.join("\n"),
-        };
+        FormattedExecutionResult(lines.join("\n"))
     }
 }
 
@@ -132,7 +127,7 @@ struct ConsoleReporter;
 
 impl ExecutionResultReporter for ConsoleReporter {
     fn report(&self, res: &FormattedExecutionResult) {
-        print!("{res}\n");
+        println!("{res}");
     }
 }
 
@@ -161,7 +156,7 @@ impl ExecutionPolicy for DryRunExecutionPolicy {
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
-        dry_run(&state, &test, iteration)
+        dry_run(state, test, iteration)
             .await
             .map(|passed| (passed, vec![] as Vec<StageResult>))
     }
@@ -182,7 +177,7 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         let telemetry_test = if let Some(s) = &telemetry {
-            match telemetry::create_test(s, &test).await {
+            match telemetry::create_test(s, test).await {
                 Ok(t) => Some(t),
                 Err(e) => {
                     debug!("telemetry failed: {}", e);
@@ -193,7 +188,7 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
             None
         };
 
-        run(state, &test, iteration, telemetry_test).await
+        run(state, test, iteration, telemetry_test).await
     }
 }
 
@@ -230,11 +225,11 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         }
         let ret = self
             .wrapped_policy
-            .execute(state, telemetry, &test, iteration)
+            .execute(state, telemetry, test, iteration)
             .await;
         let passed = ret.as_ref().map(|(passed, _)| *passed).unwrap_or_default();
         self.failed = !passed;
-        return ret;
+        ret
     }
 }
 
@@ -288,7 +283,7 @@ async fn run_tests<T: ExecutionPolicy>(
             test_result.push(result);
         }
         results.push(TestResult {
-            test_name: test_name,
+            test_name,
             iteration_results: test_result,
         });
     }
@@ -299,7 +294,7 @@ async fn run_tests<T: ExecutionPolicy>(
         _ = telemetry::complete_session(s, runtime, 1).await;
     }
 
-    return results;
+    results
 }
 
 struct State {
@@ -366,11 +361,11 @@ impl ResultData {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
                 Ok(data) => {
                     debug!("Body is {data}");
-                    return Some(ResultData {
+                    Some(ResultData {
                         headers,
                         status: response_status.as_u16(),
                         body: data,
-                    });
+                    })
                 }
                 Err(e) => {
                     // TODO: add support for non JSON responses
@@ -422,18 +417,18 @@ pub struct StageResult {
 
 fn load_test_from_path(filename: &String) -> Option<test::File> {
     let load_result = test::file::load(filename);
-    return match load_result {
+    match load_result {
         Ok(file) => Some(file),
         Err(e) => {
             error!("unable to load test file ({}) data: {}", filename, e);
             None
         }
-    };
+    }
 }
 
 fn validate_test_file(
     test_file: test::File,
-    global_variables: &Vec<test::Variable>,
+    global_variables: &[test::Variable],
     project: Option<String>,
     environment: Option<String>,
 ) -> Option<test::Definition> {
@@ -441,21 +436,21 @@ fn validate_test_file(
         .name
         .clone()
         .unwrap_or_else(|| test_file.filename.clone());
-    let res = validation::validate_file(test_file, &global_variables, project, environment);
-    return match res {
+    let res = validation::validate_file(test_file, global_variables, project, environment);
+    match res {
         Ok(file) => Some(file),
         Err(e) => {
             error!("test ({}) failed validation: {}", name, e);
             None
         }
-    };
+    }
 }
 
 //consider using a set for tags and leverage set operations
 //insted of raw loops
 fn ignored_due_to_tag_filter(
     test_definition: &test::Definition,
-    tags: &Vec<String>,
+    tags: &[String],
     tag_mode: &TagMode,
 ) -> bool {
     let test_name = test_definition
@@ -476,7 +471,7 @@ fn ignored_due_to_tag_filter(
                 test_name,
                 tags.join(", ")
             );
-            return true;
+            true
         }
         TagMode::AND => {
             for t in tags.iter() {
@@ -485,7 +480,7 @@ fn ignored_due_to_tag_filter(
                     return true;
                 }
             }
-            return false;
+            false
         }
     }
 }
@@ -495,7 +490,7 @@ fn schedule_impl(
     scheduled_nodes: &HashSet<String>,
 ) -> HashSet<String> {
     let mut ignore: HashSet<String> = HashSet::new();
-    ignore.clone_from(&scheduled_nodes);
+    ignore.clone_from(scheduled_nodes);
 
     //Is there a way to do in 1 iteration?
     graph
@@ -507,7 +502,7 @@ fn schedule_impl(
     return graph
         .keys()
         .filter(|s| !ignore.contains(*s))
-        .map(|s| s.clone())
+        .cloned()
         .collect();
 }
 
@@ -518,7 +513,7 @@ fn construct_test_execution_graph_v2(
     let tests_by_id: HashMap<String, test::Definition> = tests_to_run
         .clone()
         .into_iter()
-        .chain(tests_to_ignore.into_iter())
+        .chain(tests_to_ignore)
         .map(|td| (td.id.clone(), td))
         .collect();
 
@@ -530,19 +525,16 @@ fn construct_test_execution_graph_v2(
         .iter()
         .map(|td| (td.id.clone(), td))
         .for_each(|(id, definition)| {
-            match definition.requires.as_ref() {
-                Some(req) => {
-                    if !tests_by_id.contains_key(req) {
-                        return;
-                    }
-
-                    if let Some(edges) = graph.get_mut(req) {
-                        edges.insert(id.clone());
-                    } else {
-                        graph.insert(req.clone(), HashSet::from([id.clone()]));
-                    }
+            if let Some(req) = definition.requires.as_ref() {
+                if !tests_by_id.contains_key(req) {
+                    return;
                 }
-                None => {}
+
+                if let Some(edges) = graph.get_mut(req) {
+                    edges.insert(id.clone());
+                } else {
+                    graph.insert(req.clone(), HashSet::from([id.clone()]));
+                }
             }
 
             if !graph.contains_key(&id) {
@@ -607,7 +599,7 @@ fn construct_test_execution_graph_v2(
         )
     }
 
-    return job_definitions;
+    job_definitions
 }
 
 pub async fn execute_tests(
@@ -703,18 +695,17 @@ pub async fn execute_tests(
     let totals = execution_res
         .test_results
         .into_iter()
-        .map(|tr| tr.iteration_results)
-        .flatten()
+        .flat_map(|tr| tr.iteration_results)
         .fold((0, 0), |(passed, failed), result| {
             let fail = result.is_err() || !result.unwrap().0;
-            return (passed + 1 * (!fail as u16), failed + 1 * fail as u16);
+            (passed + 1 * (!fail as u16), failed + 1 * fail as u16)
         });
 
-    return Report {
+    Report {
         failed: totals.1,
         passed: totals.0,
         run: run as u16,
-    };
+    }
 }
 
 async fn run(
@@ -885,7 +876,7 @@ fn process_response(
             //no logic currently
             trace!("validating {}headers", validation_type);
         }
-        return Good(());
+        Good(())
     };
 
     let validate_status_code =
@@ -915,7 +906,7 @@ fn process_response(
             return Good(());
         }
         trace!("validating {}body", validation_type);
-        match validate_body(&actual, &expected, ignore_body) {
+        match validate_body(actual, expected, ignore_body) {
             Ok(passed) => {
                 if passed {
                     Good(())
@@ -926,7 +917,7 @@ fn process_response(
                     ))
                 }
             }
-            Err(e) => Validated::fail(format!("{}{}", validation_type, e.to_string())),
+            Err(e) => Validated::fail(format!("{}{}", validation_type, e)),
         }
     };
 
@@ -1391,7 +1382,7 @@ fn http_request_from_test_spec(
     //Where all can we resolve variables? May be worth making an external function
     let variable_resolver = |variable: String| -> String {
         vars.iter().fold(variable, |acc, (var_name, var_value)| {
-            acc.replace(var_name, *var_value)
+            acc.replace(var_name, var_value)
         })
     };
 
@@ -1417,7 +1408,7 @@ fn http_request_from_test_spec(
                 .fold(builder, |builder, (k, v)| {
                     builder.header(k, variable_resolver(v.clone()))
                 })
-                .body(maybe_body.map(|b| Body::from(b)).unwrap_or(Body::empty()))
+                .body(maybe_body.map(Body::from).unwrap_or(Body::empty()))
                 .map_err(|e| Box::from(format!("bad request result: {}", e)));
         });
 }
@@ -1429,13 +1420,13 @@ async fn process_request(
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     debug!("url({})", resolved_request.url);
 
-    return match http_request_from_test_spec(&state.variables, resolved_request) {
+    match http_request_from_test_spec(&state.variables, resolved_request) {
         Ok(req) => {
             debug!("sending request: {req:?}");
-            return Ok(client.request(req).await?);
+            Ok(client.request(req).await?)
         }
         Err(error) => Err(Box::from(format!("bad request result: {}", error))),
-    };
+    }
 }
 
 fn validate_dry_run(

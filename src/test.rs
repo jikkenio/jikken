@@ -715,7 +715,7 @@ impl Definition {
                     continue;
                 }
 
-                if body_str.starts_with("\"") && body_str.ends_with("\"") {
+                if body_str.starts_with('"') && body_str.ends_with('"') {
                     body_str = body_str[1..body_str.len() - 1].to_string();
                 }
 

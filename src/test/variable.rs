@@ -35,15 +35,15 @@ impl Modifier {
     }
 }
 
-pub fn parse_source_path<'a>(path: &'a str) -> String {
-    let index = path.rfind("/");
+pub fn parse_source_path(path: &str) -> String {
+    let index = path.rfind('/');
 
     let mut result = match index {
         Some(i) => path[0..i].to_string(),
         None => "./".to_string(),
     };
 
-    if !result.ends_with("/") {
+    if !result.ends_with('/') {
         result = format!("{}/", result);
     }
 

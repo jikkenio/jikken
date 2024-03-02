@@ -89,13 +89,13 @@ pub async fn get_config() -> Config {
         Some(load_config_from_environment_variables_as_file()),
     ];
 
-    return get_config_impl(config_sources_ascending_priority);
+    get_config_impl(config_sources_ascending_priority)
 }
 
 fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Config {
-    return config_sources_ascending_priority
+    config_sources_ascending_priority
         .into_iter()
-        .fold(Config::default(), apply_config_file);
+        .fold(Config::default(), apply_config_file)
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
@@ -123,7 +123,7 @@ async fn load_config_file(file: &str) -> Option<File> {
 
 async fn load_home_file() -> Option<File> {
     let cfg_file = dirs::home_dir().map(|pb| pb.join(".jikken"));
-    return load_config_file(cfg_file?.as_path().to_str()?).await;
+    load_config_file(cfg_file?.as_path().to_str()?).await
 }
 
 fn load_config_from_environment_variables_as_file() -> File {
@@ -144,7 +144,7 @@ fn load_config_from_environment_variables_as_file() -> File {
         }
     }
 
-    return File {
+    File {
         settings: Some(FileSettings {
             api_key: envvar_apikey,
             continue_on_failure: envvar_cof,
@@ -152,7 +152,7 @@ fn load_config_from_environment_variables_as_file() -> File {
             environment: envvar_env,
         }),
         globals: Some(global_variables),
-    };
+    }
 }
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
