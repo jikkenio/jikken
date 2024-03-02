@@ -120,30 +120,28 @@ pub enum Commands {
     Update,
 }
 
-fn glob_walk(glob_string: &String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+fn glob_walk(glob_string: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let mut ret: Vec<String> = Vec::new();
 
-    for entry in glob_with(glob_string.as_str(), MatchOptions::default()).unwrap() {
-        if let Ok(path) = entry {
-            match path.to_str() {
-                Some(s) => {
-                    if s.ends_with(".jkt") {
-                        ret.push(String::from(s))
-                    }
-                }
-                None => {}
+    for path in glob_with(glob_string, MatchOptions::default())
+        .unwrap()
+        .flatten()
+    {
+        if let Some(s) = path.to_str() {
+            if s.ends_with(".jkt") {
+                ret.push(String::from(s))
             }
         }
     }
 
-    return Ok(ret);
+    Ok(ret)
 }
 
 fn satisfies_potential_glob_filter(glob_pattern: &Option<glob::Pattern>, file_name: &str) -> bool {
-    return match &glob_pattern {
+    match &glob_pattern {
         Some(p) => p.matches_with(file_name, MatchOptions::default()),
         None => true,
-    };
+    }
 }
 
 // Consider how to approach feedback to user when supplied pattern
@@ -162,7 +160,7 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
             .map(|s| {
                 (e.file_type().is_file()
                     && s.ends_with(".jkt")
-                    && satisfies_potential_glob_filter(&pattern, &s))
+                    && satisfies_potential_glob_filter(&pattern, s))
                     || e.file_type().is_dir()
             })
             .unwrap_or(false)
@@ -177,18 +175,19 @@ async fn search_directory(
     let mut ret: Vec<String> = Vec::new();
     let entry_is_file = |e: &walkdir::DirEntry| e.metadata().map(|e| e.is_file()).unwrap_or(false);
 
-    walkdir::WalkDir::new(&path)
+    walkdir::WalkDir::new(path)
         .max_depth(if recursive { ::std::usize::MAX } else { 1 })
         .into_iter()
         .filter_entry(create_top_level_filter(&glob_pattern))
         .filter_map(|e| e.ok())
         .filter(entry_is_file)
-        .for_each(|e| match e.path().to_str() {
-            Some(s) => ret.push(String::from(s)),
-            None => {}
+        .for_each(|e| {
+            if let Some(s) = e.path().to_str() {
+                ret.push(String::from(s))
+            }
         });
 
-    return Ok(ret);
+    Ok(ret)
 }
 
 async fn get_files(
@@ -209,7 +208,7 @@ async fn get_files(
         if is_file {
             results.push(path);
         } else if !exists && !recursive {
-            results.append(glob_walk(&path).unwrap_or(Vec::new()).as_mut());
+            results.append(glob_walk(&path).unwrap_or_default().as_mut());
         } else {
             results.append(
                 search_directory(
