@@ -40,7 +40,6 @@ pub struct Cli {
     #[arg(short, long = "project", name = "proj")]
     project: Option<String>,
 
-
     /// Enable quiet mode, suppresses all console output
     #[arg(short, long, default_value_t = false)]
     quiet: bool,
@@ -265,8 +264,17 @@ async fn run_tests(
         plurality_policy(files.len())
     );
 
-    let report =
-        executor::execute_tests(config, files, dryrun_mode, tags, cli_tag_mode, project, environment, cli_args).await;
+    let report = executor::execute_tests(
+        config,
+        files,
+        dryrun_mode,
+        tags,
+        cli_tag_mode,
+        project,
+        environment,
+        cli_args,
+    )
+    .await;
 
     info!(
         "Jikken executed {} test{} with {} passed and {} failed.\n",
@@ -357,7 +365,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
-            run_tests(paths, tags, tags_or, false, recursive, cli_project, cli_environment, cli_args).await?;
+            run_tests(
+                paths,
+                tags,
+                tags_or,
+                false,
+                recursive,
+                cli_project,
+                cli_environment,
+                cli_args,
+            )
+            .await?;
         }
     }
 

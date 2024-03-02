@@ -625,7 +625,9 @@ pub async fn execute_tests(
     let tests_to_run: Vec<test::Definition> = files
         .iter()
         .filter_map(load_test_from_path)
-        .filter_map(|f| validate_test_file(f, &global_variables, project.clone(), environment.clone()))
+        .filter_map(|f| {
+            validate_test_file(f, &global_variables, project.clone(), environment.clone())
+        })
         .filter_map(|f| {
             if !ignored_due_to_tag_filter(&f, &tags, &tag_mode) {
                 Some(f)
@@ -1127,8 +1129,15 @@ async fn run_cleanup(
                 compare_actual: None,
             };
 
-            let result =
-                process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
+            let result = process_response(
+                counter,
+                StageType::Cleanup,
+                runtime,
+                details,
+                &Vec::new(),
+                td.project.clone(),
+                td.environment.clone(),
+            );
             counter += 1;
             results.push(result);
         }
@@ -1169,7 +1178,15 @@ async fn run_cleanup(
             compare_actual: None,
         };
 
-        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
+        let result = process_response(
+            counter,
+            StageType::Cleanup,
+            runtime,
+            details,
+            &Vec::new(),
+            td.project.clone(),
+            td.environment.clone(),
+        );
         counter += 1;
         results.push(result);
     }
@@ -1211,7 +1228,15 @@ async fn run_cleanup(
             compare_actual: None,
         };
 
-        let result = process_response(counter, StageType::Cleanup, runtime, details, &Vec::new(), td.project.clone(), td.environment.clone());
+        let result = process_response(
+            counter,
+            StageType::Cleanup,
+            runtime,
+            details,
+            &Vec::new(),
+            td.project.clone(),
+            td.environment.clone(),
+        );
         results.push(result);
     }
 
@@ -1743,6 +1768,8 @@ mod tests {
                 }),
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(actual.validation, Validated::Fail(nev![
@@ -1777,6 +1804,8 @@ mod tests {
                 compare_actual: None,
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert!(actual.validation.is_fail());
@@ -1818,6 +1847,8 @@ mod tests {
                 compare_actual: None,
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(actual.validation, Validated::fail(
@@ -1853,6 +1884,8 @@ mod tests {
                 compare_actual: None,
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Passed);
         assert!(actual.validation.is_good());
@@ -1884,6 +1917,8 @@ mod tests {
                 compare_actual: None,
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Passed);
         assert!(actual.validation.is_good());
@@ -1918,6 +1953,8 @@ mod tests {
                 compare_actual: None,
             },
             &ignore_body,
+            None,
+            None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(
@@ -2013,10 +2050,11 @@ mod tests {
         requires: Option<String>,
     ) -> test::Definition {
         test::Definition {
-            name: None, //Some(name.to_string()),
+            name: None, 
             id: String::from(id),
+            project: None,
             environment: None,
-            requires: requires,
+            requires,
             tags: vec![String::from("myTag"), String::from("myTag2")],
             iterate: 0,
             variables: Vec::new(),
@@ -2097,6 +2135,7 @@ mod tests {
         test::Definition {
             name: None,
             id: String::from("id"),
+            project: None,
             environment: None,
             requires: None,
             tags: vec![String::from("myTag"), String::from("myTag2")],
