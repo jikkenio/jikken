@@ -35,6 +35,12 @@ pub struct Cli {
     #[arg(short, long = "env", name = "env")]
     environment: Option<String>,
 
+    /// Indicate which project tests belong to
+    /// {n}This is not used unless tests are reporting to the Jikken.IO platform via an API Key
+    #[arg(short, long = "project", name = "proj")]
+    project: Option<String>,
+
+
     /// Enable quiet mode, suppresses all console output
     #[arg(short, long, default_value_t = false)]
     quiet: bool,
@@ -232,6 +238,8 @@ async fn run_tests(
     tags_or: bool,
     dryrun_mode: bool,
     recursive: bool,
+    project: Option<String>,
+    environment: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut cli_paths = paths;
@@ -248,6 +256,9 @@ async fn run_tests(
         _ => "s",
     };
 
+    let project = project.or(config.clone().settings.project);
+    let environment = environment.or(config.clone().settings.environment);
+
     info!(
         "Jikken found {} test file{}.\n",
         files.len(),
@@ -255,7 +266,7 @@ async fn run_tests(
     );
 
     let report =
-        executor::execute_tests(config, files, dryrun_mode, tags, cli_tag_mode, cli_args).await;
+        executor::execute_tests(config, files, dryrun_mode, tags, cli_tag_mode, project, environment, cli_args).await;
 
     info!(
         "Jikken executed {} test{} with {} passed and {} failed.\n",
@@ -295,6 +306,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     log::set_max_level(LevelFilter::Trace);
 
+    let cli_project = cli.project;
+    let cli_environment = cli.environment;
+
     match cli.command {
         Commands::Update => {
             updater::try_updating().await;
@@ -330,6 +344,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 tags_or,
                 true,
                 recursive,
+                cli_project,
+                cli_environment,
                 Box::new(serde_json::Value::Null),
             )
             .await?;
@@ -341,7 +357,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
-            run_tests(paths, tags, tags_or, false, recursive, cli_args).await?;
+            run_tests(paths, tags, tags_or, false, recursive, cli_project, cli_environment, cli_args).await?;
         }
     }
 

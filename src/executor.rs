@@ -434,12 +434,14 @@ fn load_test_from_path(filename: &String) -> Option<test::File> {
 fn validate_test_file(
     test_file: test::File,
     global_variables: &Vec<test::Variable>,
+    project: Option<String>,
+    environment: Option<String>,
 ) -> Option<test::Definition> {
     let name = test_file
         .name
         .clone()
         .unwrap_or_else(|| test_file.filename.clone());
-    let res = validation::validate_file(test_file, &global_variables);
+    let res = validation::validate_file(test_file, &global_variables, project, environment);
     return match res {
         Ok(file) => Some(file),
         Err(e) => {
@@ -614,6 +616,8 @@ pub async fn execute_tests(
     mode_dryrun: bool,
     tags: Vec<String>,
     tag_mode: TagMode,
+    project: Option<String>,
+    environment: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Report {
     let global_variables = config.generate_global_variables();
@@ -621,7 +625,7 @@ pub async fn execute_tests(
     let tests_to_run: Vec<test::Definition> = files
         .iter()
         .filter_map(load_test_from_path)
-        .filter_map(|f| validate_test_file(f, &global_variables))
+        .filter_map(|f| validate_test_file(f, &global_variables, project.clone(), environment.clone()))
         .filter_map(|f| {
             if !ignored_due_to_tag_filter(&f, &tags, &tag_mode) {
                 Some(f)

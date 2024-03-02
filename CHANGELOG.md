@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+Features:
+* Enable project and environment support for test runs. These can be defined via envvar, config, or test definitions.
+
 Changes:
 * Changed the field name for variable definitions from `dataType` to just `type`.
 * The `type` value for Variable definitions now supports other cases (String, string, STRING... etc).
