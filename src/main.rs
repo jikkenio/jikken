@@ -40,6 +40,13 @@ pub struct Cli {
     #[arg(short, long = "project", name = "proj")]
     project: Option<String>,
 
+    /// Specify path to a Jikken configuration file
+    /// {n}By default, optional ".jikken" files can be placed in the current directory
+    /// {n}and the user's home directory. This option instructs jikken to use the
+    /// {n}provided path instead of the optional .jikken file in the current directory
+    #[arg(short, long = "config_file", name = "config_file")]
+    config_file: Option<String>,
+
     /// Enable quiet mode, suppresses all console output
     #[arg(short, long, default_value_t = false)]
     quiet: bool,
@@ -238,6 +245,7 @@ async fn run_tests(
     recursive: bool,
     project: Option<String>,
     environment: Option<String>,
+    config_file: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut cli_paths = paths;
@@ -247,7 +255,7 @@ async fn run_tests(
     }
 
     let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
-    let config = config::get_config().await;
+    let config = config::get_config(config_file).await;
     let files = get_files(cli_paths, recursive).await?;
     let plurality_policy = |count: usize| match count {
         1 => "",
@@ -353,6 +361,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 recursive,
                 cli_project,
                 cli_environment,
+                cli.config_file,
                 Box::new(serde_json::Value::Null),
             )
             .await?;
@@ -372,6 +381,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 recursive,
                 cli_project,
                 cli_environment,
+                cli.config_file,
                 cli_args,
             )
             .await?;
