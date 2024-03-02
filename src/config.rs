@@ -82,10 +82,10 @@ impl Default for Config {
     }
 }
 
-pub async fn get_config() -> Config {
+pub async fn get_config(file: Option<String>) -> Config {
     let config_sources_ascending_priority = vec![
         load_home_file().await,
-        load_config_file(".jikken").await,
+        load_config_file(file.unwrap_or(".jikken".to_string()).as_str()).await,
         Some(load_config_from_environment_variables_as_file()),
     ];
 
