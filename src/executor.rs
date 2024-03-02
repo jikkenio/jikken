@@ -2050,7 +2050,7 @@ mod tests {
         requires: Option<String>,
     ) -> test::Definition {
         test::Definition {
-            name: None, 
+            name: None,
             id: String::from(id),
             project: None,
             environment: None,
