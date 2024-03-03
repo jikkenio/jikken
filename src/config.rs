@@ -93,9 +93,10 @@ pub async fn get_config(file: Option<String>) -> Config {
 }
 
 fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Config {
-    config_sources_ascending_priority
+    let specified_config = config_sources_ascending_priority
         .into_iter()
-        .fold(Config::default(), apply_config_file)
+        .fold(None, combine_config_files);
+    return apply_config_file(Config::default(), specified_config);
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
@@ -184,6 +185,52 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     }
 
     config
+}
+
+//rhs priority
+fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
+    match (lhs, rhs) {
+        (None, None) => None,
+        (Some(x), None) => Some(x),
+        (None, Some(x)) => Some(x),
+        (Some(existing_file), Some(file_to_apply)) => {
+            let merged_globals: BTreeMap<String, String> = existing_file
+                .globals
+                .unwrap_or_default()
+                .into_iter()
+                .chain(file_to_apply.globals.unwrap_or_default())
+                .collect();
+
+            if let Some(settings) = file_to_apply.settings {
+                return Some(File {
+                    settings: Some(FileSettings {
+                        continue_on_failure: settings.continue_on_failure.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.continue_on_failure)),
+                        api_key: settings.api_key.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.api_key.clone())),
+                        project: settings.project.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.project.clone())),
+                        environment: settings.environment.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.environment.clone())),
+                    }),
+                    globals: Some(merged_globals),
+                });
+            }
+
+            return Some(File {
+                settings: existing_file.settings,
+                globals: Some(merged_globals),
+            });
+        }
+    }
 }
 
 #[cfg(test)]
