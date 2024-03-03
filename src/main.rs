@@ -283,6 +283,17 @@ async fn run_tests(
     )
     .await;
 
+    if report.skipped() > 0 {
+        info!(
+            "Jikken executed {} test{} with {} passed, {} skipped, and {} failed.\n",
+            report.run,
+            plurality_policy(report.run.into()),
+            report.passed,
+            report.skipped(),
+            report.failed
+        );
+
+    } else {
     info!(
         "Jikken executed {} test{} with {} passed and {} failed.\n",
         report.run,
@@ -290,6 +301,7 @@ async fn run_tests(
         report.passed,
         report.failed
     );
+    }
 
     Ok(())
 }
