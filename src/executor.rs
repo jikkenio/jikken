@@ -200,15 +200,13 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
 
 struct FailurePolicy<T: ExecutionPolicy> {
     wrapped_policy: T,
-    fail_fast: bool,
     failed: bool,
 }
 
 impl<T: ExecutionPolicy> FailurePolicy<T> {
-    fn new(policy: T, fast_failure: bool) -> FailurePolicy<T> {
+    fn new(policy: T) -> FailurePolicy<T> {
         FailurePolicy {
             wrapped_policy: policy,
-            fail_fast: fast_failure,
             failed: false,
         }
     }
@@ -226,9 +224,6 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         test: &test::Definition,
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
-        if self.failed && self.fail_fast {
-            return Err(Box::from("Not ran due to failure policy".to_string()));
-        }
         let ret = self
             .wrapped_policy
             .execute(state, telemetry, test, iteration)
@@ -243,7 +238,7 @@ async fn run_tests<T: ExecutionPolicy>(
     tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
-    fail_fast: bool,
+    continue_on_failure: bool,
 ) -> Vec<TestResult> {
     let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
     let total_count = flattened_tests.len();
@@ -258,7 +253,7 @@ async fn run_tests<T: ExecutionPolicy>(
     let mut message_displayed = false;
 
     for (i, test) in flattened_tests.into_iter().enumerate() {
-        if any_failures && fail_fast  && !message_displayed {
+        if any_failures && !continue_on_failure && !message_displayed {
            warn!("Skipping remaining tests due to continueOnFailure setting.");
            message_displayed = true;
         }
@@ -269,7 +264,7 @@ async fn run_tests<T: ExecutionPolicy>(
         for iteration in 0..test.iterate {
             // TODO: clean this up based on policies
             // I don't see a clean way to access it without refactoring
-            if any_failures && fail_fast {
+            if any_failures && !continue_on_failure {
                 break;
             }
 
@@ -690,7 +685,7 @@ pub async fn execute_tests(
         run_tests(
             tests_to_run_with_dependencies,
             session,
-            FailurePolicy::new(DryRunExecutionPolicy, config.settings.continue_on_failure),
+            FailurePolicy::new(DryRunExecutionPolicy),
             config.settings.continue_on_failure,
         )
         .await
@@ -700,7 +695,6 @@ pub async fn execute_tests(
             session,
             FailurePolicy::new(
                 ActualRunExecutionPolicy,
-                config.settings.continue_on_failure,
             ),
             config.settings.continue_on_failure,
         )
