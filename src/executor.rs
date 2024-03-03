@@ -30,6 +30,12 @@ pub struct Report {
     pub failed: u16,
 }
 
+impl Report {
+    pub fn skipped(&self) -> u16 {
+        self.run - (self.passed + self.failed)
+    }
+}
+
 pub struct TestResult {
     pub test_name: String,
     pub iteration_results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>,
@@ -237,6 +243,7 @@ async fn run_tests<T: ExecutionPolicy>(
     tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
+    fail_fast: bool,
 ) -> Vec<TestResult> {
     let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
     let total_count = flattened_tests.len();
@@ -247,11 +254,25 @@ async fn run_tests<T: ExecutionPolicy>(
     };
     let start_time = Instant::now();
 
+    let mut any_failures = false;
+    let mut message_displayed = false;
+
     for (i, test) in flattened_tests.into_iter().enumerate() {
+        if any_failures && fail_fast  && !message_displayed {
+           warn!("Skipping remaining tests due to continueOnFailure setting.");
+           message_displayed = true;
+        }
+
         let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
             Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
+            // TODO: clean this up based on policies
+            // I don't see a clean way to access it without refactoring
+            if any_failures && fail_fast {
+                break;
+            }
+
             info!(
                 "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
                 exec_policy.name(),
@@ -271,10 +292,12 @@ async fn run_tests<T: ExecutionPolicy>(
                     if p.0 {
                         info!("\x1b[32mPASSED\x1b[0m\n");
                     } else {
+                        any_failures = true;
                         info!("\x1b[31mFAILED\x1b[0m\n");
                     }
                 }
                 Err(e) => {
+                    any_failures = true;
                     info!("\x1b[31mFAILED\x1b[0m\n");
                     error!("{}", e);
                 }
@@ -291,7 +314,8 @@ async fn run_tests<T: ExecutionPolicy>(
     let runtime = start_time.elapsed().as_millis() as u32;
 
     if let Some(s) = &telemetry {
-        _ = telemetry::complete_session(s, runtime, 1).await;
+        let status = if any_failures { 2 } else { 1 };
+        _ = telemetry::complete_session(s, runtime, status).await;
     }
 
     results
@@ -667,6 +691,7 @@ pub async fn execute_tests(
             tests_to_run_with_dependencies,
             session,
             FailurePolicy::new(DryRunExecutionPolicy, config.settings.continue_on_failure),
+            config.settings.continue_on_failure,
         )
         .await
     } else {
@@ -677,6 +702,7 @@ pub async fn execute_tests(
                 ActualRunExecutionPolicy,
                 config.settings.continue_on_failure,
             ),
+            config.settings.continue_on_failure,
         )
         .await
     };
@@ -698,7 +724,7 @@ pub async fn execute_tests(
         .flat_map(|tr| tr.iteration_results)
         .fold((0, 0), |(passed, failed), result| {
             let fail = result.is_err() || !result.unwrap().0;
-            (passed + 1 * (!fail as u16), failed + 1 * fail as u16)
+            (passed + !fail as u16, failed + fail as u16)
         });
 
     Report {
