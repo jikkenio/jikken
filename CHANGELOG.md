@@ -1,8 +1,15 @@
 Next (Version determined when release is cut)
 =====
 
+0.7.0
+=====
+
+Bugfixes:
+* Fixed a race condition that would sometimes incorrectly report sessions passing when individual tests failed.
+
 Features:
 * Enable project and environment support for test runs. These can be defined via envvar, config, or test definitions.
+* Added support for HTTP DELETE test definitions
 
 Changes:
 * Changed the field name for variable definitions from `dataType` to just `type`.
