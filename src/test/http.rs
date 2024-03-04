@@ -1,4 +1,3 @@
-use hyper;
 use serde::{Deserialize, Serialize, Serializer};
 use std::cell::Cell;
 use std::fmt;

@@ -1,7 +1,7 @@
 Next (Version determined when release is cut)
 =====
 
-0.7.0
+0.6.2
 =====
 
 Bugfixes:
