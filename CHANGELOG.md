@@ -6,6 +6,7 @@ Next (Version determined when release is cut)
 
 Bugfixes:
 * Fixed a race condition that would sometimes incorrectly report sessions passing when individual tests failed.
+* Fixed a bug with auto-updating version comparisons. Under some conditions the tool would improperly report an older version as being newer.
 
 Features:
 * Enable project and environment support for test runs. These can be defined via envvar, config, or test definitions.
