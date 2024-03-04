@@ -292,15 +292,14 @@ async fn run_tests(
             report.skipped(),
             report.failed
         );
-
     } else {
-    info!(
-        "Jikken executed {} test{} with {} passed and {} failed.\n",
-        report.run,
-        plurality_policy(report.run.into()),
-        report.passed,
-        report.failed
-    );
+        info!(
+            "Jikken executed {} test{} with {} passed and {} failed.\n",
+            report.run,
+            plurality_policy(report.run.into()),
+            report.passed,
+            report.failed
+        );
     }
 
     Ok(())

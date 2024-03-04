@@ -1,8 +1,11 @@
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, warn};
+use regex;
+use regex::Regex;
 use remove_dir_all::remove_dir_all;
 use serde::Deserialize;
+use std::cmp::Ordering;
 use std::env;
 use std::error::Error;
 use std::io::{stdout, Cursor, Write};
@@ -15,6 +18,59 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct ReleaseResponse {
     pub version: String,
     pub url: String,
+}
+
+#[derive(Eq)]
+pub struct Version(String);
+
+impl Version {
+    //Extraneous trailing zeros can throw a wrench in things
+    fn normalized(&self) -> String {
+        let trailing_zero_regex: Regex = Regex::new(r"(.0)?$").unwrap();
+
+        let ret = trailing_zero_regex
+            .find(self.0.as_str())
+            .map(|(start, _)| self.0[..start].to_string())
+            .unwrap_or(self.0.clone());
+
+        return ret;
+    }
+}
+
+impl PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        let lhs_val = self.normalized();
+        let rhs_val = other.normalized();
+
+        return lhs_val == rhs_val;
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        return !self.eq(other);
+    }
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let lhs_val = self.normalized();
+        let rhs_val = other.normalized();
+
+        if lhs_val > rhs_val {
+            return Ordering::Greater;
+        }
+
+        if lhs_val < rhs_val {
+            return Ordering::Less;
+        }
+
+        return Ordering::Equal;
+    }
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        return Some(self.cmp(other));
+    }
 }
 
 async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -69,24 +125,8 @@ async fn update(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-fn has_newer_version(new_version: String) -> bool {
-    let new_version_segments: Vec<&str> = new_version.split('.').collect();
-    let my_version_segments: Vec<&str> = crate::VERSION.split('.').collect();
-
-    let segment_length = std::cmp::min(new_version_segments.len(), my_version_segments.len());
-
-    for i in 0..segment_length {
-        let new_segment_opt = new_version_segments[i].parse::<u32>();
-        let my_segment_opt = my_version_segments[i].parse::<u32>();
-
-        if new_segment_opt.is_err() || my_segment_opt.is_err() {
-            return false;
-        } else if new_segment_opt.unwrap() > my_segment_opt.unwrap() {
-            return true;
-        }
-    }
-
-    false
+fn has_newer_version(new_version: Version) -> bool {
+    new_version > Version(crate::VERSION.to_string())
 }
 
 pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
@@ -103,7 +143,7 @@ pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Err
     let (_, body) = resp.into_parts();
     let response_bytes = body::to_bytes(body).await?;
     if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes) {
-        if has_newer_version(r.version.clone()) {
+        if has_newer_version(Version(r.version.clone())) {
             return Ok(Some(r));
         }
     }
@@ -155,3 +195,44 @@ pub async fn check_for_updates() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_less() -> () {
+        assert!(Version("0.6.1".to_string()) < Version("0.7.0".to_string()));
+    }
+
+    #[test]
+    fn version_greater() -> () {
+        assert!(Version("0.7.1".to_string()) > Version("0.7.0".to_string()));
+    }
+
+    #[test]
+    fn version_greater_or_equal() -> () {
+        assert!(Version("0.7.1".to_string()) >= Version("0.7.0".to_string()));
+    }
+
+    #[test]
+    fn version_less_or_equal() -> () {
+        assert!(Version("0.6.0.0".to_string()) <= Version("0.7.0".to_string()));
+    }
+
+    #[test]
+    fn version_equal() -> () {
+        assert!(Version("0.6.1".to_string()) == Version("0.6.1".to_string()));
+        assert!(Version("0.6.1".to_string()) == Version("0.6.1.0".to_string()));
+    }
+
+    #[test]
+    fn version_not_equal() -> () {
+        assert!(Version("0.6.1".to_string()) != Version("0.6.2".to_string()));
+    }
+
+    #[test]
+    fn newer_version_checkings() -> () {
+        assert!(!has_newer_version(Version("0.6.1".to_string())));
+    }
+} //mod tests
