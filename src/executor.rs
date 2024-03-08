@@ -558,6 +558,8 @@ fn construct_test_execution_graph_v2(
 
             if !graph.contains_key(&id) {
                 graph.insert(id.clone(), HashSet::new());
+            } else {
+                warn!("Skipping test, found duplicate test id: {}", id.clone());
             }
         });
 
@@ -600,11 +602,14 @@ fn construct_test_execution_graph_v2(
             .map(|s| format!("\"{}\"", s))
             .collect::<Vec<String>>()
             .join(",");
-        warn!("Warning: Required tests not found.");
-        warn!(
-            "Check the 'requires' tag in the following test definition(s): {}.\n\n",
-            missing_tests
-        );
+
+        if missing_tests.len() >  0 {
+            warn!("Warning: Required tests not found.");
+            warn!(
+                "Check the 'requires' tag in the following test definition(s): {}.\n\n",
+                missing_tests
+            );
+        }
     }
 
     for (count, job) in job_definitions.iter().enumerate() {
