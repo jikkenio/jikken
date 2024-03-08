@@ -17,6 +17,7 @@ use std::path::Path;
 pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
+    pub project: Option<String>,
     pub env: Option<String>,
     pub tags: Option<String>,
     pub requires: Option<String>,
@@ -45,6 +46,7 @@ impl File {
 #[serde(rename_all = "camelCase")]
 pub struct Variable {
     pub name: String,
+    #[serde(rename = "type")]
     pub data_type: variable::Type,
     pub value: serde_yaml::Value,
     pub modifier: Option<variable::Modifier>,
@@ -349,6 +351,7 @@ impl Variable {
 pub struct Definition {
     pub name: Option<String>,
     pub id: String,
+    pub project: Option<String>,
     pub environment: Option<String>,
     pub requires: Option<String>,
     pub tags: Vec<String>,
@@ -712,7 +715,7 @@ impl Definition {
                     continue;
                 }
 
-                if body_str.starts_with("\"") && body_str.ends_with("\"") {
+                if body_str.starts_with('"') && body_str.ends_with('"') {
                     body_str = body_str[1..body_str.len() - 1].to_string();
                 }
 

@@ -1,5 +1,5 @@
 use crate::test;
-use chrono::Local;
+use chrono::{Local, Utc};
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -17,6 +17,7 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
+    pub project: Option<String>,
     pub environment: Option<String>,
     #[serde(skip_serializing)]
     pub api_key: Option<String>,
@@ -34,6 +35,7 @@ struct File {
 struct FileSettings {
     pub continue_on_failure: Option<bool>,
     pub api_key: Option<String>,
+    pub project: Option<String>,
     pub environment: Option<String>,
 }
 
@@ -43,6 +45,11 @@ impl Config {
         global_variables.insert(
             "TODAY".to_string(),
             format!("{}", Local::now().format("%Y-%m-%d")),
+        );
+
+        global_variables.insert(
+            "TODAY_UTC".to_string(),
+            format!("{}", Utc::now().format("%Y-%m-%d")),
         );
 
         global_variables
@@ -67,6 +74,7 @@ impl Default for Config {
             settings: Settings {
                 continue_on_failure: false,
                 api_key: None,
+                project: None,
                 environment: None,
             },
             globals: BTreeMap::new(),
@@ -74,24 +82,25 @@ impl Default for Config {
     }
 }
 
-pub async fn get_config() -> Config {
+pub async fn get_config(file: Option<String>) -> Config {
     let config_sources_ascending_priority = vec![
         load_home_file().await,
-        load_config_file(".jikken").await,
+        load_config_file(file.unwrap_or(".jikken".to_string()).as_str()).await,
         Some(load_config_from_environment_variables_as_file()),
     ];
 
-    return get_config_impl(config_sources_ascending_priority);
+    get_config_impl(config_sources_ascending_priority)
 }
 
 fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Config {
-    return config_sources_ascending_priority
+    let specified_config = config_sources_ascending_priority
         .into_iter()
-        .fold(Config::default(), apply_config_file);
+        .fold(None, combine_config_files);
+    return apply_config_file(Config::default(), specified_config);
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
-    if !Path::new(file).exists() {
+    if !Path::new(file).exists() || !Path::new(file).is_file() {
         return None;
     }
 
@@ -115,7 +124,7 @@ async fn load_config_file(file: &str) -> Option<File> {
 
 async fn load_home_file() -> Option<File> {
     let cfg_file = dirs::home_dir().map(|pb| pb.join(".jikken"));
-    return load_config_file(cfg_file?.as_path().to_str()?).await;
+    load_config_file(cfg_file?.as_path().to_str()?).await
 }
 
 fn load_config_from_environment_variables_as_file() -> File {
@@ -125,6 +134,7 @@ fn load_config_from_environment_variables_as_file() -> File {
 
     let envvar_apikey = env::var("JIKKEN_API_KEY").ok();
 
+    let envvar_project = env::var("JIKKEN_PROJECT").ok();
     let envvar_env = env::var("JIKKEN_ENVIRONMENT").ok();
 
     let mut global_variables = BTreeMap::new();
@@ -135,14 +145,15 @@ fn load_config_from_environment_variables_as_file() -> File {
         }
     }
 
-    return File {
+    File {
         settings: Some(FileSettings {
             api_key: envvar_apikey,
             continue_on_failure: envvar_cof,
+            project: envvar_project,
             environment: envvar_env,
         }),
         globals: Some(global_variables),
-    };
+    }
 }
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
@@ -160,6 +171,7 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                         .continue_on_failure
                         .unwrap_or(config.settings.continue_on_failure),
                     api_key: settings.api_key.or(config.settings.api_key),
+                    project: settings.project.or(config.settings.project),
                     environment: settings.environment.or(config.settings.environment),
                 },
                 globals: merged_globals,
@@ -173,6 +185,52 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     }
 
     config
+}
+
+//rhs priority
+fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
+    match (lhs, rhs) {
+        (None, None) => None,
+        (Some(x), None) => Some(x),
+        (None, Some(x)) => Some(x),
+        (Some(existing_file), Some(file_to_apply)) => {
+            let merged_globals: BTreeMap<String, String> = existing_file
+                .globals
+                .unwrap_or_default()
+                .into_iter()
+                .chain(file_to_apply.globals.unwrap_or_default())
+                .collect();
+
+            if let Some(settings) = file_to_apply.settings {
+                return Some(File {
+                    settings: Some(FileSettings {
+                        continue_on_failure: settings.continue_on_failure.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.continue_on_failure)),
+                        api_key: settings.api_key.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.api_key.clone())),
+                        project: settings.project.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.project.clone())),
+                        environment: settings.environment.or(existing_file
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.environment.clone())),
+                    }),
+                    globals: Some(merged_globals),
+                });
+            }
+
+            return Some(File {
+                settings: existing_file.settings,
+                globals: Some(merged_globals),
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -219,6 +277,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: true,
                     api_key: None,
+                    project: None,
                     environment: None,
                 },
                 globals: BTreeMap::from([(
@@ -267,6 +326,7 @@ mod tests {
             r#"
             [settings]
             continueOnFailure=false
+            project="my_proj"
             environment="magic"
 
             [globals]
@@ -287,6 +347,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: false,
                     api_key: Some(String::from("key")),
+                    project: Some(String::from("my_proj")),
                     environment: Some(String::from("magic")),
                 },
                 globals: BTreeMap::from([

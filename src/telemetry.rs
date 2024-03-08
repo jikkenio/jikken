@@ -72,6 +72,10 @@ struct TestCompletedPost {
     pub status: u32,
     pub runtime: u32,
     pub details: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -238,6 +242,8 @@ pub async fn complete_stage(
         status: stage.status.clone() as u32,
         runtime: stage.runtime,
         details: details_json,
+        project: stage.project.clone(),
+        environment: stage.environment.clone(),
     };
 
     let post_body = serde_json::to_value(post_data)?;

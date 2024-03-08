@@ -9,6 +9,7 @@ pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         filename: "".to_string(),
         name: Some("".to_string()),
         id: Some(Uuid::new_v4().to_string()),
+        project: None,
         env: None,
         tags: None,
         requires: None,
@@ -28,6 +29,7 @@ pub fn template_staged() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         filename: "".to_string(),
         name: Some("".to_string()),
         id: Some(Uuid::new_v4().to_string()),
+        project: None,
         env: None,
         tags: None,
         requires: None,
@@ -47,6 +49,7 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         filename: "".to_string(),
         name: Some("".to_string()),
         id: Some(Uuid::new_v4().to_string()),
+        project: Some("".to_string()),
         env: Some("".to_string()),
         tags: Some("".to_string()),
         requires: Some("".to_string()),
@@ -83,6 +86,7 @@ fn new_stage() -> file::UnvalidatedStage {
         compare: None,
         response: Some(new_response()),
         variables: None,
+        name: None,
     }
 }
 
@@ -92,6 +96,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
         compare: Some(new_full_compare()?),
         response: Some(new_full_response()?),
         variables: Some(vec![new_full_variable()?]),
+        name: None,
     })
 }
 

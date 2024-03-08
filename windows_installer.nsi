@@ -1,8 +1,17 @@
-OutFile "jikken-v0.6.1-x86_64-windows.exe"
-InstallDir $PROFILE\.jikken
+OutFile "jikken-v0.6.2-x86_64-windows.exe"
+InstallDir $PROFILE\.jk
 
 !include "LogicLib.nsh"
 !include "WinMessages.nsh"
+
+!define SHCNE_ASSOCCHANGED 0x08000000
+!define SHCNF_IDLIST 0
+
+Function RefreshShellIcons
+  ; By jerome tremblay - april 2003
+  System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v \
+  (${SHCNE_ASSOCCHANGED}, ${SHCNF_IDLIST}, 0, 0)'
+FunctionEnd
 
 Section
 
@@ -12,10 +21,18 @@ WriteUninstaller $INSTDIR\uninstaller.exe
 Push "$INSTDIR"
 Call AddToPath
 
+
+WriteRegStr HKCR ".jkt" "" "Jikken Test"
+WriteRegStr HKCR "Jikken Test" "" "Jikken Test"
+FILE favicon.ico
+WriteRegStr HKCR "Jikken Test\DefaultIcon" "" "$INSTDIR\favicon.ico,0"
+Call RefreshShellIcons
+
 SectionEnd
 
 Section "Uninstall"
-
+DeleteRegKey HKCR ".jkt"
+DeleteRegKey HKCR "Jikken Test"
 Delete $INSTDIR\jk.exe
 Delete $INSTDIR\uninstaller.exe
 RMDir $INSTDIR
@@ -39,7 +56,7 @@ SectionEnd
   Call un.StrStr
   Pop `${ResultVar}`
 !macroend
-  
+ 
 Function StrStr
 /*After this point:
   ------------------------------------------

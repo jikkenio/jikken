@@ -35,6 +35,18 @@ pub struct Cli {
     #[arg(short, long = "env", name = "env")]
     environment: Option<String>,
 
+    /// Indicate which project tests belong to
+    /// {n}This is not used unless tests are reporting to the Jikken.IO platform via an API Key
+    #[arg(short, long = "project", name = "proj")]
+    project: Option<String>,
+
+    /// Specify path to a Jikken configuration file
+    /// {n}By default, optional ".jikken" files can be placed in the current directory
+    /// {n}and the user's home directory. This option instructs jikken to use the
+    /// {n}provided path instead of the optional .jikken file in the current directory
+    #[arg(short, long = "config_file", name = "config_file")]
+    config_file: Option<String>,
+
     /// Enable quiet mode, suppresses all console output
     #[arg(short, long, default_value_t = false)]
     quiet: bool,
@@ -115,30 +127,28 @@ pub enum Commands {
     Update,
 }
 
-fn glob_walk(glob_string: &String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+fn glob_walk(glob_string: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let mut ret: Vec<String> = Vec::new();
 
-    for entry in glob_with(glob_string.as_str(), MatchOptions::default()).unwrap() {
-        if let Ok(path) = entry {
-            match path.to_str() {
-                Some(s) => {
-                    if s.ends_with(".jkt") {
-                        ret.push(String::from(s))
-                    }
-                }
-                None => {}
+    for path in glob_with(glob_string, MatchOptions::default())
+        .unwrap()
+        .flatten()
+    {
+        if let Some(s) = path.to_str() {
+            if s.ends_with(".jkt") {
+                ret.push(String::from(s))
             }
         }
     }
 
-    return Ok(ret);
+    Ok(ret)
 }
 
 fn satisfies_potential_glob_filter(glob_pattern: &Option<glob::Pattern>, file_name: &str) -> bool {
-    return match &glob_pattern {
+    match &glob_pattern {
         Some(p) => p.matches_with(file_name, MatchOptions::default()),
         None => true,
-    };
+    }
 }
 
 // Consider how to approach feedback to user when supplied pattern
@@ -157,7 +167,7 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
             .map(|s| {
                 (e.file_type().is_file()
                     && s.ends_with(".jkt")
-                    && satisfies_potential_glob_filter(&pattern, &s))
+                    && satisfies_potential_glob_filter(&pattern, s))
                     || e.file_type().is_dir()
             })
             .unwrap_or(false)
@@ -172,18 +182,19 @@ async fn search_directory(
     let mut ret: Vec<String> = Vec::new();
     let entry_is_file = |e: &walkdir::DirEntry| e.metadata().map(|e| e.is_file()).unwrap_or(false);
 
-    walkdir::WalkDir::new(&path)
+    walkdir::WalkDir::new(path)
         .max_depth(if recursive { ::std::usize::MAX } else { 1 })
         .into_iter()
         .filter_entry(create_top_level_filter(&glob_pattern))
         .filter_map(|e| e.ok())
         .filter(entry_is_file)
-        .for_each(|e| match e.path().to_str() {
-            Some(s) => ret.push(String::from(s)),
-            None => {}
+        .for_each(|e| {
+            if let Some(s) = e.path().to_str() {
+                ret.push(String::from(s))
+            }
         });
 
-    return Ok(ret);
+    Ok(ret)
 }
 
 async fn get_files(
@@ -204,7 +215,7 @@ async fn get_files(
         if is_file {
             results.push(path);
         } else if !exists && !recursive {
-            results.append(glob_walk(&path).unwrap_or(Vec::new()).as_mut());
+            results.append(glob_walk(&path).unwrap_or_default().as_mut());
         } else {
             results.append(
                 search_directory(
@@ -232,6 +243,9 @@ async fn run_tests(
     tags_or: bool,
     dryrun_mode: bool,
     recursive: bool,
+    project: Option<String>,
+    environment: Option<String>,
+    config_file: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut cli_paths = paths;
@@ -241,29 +255,60 @@ async fn run_tests(
     }
 
     let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
-    let config = config::get_config().await;
+    let config = config::get_config(config_file).await;
     let files = get_files(cli_paths, recursive).await?;
-    let test_plurality = if files.len() != 1 { "s" } else { "" };
+    let plurality_policy = |count: usize| match count {
+        1 => "",
+        _ => "s",
+    };
+
+    let project = project.or(config.clone().settings.project);
+    let environment = environment.or(config.clone().settings.environment);
 
     info!(
         "Jikken found {} test file{}.\n",
         files.len(),
-        test_plurality
+        plurality_policy(files.len())
     );
 
-    let report =
-        executor::execute_tests(config, files, dryrun_mode, tags, cli_tag_mode, cli_args).await;
+    let report = executor::execute_tests(
+        config,
+        files,
+        dryrun_mode,
+        tags,
+        cli_tag_mode,
+        project,
+        environment,
+        cli_args,
+    )
+    .await;
 
-    info!(
-        "Jikken executed {} test{} with {} passed and {} failed.\n",
-        report.run, test_plurality, report.passed, report.failed
-    );
+    if report.skipped() > 0 {
+        info!(
+            "Jikken executed {} test{} with {} passed, {} skipped, and {} failed.\n",
+            report.run,
+            plurality_policy(report.run.into()),
+            report.passed,
+            report.skipped(),
+            report.failed
+        );
+    } else {
+        info!(
+            "Jikken executed {} test{} with {} passed and {} failed.\n",
+            report.run,
+            plurality_policy(report.run.into()),
+            report.passed,
+            report.failed
+        );
+    }
 
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let _ = enable_ansi_support::enable_ansi_support();
+
     let cli = Cli::parse();
     let cli_args = Box::new(serde_json::to_value(&cli)?);
 
@@ -286,6 +331,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     log::set_max_level(LevelFilter::Trace);
+
+    let cli_project = cli.project;
+    let cli_environment = cli.environment;
 
     match cli.command {
         Commands::Update => {
@@ -322,6 +370,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 tags_or,
                 true,
                 recursive,
+                cli_project,
+                cli_environment,
+                cli.config_file,
                 Box::new(serde_json::Value::Null),
             )
             .await?;
@@ -333,7 +384,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
-            run_tests(paths, tags, tags_or, false, recursive, cli_args).await?;
+            run_tests(
+                paths,
+                tags,
+                tags_or,
+                false,
+                recursive,
+                cli_project,
+                cli_environment,
+                cli.config_file,
+                cli_args,
+            )
+            .await?;
         }
     }
 

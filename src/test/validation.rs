@@ -31,6 +31,8 @@ fn validate_test_file(
 pub fn validate_file(
     file: test::File,
     global_variables: &[test::Variable],
+    project: Option<String>,
+    environment: Option<String>,
 ) -> Result<test::Definition, Error> {
     validate_test_file(&file, global_variables)?;
 
@@ -48,7 +50,8 @@ pub fn validate_file(
     let td = test::Definition {
         name: file.name,
         id: file.id.unwrap_or(generated_id).to_lowercase(),
-        environment: file.env,
+        project: file.project.or(project),
+        environment: file.env.or(environment),
         requires: file.requires,
         tags: new_tags,
         iterate: file.iterate.unwrap_or(1),

@@ -1,10 +1,9 @@
-use hyper;
 use serde::{Deserialize, Serialize, Serializer};
 use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Header {
     pub header: String,
     pub value: String,
@@ -74,6 +73,8 @@ pub enum Verb {
     Put,
     #[serde(alias = "patch", alias = "PATCH")]
     Patch,
+    #[serde(alias = "delete", alias = "DELETE")]
+    Delete,
     Undefined,
 }
 
@@ -81,8 +82,9 @@ impl Verb {
     pub fn as_method(&self) -> Method {
         match &self {
             Verb::Post => Method(hyper::Method::POST),
-            Verb::Patch => Method(hyper::Method::PATCH),
             Verb::Put => Method(hyper::Method::PUT),
+            Verb::Patch => Method(hyper::Method::PATCH),
+            Verb::Delete => Method(hyper::Method::DELETE),
             _ => Method(hyper::Method::GET),
         }
     }
