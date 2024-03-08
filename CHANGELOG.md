@@ -7,14 +7,20 @@ Next (Version determined when release is cut)
 Bugfixes:
 * Fixed a race condition that would sometimes incorrectly report sessions passing when individual tests failed.
 * Fixed a bug with auto-updating version comparisons. Under some conditions the tool would improperly report an older version as being newer.
+* Fixed calls which have body data to properly calculate content-type and content-length headers.
+* Fixed console colors for legacy windows terminals (ansi-support).
 
 Features:
 * Enable project and environment support for test runs. These can be defined via envvar, config, or test definitions.
-* Added support for HTTP DELETE test definitions
+* Added support for HTTP DELETE test definitions.
+* Added CLI argument to provide non-standard config file locations.
+* Added new global variable TODAY_UTC to provide today's date based on UTC as opposed to local time.
+* Added an optional `name` field for test stages.
 
 Changes:
 * Changed the field name for variable definitions from `dataType` to just `type`.
 * The `type` value for Variable definitions now supports other cases (String, string, STRING... etc).
+* The windows installer now associates `jkt` files with Jikken.
 
 0.6.1
 =====
