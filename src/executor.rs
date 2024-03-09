@@ -8,7 +8,7 @@ use crate::test::definition::ResponseDescriptor;
 use crate::test::http;
 use crate::test::http::Header;
 use crate::test::Definition;
-use crate::test::{definition, validation};
+use crate::test::{definition, validation, Variable};
 use crate::TagMode;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
@@ -254,8 +254,8 @@ async fn run_tests<T: ExecutionPolicy>(
 
     for (i, test) in flattened_tests.into_iter().enumerate() {
         if any_failures && !continue_on_failure && !message_displayed {
-           warn!("Skipping remaining tests due to continueOnFailure setting.");
-           message_displayed = true;
+            warn!("Skipping remaining tests due to continueOnFailure setting.");
+            message_displayed = true;
         }
 
         let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
@@ -351,16 +351,22 @@ impl Default for ResultData {
 }
 
 impl ResultData {
-    pub fn from_request(req: Option<ResponseDescriptor>) -> ResultData {
-        if let Some(r) = req {
-            return ResultData {
-                headers: r.headers,
-                status: r.status.unwrap_or(0),
-                body: r.body.map_or(serde_json::Value::Null, |b| b.data),
-            };
-        }
-
-        ResultData::default()
+    //Consider making get_body a static method that
+    //accepts the global vars. Passing the Definition seems wrong
+    pub fn from_request(
+        req: Option<ResponseDescriptor>,
+        td: &test::Definition,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> ResultData {
+        req.map(|r| ResultData {
+            headers: r.headers,
+            status: r.status.unwrap_or(0),
+            body: td
+                .get_body(&r.body, variables, iteration)
+                .unwrap_or(serde_json::Value::Null),
+        })
+        .unwrap_or(ResultData::default())
     }
 
     pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
@@ -603,7 +609,7 @@ fn construct_test_execution_graph_v2(
             .collect::<Vec<String>>()
             .join(",");
 
-        if missing_tests.len() >  0 {
+        if missing_tests.len() > 0 {
             warn!("Warning: Required tests not found.");
             warn!(
                 "Check the 'requires' tag in the following test definition(s): {}.\n\n",
@@ -698,9 +704,7 @@ pub async fn execute_tests(
         run_tests(
             tests_to_run_with_dependencies,
             session,
-            FailurePolicy::new(
-                ActualRunExecutionPolicy,
-            ),
+            FailurePolicy::new(ActualRunExecutionPolicy),
             config.settings.continue_on_failure,
         )
         .await
@@ -1014,7 +1018,7 @@ async fn validate_setup(
             &td.variables,
         );
         let req_headers = td.get_setup_request_headers(iteration);
-        let req_body = td.get_body(&setup.request, &td.variables, iteration);
+        let req_body = td.get_body(&setup.request.body, &td.variables, iteration);
 
         let resolved_request = test::definition::ResolvedRequest::new(
             req_url.clone(),
@@ -1025,7 +1029,8 @@ async fn validate_setup(
 
         debug!("executing setup stage: {}", req_url);
 
-        let expected = ResultData::from_request(setup.response.clone());
+        let expected =
+            ResultData::from_request(setup.response.clone(), &td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1113,7 +1118,7 @@ async fn run_cleanup(
             let success_url =
                 &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
             let success_headers = td.get_headers(&onsuccess.headers, iteration);
-            let success_body = td.get_body(onsuccess, &td.variables, iteration);
+            let success_body = td.get_body(&onsuccess.body, &td.variables, iteration);
             let resolved_request = test::definition::ResolvedRequest::new(
                 success_url.clone(),
                 success_method.clone(),
@@ -1121,7 +1126,7 @@ async fn run_cleanup(
                 success_body.clone(),
             );
 
-            let expected = ResultData::from_request(None);
+            let expected = ResultData::from_request(None, &td, &td.variables, iteration);
             let start_time = Instant::now();
             let req_response = process_request(state, resolved_request).await?;
             let runtime = start_time.elapsed().as_millis() as u32;
@@ -1162,7 +1167,7 @@ async fn run_cleanup(
         let failure_method = onfailure.method.as_method();
         let failure_url = &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
         let failure_headers = td.get_headers(&onfailure.headers, iteration);
-        let failure_body = td.get_body(onfailure, &td.variables, iteration);
+        let failure_body = td.get_body(&onfailure.body, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
             failure_url.clone(),
             failure_method.clone(),
@@ -1170,7 +1175,7 @@ async fn run_cleanup(
             failure_body.clone(),
         );
 
-        let expected = ResultData::from_request(None);
+        let expected = ResultData::from_request(None, &td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1212,7 +1217,7 @@ async fn run_cleanup(
         let req_method = request.method.as_method();
         let req_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
         let req_headers = td.get_cleanup_request_headers(iteration);
-        let req_body = td.get_body(request, &td.variables, iteration);
+        let req_body = td.get_body(&request.body, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
             req_url.clone(),
             req_method.clone(),
@@ -1220,7 +1225,7 @@ async fn run_cleanup(
             req_body.clone(),
         );
 
-        let expected = ResultData::from_request(None);
+        let expected = ResultData::from_request(None, &td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1278,7 +1283,7 @@ async fn validate_stage(
     );
     let req_headers = td.get_headers(&stage.request.headers, iteration);
     let req_body = td.get_body(
-        &stage.request,
+        &stage.request.body,
         &[&stage.variables[..], &td.variables[..]].concat(),
         iteration,
     );
@@ -1290,7 +1295,12 @@ async fn validate_stage(
         req_body.clone(),
     );
     debug!("executing test stage {stage_name}: {req_url}");
-    let expected = ResultData::from_request(stage.response.clone());
+    let expected = ResultData::from_request(
+        stage.response.clone(),
+        &td,
+        &[&stage.variables[..], &td.variables[..]].concat(),
+        iteration,
+    );
     let request = RequestDetails {
         headers: req_headers
             .iter()
@@ -1470,7 +1480,7 @@ fn validate_dry_run(
             &td.variables,
         );
         let setup_headers = td.get_setup_request_headers(iteration);
-        let setup_body = td.get_body(&setup.request, &td.variables, iteration);
+        let setup_body = td.get_body(&setup.request.body, &td.variables, iteration);
         info!("setup: {} {}\n", setup_method, setup_url);
         if !setup_headers.is_empty() {
             info!("setup_headers:\n");
@@ -1532,7 +1542,7 @@ fn validate_dry_run(
         );
         let stage_headers = td.get_headers(&stage.request.headers, iteration);
         let stage_body = td.get_body(
-            &stage.request,
+            &stage.request.body,
             &[&stage.variables[..], &td.variables[..]].concat(),
             iteration,
         );
@@ -1676,7 +1686,7 @@ fn validate_dry_run(
         let onsuccess_url =
             &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &td.variables);
         let onsuccess_headers = td.get_setup_request_headers(iteration);
-        let onsuccess_body = td.get_body(onsuccess, &td.variables, iteration);
+        let onsuccess_body = td.get_body(&onsuccess.body, &td.variables, iteration);
         info!("onsuccess: {} {}\n", onsuccess_method, onsuccess_url);
         if !onsuccess_headers.is_empty() {
             info!("onsuccess_headers:\n");
@@ -1696,7 +1706,7 @@ fn validate_dry_run(
         let onfailure_url =
             &td.get_url(iteration, &onfailure.url, &onfailure.params, &td.variables);
         let onfailure_headers = td.get_setup_request_headers(iteration);
-        let onfailure_body = td.get_body(onfailure, &td.variables, iteration);
+        let onfailure_body = td.get_body(&onfailure.body, &td.variables, iteration);
         info!("onfailure: {} {}\n", onfailure_method, onfailure_url);
         if !onfailure_headers.is_empty() {
             info!("onfailure_headers:\n");
@@ -1715,7 +1725,7 @@ fn validate_dry_run(
         let cleanup_method = request.method.as_method();
         let cleanup_url = &td.get_url(iteration, &request.url, &request.params, &td.variables);
         let cleanup_headers = td.get_setup_request_headers(iteration);
-        let cleanup_body = td.get_body(request, &td.variables, iteration);
+        let cleanup_body = td.get_body(&request.body, &td.variables, iteration);
         info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
         if !cleanup_headers.is_empty() {
             info!("cleanup_headers:\n");

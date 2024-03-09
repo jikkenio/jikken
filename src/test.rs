@@ -5,6 +5,7 @@ pub mod template;
 pub mod validation;
 pub mod variable;
 
+use crate::test::definition::RequestBody;
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
@@ -694,11 +695,11 @@ impl Definition {
 
     pub fn get_body(
         &self,
-        request: &definition::RequestDescriptor,
+        body: &Option<RequestBody>,
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        if let Some(body) = &request.body {
+        if let Some(body) = &body {
             if !body.matches_variable.get() {
                 return Some(body.data.clone());
             }
@@ -713,10 +714,6 @@ impl Definition {
 
                 if !body_str.contains(var_pattern.as_str()) {
                     continue;
-                }
-
-                if body_str.starts_with('"') && body_str.ends_with('"') {
-                    body_str = body_str[1..body_str.len() - 1].to_string();
                 }
 
                 let replacement = variable.generate_value(iteration, self.global_variables.clone());
@@ -744,33 +741,141 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        if let Some(body) = &compare.body {
-            if !body.matches_variable.get() {
-                return Some(body.data.clone());
-            }
+        self.get_body(&compare.body, variables, iteration)
+    }
+}
 
-            let mut body_str = match serde_json::to_string(&body.data) {
-                Ok(s) => s,
-                Err(_) => "".to_string(),
-            };
+//------------------TESTS---------------------------------
 
-            for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${{{}}}", variable.name);
+#[cfg(test)]
+mod tests {
 
-                if !body_str.contains(var_pattern.as_str()) {
-                    continue;
-                }
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    use crate::test::definition::CleanupDescriptor;
 
-                let replacement = variable.generate_value(iteration, self.global_variables.clone());
-                body_str = body_str.replace(var_pattern.as_str(), replacement.as_str());
-            }
+    #[test]
+    fn none_body_returns_none() {
+        let vars: Vec<Variable> = vec![];
+        let td = Definition {
+            name: None,
+            id: "id".to_string(),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: vec![],
+            iterate: 0,
+            variables: vec![],
+            global_variables: vec![],
+            stages: vec![],
+            setup: None,
+            cleanup: CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                always: None,
+            },
+        };
+        assert_eq!(None, td.get_body(&None, vars.as_slice(), 1))
+    }
 
-            return match serde_json::from_str(body_str.as_str()) {
-                Ok(result) => Some(result),
-                Err(_) => None,
-            };
-        }
+    #[test]
+    fn body_novars_unchanged() {
+        let vars: Vec<Variable> = vec![];
+        let td = Definition {
+            name: None,
+            id: "id".to_string(),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: vec![],
+            iterate: 0,
+            variables: vec![Variable {
+                name: "my_var".to_string(),
+                data_type: variable::Type::String,
+                value: serde_yaml::to_value("my_val").unwrap(),
+                modifier: None,
+                format: None,
+                file: None,
+                source_path: "path".to_string(),
+            }],
+            global_variables: vec![],
+            stages: vec![],
+            setup: None,
+            cleanup: CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                always: None,
+            },
+        };
 
-        None
+        let body = RequestBody {
+            data: serde_json::to_value("this_is_my_body").unwrap(),
+            matches_variable: false.into(),
+        };
+
+        assert_eq!(
+            serde_json::to_value("this_is_my_body").ok(),
+            td.get_body(&Some(body), vars.as_slice(), 1)
+        )
+    }
+
+    #[test]
+    fn body_withvars_changed() {
+        //Our expected sub is in this vector as opposed
+        //to the vars in the TD.
+        let vars: Vec<Variable> = vec![Variable {
+            name: "my_var".to_string(),
+            data_type: variable::Type::String,
+            value: serde_yaml::to_value("my_val2").unwrap(),
+            modifier: None,
+            format: None,
+            file: None,
+            source_path: "path".to_string(),
+        }];
+        let td = Definition {
+            name: None,
+            id: "id".to_string(),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: vec![],
+            iterate: 0,
+            variables: vec![Variable {
+                name: "my_var".to_string(),
+                data_type: variable::Type::String,
+                value: serde_yaml::to_value("my_val").unwrap(),
+                modifier: None,
+                format: None,
+                file: None,
+                source_path: "path".to_string(),
+            }],
+            global_variables: vec![Variable {
+                name: "my_var2".to_string(),
+                data_type: variable::Type::String,
+                value: serde_yaml::to_value("my_val3").unwrap(),
+                modifier: None,
+                format: None,
+                file: None,
+                source_path: "path".to_string(),
+            }],
+            stages: vec![],
+            setup: None,
+            cleanup: CleanupDescriptor {
+                onsuccess: None,
+                onfailure: None,
+                always: None,
+            },
+        };
+
+        let body = RequestBody {
+            data: serde_json::to_value(format!("this_is_my_body_${{my_var}}_${{my_var2}}"))
+                .unwrap(),
+            matches_variable: true.into(),
+        };
+
+        assert_eq!(
+            serde_json::to_value("this_is_my_body_my_val2_my_val3").ok(),
+            td.get_body(&Some(body), vars.as_slice(), 1)
+        )
     }
 }
