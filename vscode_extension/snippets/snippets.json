@@ -1,0 +1,98 @@
+{
+    "Request": {
+        "prefix": [
+            "request"
+        ],
+        "body": [
+            "request:",
+            "\turl:",
+            "\tbody:",
+            "\tmethod:",
+            "\tparams:",
+            "\t\t- param:",
+            "\t\t  value:",
+            "\theaders:",
+            "\t\t- header:",
+            "\t\t  value:"
+        ],
+        "description": "A request block"
+    },
+    "Response": {
+        "prefix": [
+            "response"
+        ],
+        "body": [
+            "response:",
+            "\tstatus:",
+            "\theaders:",
+            "\t\t- header:",
+            "\t\t  value:",
+            "\tbody:",
+            "\tignore:",
+            "\t\t- ",
+            "\textract:",
+            "\t\t- name:",
+            "\t\t  field:"
+        ],
+        "description": "A response block"
+    },
+    "Compare": {
+        "prefix": [
+            "compare"
+        ],
+        "body": [
+            "compare:",
+            "\trequest:",
+            "\t\turl:",
+            "\t\tbody:",
+            "\t\tmethod:",
+            "\t\tparams:",
+            "\t\t\t- param:",
+            "\t\t\t  value:",
+            "\t\theaders:",
+            "\t\t\t- header:",
+            "\t\t\t  value:",
+            "\taddParams:",
+            "\t\t- param:",
+            "\t\t  value:",
+            "\tignoreParams:",
+            "\t\t-",
+            "\taddHeaders:",
+            "\t\t- header:",
+            "\t\t  value:",
+            "\tignoreHeaders:",
+            "\t\t-"
+        ],
+        "description": "A compare block"
+    },
+    "Cleanup": {
+        "prefix": [
+            "cleanup"
+        ],
+        "body": [
+            "cleanup:",
+            "\tonsuccess:",
+            "\tonfailure:",
+            "\talways:"
+        ],
+        "description": "A cleanup block"
+    },
+    "Variables": {
+        "prefix": [
+            "variables"
+        ],
+        "body": [
+            "variables:",
+            "\t- name:",
+            "\t  dataType:",
+            "\t  value:",
+            "\t  file:",
+            "\t  modifier:",
+            "\t\t  operation:",
+            "\t\t  value:",
+            "\t\t  unit:",
+            "\t  format:"
+        ],
+        "description": "A variables block"
+    }
+}
