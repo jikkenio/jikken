@@ -1,6 +1,6 @@
 # Jikken README
 
-An extension for working with Jikken .jkt files. \
+An extension for working with Jikken .jkt files.
 
 For more information about Jikken, visit https://jikken.io/
 

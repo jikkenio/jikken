@@ -6,7 +6,7 @@
   "engines": {
     "vscode": "^1.84.0"
   },
-  "publisher": "jikkenio",
+  "publisher": "Jikken",
   "author": {
     "name": "Jikken"
   },
@@ -19,14 +19,14 @@
     "Programming Languages"
   ],
   "homepage": "https://www.jikken.io/",
-  "icon": "./images/favicon.ico",
+  "icon": "./images/logo.png",
   "contributes": {
     "languages": [
       {
         "id": "jikken",
         "icon": {
-          "light": "./images/favicon.ico",
-          "dark": "./images/favicon.ico"
+          "light": "./images/logo.png",
+          "dark": "./images/logo.png"
         },
         "aliases": [
           "Jikken Test",
