@@ -1,0 +1,55 @@
+{
+  "name": "jikken",
+  "displayName": "Jikken",
+  "description": "Language support for Jikken Tests",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "publisher": "jikkenio",
+  "author": {
+    "name": "Jikken"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jikkenio/jikken-vscode"
+  },
+  "license": "MIT",
+  "categories": [
+    "Programming Languages"
+  ],
+  "homepage": "https://www.jikken.io/",
+  "icon": "./images/favicon.ico",
+  "contributes": {
+    "languages": [
+      {
+        "id": "jikken",
+        "icon": {
+          "light": "./images/favicon.ico",
+          "dark": "./images/favicon.ico"
+        },
+        "aliases": [
+          "Jikken Test",
+          "jikken"
+        ],
+        "extensions": [
+          ".jkt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jikken",
+        "scopeName": "source.jkt",
+        "path": "./syntaxes/jikken.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "jikken",
+        "path": "./snippets/snippets.json"
+      }
+    ]
+  }
+}
