@@ -555,20 +555,29 @@ fn construct_test_execution_graph_v2(
         .iter()
         .map(|td| (td.id.clone(), td))
         .for_each(|(id, definition)| {
-            //don't schedule a dependency of a disabled test
-            //but still add the disabled test as a node to provide
-            //visibility into our test report that it was skipped
-            if !definition.disabled {
-                if let Some(req) = definition.requires.as_ref() {
-                    if !tests_by_id.contains_key(req) {
-                        return;
-                    }
+            if let Some(req) = definition.requires.as_ref() {
+                let required_def = tests_by_id.get(req);
+                if required_def.is_none() {
+                    return;
+                }
 
-                    if let Some(edges) = graph.get_mut(req) {
-                        edges.insert(id.clone());
-                    } else {
-                        graph.insert(req.clone(), HashSet::from([id.clone()]));
-                    }
+                if required_def.unwrap().disabled {
+                    warn!(
+                        "Test \"{}\" requires a disabled test: \"{}\"",
+                        definition
+                            .name
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or(id.as_str()),
+                        required_def.unwrap().id
+                    );
+                    //should we do transitive disablement?
+                }
+
+                if let Some(edges) = graph.get_mut(req) {
+                    edges.insert(id.clone());
+                } else {
+                    graph.insert(req.clone(), HashSet::from([id.clone()]));
                 }
             }
 
