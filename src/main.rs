@@ -15,7 +15,6 @@ use log::{debug, error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::ffi::OsStr;
 use std::path::Path;
 use tokio::fs;
 
@@ -216,12 +215,11 @@ fn ignore_matches<'a>(ignore_pattern: &'a str, file: &'a str) -> bool {
     let ignore_pattern_path = std::path::Path::new(ignore_pattern);
     let file_path = std::path::Path::new(file);
 
-    let filename_extractor = |s: &'a Path| -> &'a OsStr { s.file_stem().unwrap_or_default() };
     let dirname_extractor =
         |s: &'a Path| -> &'a str { s.parent().and_then(|s| s.to_str()).unwrap_or_default() };
 
     if ignore_pattern_path.is_file() {
-        return filename_extractor(file_path) == filename_extractor(ignore_pattern_path);
+        return file_path == ignore_pattern_path;
     } else if ignore_pattern_path.is_dir() {
         return dirname_extractor(file_path) == ignore_pattern_path.to_str().unwrap_or_default();
     }
