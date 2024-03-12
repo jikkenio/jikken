@@ -1,0 +1,10 @@
+name: Simulate Flaky Test You Wish to Disable
+requires: auth
+disabled: true
+request:
+  url: https://api.jikken.io/v2/fix_me
+  headers:
+    - header: Authorization
+      value: ${token}
+response:
+  status: 200

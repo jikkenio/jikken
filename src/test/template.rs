@@ -21,6 +21,7 @@ pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         stages: None,
         cleanup: None,
         variables: None,
+        disabled: None,
     })
 }
 
@@ -41,6 +42,7 @@ pub fn template_staged() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         stages: Some(vec![new_stage()]),
         cleanup: None,
         variables: None,
+        disabled: None,
     })
 }
 
@@ -61,6 +63,7 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         stages: Some(vec![new_full_stage()?]),
         cleanup: Some(new_full_cleanup()?),
         variables: Some(vec![new_full_variable()?]),
+        disabled: Some(false),
     })
 }
 
