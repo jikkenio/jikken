@@ -268,6 +268,11 @@ async fn run_tests<T: ExecutionPolicy>(
                 break;
             }
 
+            if test.disabled {
+                warn!("Skipping disabled test : {test_name}");
+                break;
+            }
+
             info!(
                 "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
                 exec_policy.name(),
@@ -551,8 +556,22 @@ fn construct_test_execution_graph_v2(
         .map(|td| (td.id.clone(), td))
         .for_each(|(id, definition)| {
             if let Some(req) = definition.requires.as_ref() {
-                if !tests_by_id.contains_key(req) {
+                let required_def = tests_by_id.get(req);
+                if required_def.is_none() {
                     return;
+                }
+
+                if required_def.unwrap().disabled {
+                    warn!(
+                        "Test \"{}\" requires a disabled test: \"{}\"",
+                        definition
+                            .name
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or(id.as_str()),
+                        required_def.unwrap().id
+                    );
+                    //should we do transitive disablement?
                 }
 
                 if let Some(edges) = graph.get_mut(req) {
@@ -562,9 +581,13 @@ fn construct_test_execution_graph_v2(
                 }
             }
 
-            if !graph.contains_key(&id) {
+            let node_for_id = graph.get(&id);
+            if node_for_id.is_none() {
                 graph.insert(id.clone(), HashSet::new());
-            } else {
+            }
+            //intution: if it already has a dependent, its simply a test
+            //depended on by multiple other tests and not a duplicate ID made in error
+            else if node_for_id.unwrap().is_empty() {
                 warn!("Skipping test, found duplicate test id: {}", id.clone());
             }
         });
@@ -2092,6 +2115,7 @@ mod tests {
                 onfailure: None,
                 always: None,
             },
+            disabled: false,
         }
     }
 
@@ -2175,6 +2199,7 @@ mod tests {
                 onfailure: None,
                 always: None,
             },
+            disabled: false,
         }
     }
 

@@ -30,6 +30,7 @@ pub struct File {
     pub stages: Option<Vec<file::UnvalidatedStage>>,
     pub cleanup: Option<file::UnvalidatedCleanup>,
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
+    pub disabled: Option<bool>,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
@@ -362,6 +363,7 @@ pub struct Definition {
     pub stages: Vec<definition::StageDescriptor>,
     pub setup: Option<definition::RequestResponseDescriptor>,
     pub cleanup: definition::CleanupDescriptor,
+    pub disabled: bool,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -774,6 +776,7 @@ mod tests {
                 onfailure: None,
                 always: None,
             },
+            disabled: false,
         };
         assert_eq!(None, td.get_body(&None, vars.as_slice(), 1))
     }
@@ -806,6 +809,7 @@ mod tests {
                 onfailure: None,
                 always: None,
             },
+            disabled: false,
         };
 
         let body = RequestBody {
@@ -865,6 +869,7 @@ mod tests {
                 onfailure: None,
                 always: None,
             },
+            disabled: false,
         };
 
         let body = RequestBody {
