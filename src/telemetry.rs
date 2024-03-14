@@ -93,17 +93,14 @@ fn redact_string(_val: &str) -> String {
 }
 
 fn redact_headers(headers: &mut Vec<Header>) {
-    println!("HERE");
     let should_redact = |s: &str| {
-        println!("CHECKING {s}");
-        return s == "Authorization";
+        return s.to_lowercase() == "authorization";
     };
 
     headers
         .iter_mut()
         .filter(|h| should_redact(h.header.as_str()))
         .for_each(|h| {
-            println!("REDACTING!");
             return h.value = redact_string(&h.value);
         });
 }
@@ -394,7 +391,7 @@ mod tests {
     fn headers_factory() -> Vec<Header> {
         vec![
             Header {
-                header: "Authorization".to_string(),
+                header: "AuthorIzation".to_string(), //dumb casing on purpose :)
                 value: "super_secret_key".to_string(),
                 matches_variable: false.into(),
             },
