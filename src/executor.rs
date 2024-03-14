@@ -183,7 +183,7 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
         iteration: u32,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         let telemetry_test = if let Some(s) = &telemetry {
-            match telemetry::create_test(s, test).await {
+            match telemetry::create_test(s, test.clone()).await {
                 Ok(t) => Some(t),
                 Err(e) => {
                     debug!("telemetry failed: {}", e);
@@ -340,9 +340,9 @@ pub enum TestStatus {
 
 #[derive(Clone, Serialize, PartialEq, Eq)]
 pub struct ResultData {
-    headers: Vec<http::Header>,
-    status: u16,
-    body: serde_json::Value,
+    pub headers: Vec<http::Header>,
+    pub status: u16,
+    pub body: serde_json::Value,
 }
 
 impl Default for ResultData {
@@ -418,19 +418,19 @@ impl ResultData {
 
 #[derive(Clone, Serialize)]
 pub struct RequestDetails {
-    headers: Vec<http::Header>,
-    url: String,
-    method: http::Method,
-    body: serde_json::Value,
+    pub headers: Vec<http::Header>,
+    pub url: String,
+    pub method: http::Method,
+    pub body: serde_json::Value,
 }
 
 #[derive(Clone, Serialize)]
 pub struct ResultDetails {
-    request: RequestDetails,
-    expected: ResultData,
-    actual: Option<ResultData>,
-    compare_request: Option<RequestDetails>,
-    compare_actual: Option<ResultData>,
+    pub request: RequestDetails,
+    pub expected: ResultData,
+    pub actual: Option<ResultData>,
+    pub compare_request: Option<RequestDetails>,
+    pub compare_actual: Option<ResultData>,
 }
 
 #[derive(Clone)]

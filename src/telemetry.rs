@@ -1,8 +1,11 @@
 use crate::config;
 use crate::errors::TelemetryError;
 use crate::executor;
+use crate::executor::ResultDetails;
 use crate::machine;
 use crate::test;
+use crate::test::definition::RequestDescriptor;
+use crate::test::http::Header;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
@@ -84,6 +87,58 @@ struct TestResponse {
     pub test_id: String,
 }
 
+fn redact_string(_val: &str) -> String {
+    static REDACTED_VALUE: &str = "*********";
+    REDACTED_VALUE.to_string()
+}
+
+fn redact_headers(headers: &mut Vec<Header>) {
+    println!("HERE");
+    let should_redact = |s: &str| {
+        println!("CHECKING {s}");
+        return s == "Authorization";
+    };
+
+    headers
+        .iter_mut()
+        .filter(|h| should_redact(h.header.as_str()))
+        .for_each(|h| {
+            println!("REDACTING!");
+            return h.value = redact_string(&h.value);
+        });
+}
+
+fn redact_request(req: &mut RequestDescriptor) {
+    redact_headers(req.headers.as_mut())
+}
+
+fn redact_definition(mut td: test::Definition) -> test::Definition {
+    _ = td.setup.as_mut().map(|s| redact_request(&mut s.request));
+
+    _ = td.cleanup.always.as_mut().map(redact_request);
+
+    _ = td.cleanup.onfailure.as_mut().map(redact_request);
+
+    _ = td.cleanup.onsuccess.as_mut().map(redact_request);
+
+    td.stages.iter_mut().for_each(|s| {
+        redact_request(&mut s.request);
+        s.compare
+            .as_mut()
+            .map(|c| redact_headers(c.headers.as_mut()));
+    });
+
+    td
+}
+
+fn redact_result_details(mut rd: ResultDetails) -> ResultDetails {
+    redact_headers((&mut rd.request).headers.as_mut());
+    rd.compare_request
+        .as_mut()
+        .map(|c| redact_headers(c.headers.as_mut()));
+    rd
+}
+
 pub async fn create_session(
     token: Uuid,
     test_count: u32,
@@ -158,7 +213,7 @@ pub async fn create_session(
 
 pub async fn create_test(
     session: &Session,
-    definition: &test::Definition,
+    definition: test::Definition,
 ) -> Result<Test, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
     let uri = format!("{}/tests", TELEMETRY_BASE_URL);
@@ -170,11 +225,12 @@ pub async fn create_test(
         }
     }
 
-    let definition_json = serde_json::to_value(definition)?;
+    let redacted_definition = redact_definition(definition);
+    let definition_json = serde_json::to_value(&redacted_definition)?;
 
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: definition.id.clone(),
+        identifier: (&redacted_definition).id.clone(),
         definition: definition_json,
     };
 
@@ -233,7 +289,7 @@ pub async fn complete_stage(
         }
     }
 
-    let details_json = serde_json::to_value(&stage.details)?;
+    let details_json = serde_json::to_value(redact_result_details(stage.details.clone()))?;
     let post_data = TestCompletedPost {
         session_id: test.session.session_id.to_string(),
         iteration,
@@ -322,4 +378,159 @@ pub async fn complete_session(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        executor::ResultData,
+        test::definition::{CompareDescriptor, RequestResponseDescriptor, StageDescriptor},
+    };
+
+    use self::executor::RequestDetails;
+
+    use super::*;
+    fn headers_factory() -> Vec<Header> {
+        vec![
+            Header {
+                header: "Authorization".to_string(),
+                value: "super_secret_key".to_string(),
+                matches_variable: false.into(),
+            },
+            Header {
+                header: "Foo".to_string(),
+                value: "Bar".to_string(),
+                matches_variable: false.into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn redact_string_redacts() {
+        assert_eq!("*********", redact_string("foo"));
+    }
+
+    #[test]
+    fn redact_headers_redacts() {
+        let mut headers = headers_factory();
+
+        redact_headers(&mut headers);
+        assert!(!headers.iter().any(|h| h.value == "super_secret_key"));
+    }
+
+    #[test]
+    fn redact_definition_redacts() {
+        let request = RequestDescriptor {
+            method: test::http::Verb::Get,
+            body: None,
+            headers: headers_factory(),
+            params: vec![],
+            url: "foo".to_string(),
+        };
+
+        let td = test::Definition {
+            name: None,
+            id: String::from("id"),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: Vec::new(),
+            iterate: 0,
+            variables: Vec::new(),
+            global_variables: Vec::new(),
+            stages: vec![StageDescriptor {
+                name: None,
+                response: None,
+                source_path: "".to_string(),
+                variables: vec![],
+                request: request.clone(),
+                compare: Some(CompareDescriptor {
+                    add_headers: vec![],
+                    method: test::http::Verb::Get,
+                    add_params: vec![],
+                    body: None,
+                    headers: headers_factory(),
+                    url: "foo2".to_string(),
+                    ignore_headers: vec![],
+                    ignore_params: vec![],
+                    params: vec![],
+                }),
+            }],
+            setup: Some(RequestResponseDescriptor {
+                response: None,
+                request: request.clone(),
+            }),
+            cleanup: test::definition::CleanupDescriptor {
+                onsuccess: Some(request.clone()),
+                onfailure: Some(request.clone()),
+                always: Some(request.clone()),
+            },
+            disabled: false,
+        };
+
+        let get_all_headers = |td: test::Definition| -> Vec<Header> {
+            td.cleanup
+                .always
+                .unwrap()
+                .headers
+                .into_iter()
+                .chain(td.cleanup.onfailure.unwrap().headers.into_iter())
+                .chain(td.cleanup.onsuccess.unwrap().headers.into_iter())
+                .chain(
+                    td.stages
+                        .into_iter()
+                        .map(|s| {
+                            s.request
+                                .headers
+                                .into_iter()
+                                .chain(s.compare.unwrap().headers.into_iter())
+                        })
+                        .flatten(),
+                )
+                .chain(td.setup.unwrap().request.headers.into_iter())
+                .collect()
+        };
+
+        let redacted_td = redact_definition(td.clone());
+        let redacted_headers = get_all_headers(redacted_td);
+        let nonredacted_headers = get_all_headers(td);
+
+        assert!(nonredacted_headers
+            .iter()
+            .any(|h| h.value == "super_secret_key"));
+
+        assert!(!redacted_headers
+            .iter()
+            .any(|h| h.value == "super_secret_key"));
+    }
+
+    #[test]
+    fn redact_resultdetails_redacts() {
+        let rd = RequestDetails {
+            body: serde_json::Value::Null,
+            headers: headers_factory(),
+            url: "".to_string(),
+            method: test::http::Verb::Get.as_method(),
+        };
+
+        let redacted = redact_result_details(ResultDetails {
+            actual: None,
+            request: rd.clone(),
+            compare_actual: None,
+            expected: ResultData {
+                body: serde_json::Value::Null,
+                headers: vec![],
+                status: 0,
+            },
+            compare_request: Some(rd.clone()),
+        });
+
+        assert!(!redacted
+            .request
+            .headers
+            .iter()
+            .chain(redacted.compare_request.unwrap().headers.iter())
+            .any(|h| h.value == "super_secret_key"));
+    }
 }
