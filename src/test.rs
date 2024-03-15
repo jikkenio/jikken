@@ -364,6 +364,9 @@ pub struct Definition {
     pub setup: Option<definition::RequestResponseDescriptor>,
     pub cleanup: definition::CleanupDescriptor,
     pub disabled: bool,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub filename: String,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -777,6 +780,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         };
         assert_eq!(None, td.get_body(&None, vars.as_slice(), 1))
     }
@@ -810,6 +814,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         };
 
         let body = RequestBody {
@@ -870,6 +875,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         };
 
         let body = RequestBody {

@@ -464,6 +464,7 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         };
 
         let get_all_headers = |td: test::Definition| -> Vec<Header> {

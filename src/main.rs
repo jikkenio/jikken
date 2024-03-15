@@ -21,6 +21,13 @@ use tokio::fs;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const IGNORE_FILE: &str = ".jikkenignore";
 
+#[derive(PartialEq, Eq)]
+pub enum ExecutionMode {
+    Run,
+    Dryrun,
+    List,
+}
+
 pub enum TagMode {
     AND,
     OR,
@@ -88,6 +95,28 @@ pub enum Commands {
     /// Process tests without calling API endpoints
     #[command(name = "dryrun")]
     DryRun {
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
+
+        /// Recursively search for test files
+        #[arg(short)]
+        recursive: bool,
+
+        /// Select tests to run based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+
+    /// Lists tests at the given path(s)
+    #[command(name = "list")]
+    List {
         /// The path(s) to search for test files
         /// {n}By default, the current path is used
         #[arg(name = "path")]
@@ -280,11 +309,42 @@ async fn get_files(
     Ok(results)
 }
 
+fn print_test_info(tests: Vec<test::Definition>) {
+    let mut path_column = vec!["PATH".to_string()];
+    let mut name_column = vec!["TEST NAME".to_string()];
+    let mut tags_column = vec!["TAGS".to_string()];
+
+    tests.into_iter().for_each(|td| {
+        name_column.push(td.name.unwrap_or("<none>".to_string()));
+        tags_column.push(if td.tags.is_empty() {
+            "<none>".to_string()
+        } else {
+            td.tags.join(",")
+        });
+        path_column.push(td.filename)
+    });
+
+    let get_column_width = |v: &Vec<String>| v.iter().fold(0, |max, s| std::cmp::max(max, s.len()));
+    let max_name_size = get_column_width(&name_column);
+    let max_tags_size = get_column_width(&tags_column);
+    let max_path_size = get_column_width(&path_column);
+    name_column
+        .into_iter()
+        .zip(tags_column)
+        .zip(path_column)
+        .for_each(|((n, t), p)| {
+            info!(
+                "{: <max_path_size$}    {: <max_name_size$}    {: <max_tags_size$} \n",
+                p, n, t
+            );
+        });
+}
+
 async fn run_tests(
     paths: Vec<String>,
     tags: Vec<String>,
     tags_or: bool,
-    dryrun_mode: bool,
+    execution_mode: ExecutionMode,
     recursive: bool,
     project: Option<String>,
     environment: Option<String>,
@@ -309,19 +369,38 @@ async fn run_tests(
     let environment = environment.or(config.clone().settings.environment);
 
     info!(
-        "Jikken found {} test file{}.\n",
+        "Jikken found {} test file{}.\n\n",
         files.len(),
         plurality_policy(files.len())
     );
 
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let filters_specified = !tags.is_empty();
+
+    let (tests_to_run, tests_to_ignore) =
+        executor::tests_from_files(&config, files, tags, project, environment, cli_tag_mode);
+
+    if execution_mode == ExecutionMode::List {
+        let number_of_tests_to_run = tests_to_run.len();
+        print_test_info(tests_to_run);
+        if filters_specified {
+            info!(
+                "\n{} test{} matched provided filters.\n",
+                number_of_tests_to_run,
+                plurality_policy(number_of_tests_to_run)
+            );
+        }
+        return Ok(());
+    }
+
     let report = executor::execute_tests(
         config,
-        files,
-        dryrun_mode,
-        tags,
-        cli_tag_mode,
-        project,
-        environment,
+        tests_to_run,
+        execution_mode == ExecutionMode::Dryrun,
+        tests_to_ignore,
         cli_args,
     )
     .await;
@@ -411,7 +490,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 paths,
                 tags,
                 tags_or,
-                true,
+                ExecutionMode::Dryrun,
                 recursive,
                 cli_project,
                 cli_environment,
@@ -431,7 +510,27 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 paths,
                 tags,
                 tags_or,
-                false,
+                ExecutionMode::Run,
+                recursive,
+                cli_project,
+                cli_environment,
+                cli.config_file,
+                cli_args,
+            )
+            .await?;
+        }
+        Commands::List {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+        } => {
+            updater::check_for_updates().await;
+            run_tests(
+                paths,
+                tags,
+                tags_or,
+                ExecutionMode::List,
                 recursive,
                 cli_project,
                 cli_environment,
