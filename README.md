@@ -3,7 +3,6 @@
 [![Chocolatey](https://img.shields.io/chocolatey/v/jikken)](https://community.chocolatey.org/packages/jikken/)
 [![Homebrew Formula](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/jikkenio/jikken/main/Cargo.toml&query=$.package.version&prefix=v&label=homebrew)](https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Formula/jikken.rb)
 
-
 jikken (jk)
 -----------
 Jikken is a powerful REST API testing toolkit that is source control friendly. This project is currently in early beta.
