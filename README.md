@@ -1,7 +1,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/jikkenio/jikken)](https://github.com/jikkenio/jikken/releases)
 [![Crates.io](https://img.shields.io/crates/v/jikken)](https://crates.io/crates/jikken)
 [![Chocolatey](https://img.shields.io/chocolatey/v/jikken)](https://community.chocolatey.org/packages/jikken/)
-[![Homebrew Formula](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/jikkenio/jikken/main/Cargo.toml&query=$.package.version&prefix=v&label=homebrew)](https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Formula/jikken.rb)
+[![Homebrew Formula](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Version.toml&query=$.package.version&prefix=v&label=homebrew)](https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Formula/jikken.rb)
 
 jikken (jk)
 -----------
