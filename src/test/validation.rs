@@ -70,6 +70,7 @@ pub fn validate_file(
         setup: definition::RequestResponseDescriptor::new_opt(file.setup)?,
         cleanup: definition::CleanupDescriptor::new(file.cleanup)?,
         disabled: file.disabled.unwrap_or_default(),
+        filename: file.filename,
     };
 
     td.update_variable_matching();

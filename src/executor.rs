@@ -445,7 +445,7 @@ pub struct StageResult {
     pub environment: Option<String>,
 }
 
-fn load_test_from_path(filename: &String) -> Option<test::File> {
+fn load_test_from_path(filename: &str) -> Option<test::File> {
     let load_result = test::file::load(filename);
     match load_result {
         Ok(file) => Some(file),
@@ -655,21 +655,19 @@ fn construct_test_execution_graph_v2(
     job_definitions
 }
 
-pub async fn execute_tests(
-    config: config::Config,
+pub fn tests_from_files(
+    config: &config::Config,
     files: Vec<String>,
-    mode_dryrun: bool,
     tags: Vec<String>,
-    tag_mode: TagMode,
     project: Option<String>,
     environment: Option<String>,
-    cli_args: Box<serde_json::Value>,
-) -> Report {
+    tag_mode: TagMode,
+) -> (Vec<test::Definition>, Vec<test::Definition>) {
     let global_variables = config.generate_global_variables();
     let mut tests_to_ignore: Vec<test::Definition> = Vec::new();
     let tests_to_run: Vec<test::Definition> = files
-        .iter()
-        .filter_map(load_test_from_path)
+        .into_iter()
+        .filter_map(|s| load_test_from_path(s.as_str()))
         .filter_map(|f| {
             validate_test_file(f, &global_variables, project.clone(), environment.clone())
         })
@@ -682,7 +680,16 @@ pub async fn execute_tests(
             }
         })
         .collect();
+    (tests_to_run, tests_to_ignore)
+}
 
+pub async fn execute_tests(
+    config: config::Config,
+    tests_to_run: Vec<test::Definition>,
+    mode_dryrun: bool,
+    tests_to_ignore: Vec<test::Definition>,
+    cli_args: Box<serde_json::Value>,
+) -> Report {
     if !tests_to_ignore.is_empty() {
         trace!("filtering out tests which don't match the tag pattern")
     }
@@ -2116,6 +2123,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         }
     }
 
@@ -2200,6 +2208,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
+            filename: "/a/path.jkt".to_string(),
         }
     }
 
