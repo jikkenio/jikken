@@ -1,8 +1,37 @@
 use log::{Level, Log, Metadata, Record};
+use std::sync::Mutex;
 
 pub struct SimpleLogger {
     pub level: Level,
     pub disabled: bool,
+    pub buffered: bool,
+    queue: Mutex<Vec<(Level, String)>>,
+}
+
+impl SimpleLogger {
+    pub fn new(level: Level, disabled: bool, buffered: bool) -> SimpleLogger {
+        SimpleLogger {
+            level: level,
+            disabled: disabled,
+            buffered: buffered,
+            queue: Mutex::new(vec![]),
+        }
+    }
+
+    fn print(&self, level: &Level, message: &String) {
+        match level {
+            Level::Info => {
+                print!("{}", message);
+            }
+            Level::Warn => {
+                println!("\x1b[33m{}\x1b[0m", message);
+            }
+            Level::Error => {
+                println!("\x1b[31m{}\x1b[0m", message);
+            }
+            _ => println!("{}", message),
+        }
+    }
 }
 
 impl Log for SimpleLogger {
@@ -19,21 +48,27 @@ impl Log for SimpleLogger {
             return;
         }
 
+        if !self.buffered {
+            self.print(&record.level(), &format!("{}", record.args()));
+            return;
+        }
+
         match record.level() {
             Level::Info => {
-                print!("{}", record.args());
+                self.print(&Level::Info, &format!("{}", record.args()));
             }
-            Level::Warn => {
-                println!("\x1b[33m{}\x1b[0m", record.args());
+            _ => {
+                let mut q = self.queue.lock().unwrap();
+                q.push((record.level(), format!("{}", record.args())));
             }
-            Level::Error => {
-                println!("\x1b[31m{}\x1b[0m", record.args());
-            }
-            _ => println!("{}", record.args()),
         }
     }
 
     fn flush(&self) {
-        println!("flush called!")
+        let mut queue = self.queue.lock().unwrap();
+        queue.iter().for_each(|(level, message)| {
+            self.print(level, message);
+        });
+        queue.clear();
     }
 }
