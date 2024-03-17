@@ -427,8 +427,8 @@ async fn run_tests(
 }
 
 /*
-    Result is converted to an exit code implicitly.
-    But it prints a message we don'tlike. So we're
+    Result is converted to an exit code implicitly,
+    but it prints a message we don't like. So we're
     forced to resort to this
 */
 fn result_to_exit_code<T>(
