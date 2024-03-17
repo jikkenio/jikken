@@ -303,6 +303,8 @@ async fn run_tests<T: ExecutionPolicy>(
                 }
             }
 
+            log::logger().flush();
+
             test_result.push(result);
         }
         results.push(TestResult {

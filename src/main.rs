@@ -442,10 +442,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Level::Info
     };
 
-    let my_logger = SimpleLogger {
-        level: log_level,
-        disabled: cli.quiet,
-    };
+    let my_logger = SimpleLogger::new(
+        log_level,
+        cli.quiet,
+        match cli.command {
+            Commands::Run { .. } => true,
+            Commands::DryRun { .. } => true,
+            _ => false,
+        },
+    );
 
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
         error!("Error creating logger: {}", e);
@@ -486,6 +491,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
+            log::logger().flush();
             run_tests(
                 paths,
                 tags,
@@ -506,6 +512,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
+            log::logger().flush();
             run_tests(
                 paths,
                 tags,
@@ -540,6 +547,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .await?;
         }
     }
+    log::logger().flush();
 
     Ok(())
 }
