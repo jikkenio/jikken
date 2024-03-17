@@ -30,6 +30,16 @@ pub struct Report {
     pub failed: u16,
 }
 
+impl Default for Report {
+    fn default() -> Self {
+        Report {
+            run: 0,
+            passed: 0,
+            failed: 0,
+        }
+    }
+}
+
 impl Report {
     pub fn skipped(&self) -> u16 {
         self.run - (self.passed + self.failed)
@@ -239,7 +249,7 @@ async fn run_tests<T: ExecutionPolicy>(
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
     continue_on_failure: bool,
-) -> Vec<TestResult> {
+) -> ExecutionResult {
     let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
     let total_count = flattened_tests.len();
     let mut results: Vec<TestResult> = Vec::new();
@@ -320,7 +330,9 @@ async fn run_tests<T: ExecutionPolicy>(
         _ = telemetry::complete_session(s, runtime, status).await;
     }
 
-    results
+    ExecutionResult {
+        test_results: results,
+    }
 }
 
 struct State {
@@ -724,7 +736,7 @@ pub async fn execute_tests(
         }
     }
 
-    let results: Vec<TestResult> = if mode_dryrun {
+    let execution_result = if mode_dryrun {
         run_tests(
             tests_to_run_with_dependencies,
             session,
@@ -742,9 +754,6 @@ pub async fn execute_tests(
         .await
     };
 
-    let execution_res = ExecutionResult {
-        test_results: results,
-    };
     /*
             TODO : integrate this kind of behavior once CLI args
             are formulated:
@@ -752,8 +761,8 @@ pub async fn execute_tests(
             ConsoleReporter.report(&summary);
     */
 
-    let run = execution_res.test_results.len();
-    let totals = execution_res
+    let run = execution_result.test_results.len();
+    let totals = execution_result
         .test_results
         .into_iter()
         .flat_map(|tr| tr.iteration_results)

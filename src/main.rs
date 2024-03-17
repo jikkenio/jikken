@@ -350,7 +350,7 @@ async fn run_tests(
     environment: Option<String>,
     config_file: Option<String>,
     cli_args: Box<serde_json::Value>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+) -> Result<executor::Report, Box<dyn Error + Send + Sync>> {
     let mut cli_paths = paths;
 
     if cli_paths.is_empty() {
@@ -375,7 +375,7 @@ async fn run_tests(
     );
 
     if files.is_empty() {
-        return Ok(());
+        return Ok(executor::Report::default());
     }
 
     let filters_specified = !tags.is_empty();
@@ -393,7 +393,7 @@ async fn run_tests(
                 plurality_policy(number_of_tests_to_run)
             );
         }
-        return Ok(());
+        return Ok(executor::Report::default());
     }
 
     let report = executor::execute_tests(
@@ -423,16 +423,53 @@ async fn run_tests(
             report.failed
         );
     }
+    Ok(report)
+}
 
-    Ok(())
+/*
+    Result is converted to an exit code implicitly,
+    but it prints a message we don't like. So we're
+    forced to resort to this
+*/
+fn result_to_exit_code<T>(
+    res: Result<T, Box<dyn Error + Send + Sync>>,
+    print: bool,
+) -> std::process::ExitCode {
+    match res {
+        Err(e) => {
+            if print {
+                eprintln!("Error: {}", e);
+            }
+            std::process::ExitCode::FAILURE
+        }
+        Ok(_) => std::process::ExitCode::SUCCESS,
+    }
+}
+
+fn result_report_to_exit_code(
+    res: Result<executor::Report, Box<dyn Error + Send + Sync>>,
+) -> std::process::ExitCode {
+    match res {
+        Err(_) => result_to_exit_code(res, true),
+        Ok(r) => report_to_exit_code(r),
+    }
+}
+
+fn report_to_exit_code(report: executor::Report) -> std::process::ExitCode {
+    if report.failed > 0 {
+        return std::process::ExitCode::FAILURE;
+    }
+
+    std::process::ExitCode::SUCCESS
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn main() -> std::process::ExitCode {
+    //Result<(), Box<dyn Error + Send + Sync>> {
     let _ = enable_ansi_support::enable_ansi_support();
 
     let cli = Cli::parse();
-    let cli_args = Box::new(serde_json::to_value(&cli)?);
+    let cli_args = Box::new(serde_json::to_value(&cli).unwrap());
 
     let log_level = if cli.verbose {
         Level::Debug
@@ -462,10 +499,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let cli_project = cli.project;
     let cli_environment = cli.environment;
 
-    match cli.command {
+    let exit_code: std::process::ExitCode = match cli.command {
         Commands::Update => {
             updater::try_updating().await;
-            std::process::exit(0);
+            std::process::ExitCode::SUCCESS
         }
         Commands::New {
             full,
@@ -474,15 +511,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             name,
         } => {
             updater::check_for_updates().await;
-            let created = new::create_test_template(full, multistage, output, name).await;
-            match created {
-                Ok(_) => {
-                    std::process::exit(0);
-                }
-                Err(_) => {
-                    std::process::exit(1);
-                }
-            }
+            result_to_exit_code(
+                new::create_test_template(full, multistage, output, name).await,
+                false,
+            )
         }
         Commands::DryRun {
             tags,
@@ -492,18 +524,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         } => {
             updater::check_for_updates().await;
             log::logger().flush();
-            run_tests(
-                paths,
-                tags,
-                tags_or,
-                ExecutionMode::Dryrun,
-                recursive,
-                cli_project,
-                cli_environment,
-                cli.config_file,
-                Box::new(serde_json::Value::Null),
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Dryrun,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    Box::new(serde_json::Value::Null),
+                )
+                .await,
             )
-            .await?;
         }
         Commands::Run {
             tags,
@@ -513,18 +547,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         } => {
             updater::check_for_updates().await;
             log::logger().flush();
-            run_tests(
-                paths,
-                tags,
-                tags_or,
-                ExecutionMode::Run,
-                recursive,
-                cli_project,
-                cli_environment,
-                cli.config_file,
-                cli_args,
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Run,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    cli_args,
+                )
+                .await,
             )
-            .await?;
         }
         Commands::List {
             tags,
@@ -533,23 +569,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             paths,
         } => {
             updater::check_for_updates().await;
-            run_tests(
-                paths,
-                tags,
-                tags_or,
-                ExecutionMode::List,
-                recursive,
-                cli_project,
-                cli_environment,
-                cli.config_file,
-                cli_args,
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::List,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    cli_args,
+                )
+                .await,
             )
-            .await?;
         }
-    }
-    log::logger().flush();
+    };
 
-    Ok(())
+    log::logger().flush();
+    return exit_code;
 }
 
 //------------------TESTS---------------------------------
