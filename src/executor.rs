@@ -19,6 +19,7 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
+use std::io::Write;
 use std::time::Instant;
 use std::vec;
 use url::Url;
@@ -67,6 +68,19 @@ impl fmt::Display for FormattedExecutionResult {
 
 trait ExecutionResultFormatter {
     fn format(&self, res: &ExecutionResult) -> FormattedExecutionResult;
+}
+
+fn formatted_result_to_file<T: ExecutionResultFormatter>(
+    formatter: T,
+    execution_result: &ExecutionResult,
+    file: &str,
+) -> Result<(), std::io::Error> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(file)
+        .and_then(|mut f| f.write(formatter.format(&execution_result).0.as_bytes()))
+        .map(|_| ())
 }
 
 struct JunitResultFormatter;
@@ -132,18 +146,6 @@ impl ExecutionResultFormatter for JunitResultFormatter {
         lines.push("</testsuites>".to_string());
 
         FormattedExecutionResult(lines.join("\n"))
-    }
-}
-
-trait ExecutionResultReporter {
-    fn report(&self, res: &FormattedExecutionResult);
-}
-
-struct ConsoleReporter;
-
-impl ExecutionResultReporter for ConsoleReporter {
-    fn report(&self, res: &FormattedExecutionResult) {
-        println!("{res}");
     }
 }
 
@@ -702,6 +704,7 @@ pub async fn execute_tests(
     tests_to_run: Vec<test::Definition>,
     mode_dryrun: bool,
     tests_to_ignore: Vec<test::Definition>,
+    junit_file: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Report {
     if !tests_to_ignore.is_empty() {
@@ -754,12 +757,14 @@ pub async fn execute_tests(
         .await
     };
 
-    /*
-            TODO : integrate this kind of behavior once CLI args
-            are formulated:
-            let summary = JunitResultFormatter.format(&execution_res);
-            ConsoleReporter.report(&summary);
-    */
+    _ = junit_file.and_then(|f| {
+        formatted_result_to_file(JunitResultFormatter {}, &execution_result, f.as_str())
+            .map_err(|e| {
+                error!("Error writing junit report to {f} : {e}");
+                e
+            })
+            .ok()
+    });
 
     let run = execution_result.test_results.len();
     let totals = execution_result

@@ -90,6 +90,10 @@ pub enum Commands {
         /// Toggle tag matching logic to select tests matching any of the given tags
         #[arg(long, default_value_t = false)]
         tags_or: bool,
+
+        /// Output results in junit format to specified file
+        #[arg(long = "junit", name = "junit_file")]
+        junit: Option<String>,
     },
 
     /// Process tests without calling API endpoints
@@ -112,6 +116,10 @@ pub enum Commands {
         /// Toggle tag matching logic to select tests matching any of the given tags
         #[arg(long, default_value_t = false)]
         tags_or: bool,
+
+        /// Output results in junit format to specified file
+        #[arg(long = "junit", name = "junit_file")]
+        junit: Option<String>,
     },
 
     /// Lists tests at the given path(s)
@@ -349,6 +357,7 @@ async fn run_tests(
     project: Option<String>,
     environment: Option<String>,
     config_file: Option<String>,
+    junit_file: Option<String>,
     cli_args: Box<serde_json::Value>,
 ) -> Result<executor::Report, Box<dyn Error + Send + Sync>> {
     let mut cli_paths = paths;
@@ -401,6 +410,7 @@ async fn run_tests(
         tests_to_run,
         execution_mode == ExecutionMode::Dryrun,
         tests_to_ignore,
+        junit_file,
         cli_args,
     )
     .await;
@@ -521,6 +531,7 @@ async fn main() -> std::process::ExitCode {
             tags_or,
             recursive,
             paths,
+            junit,
         } => {
             updater::check_for_updates().await;
             log::logger().flush();
@@ -534,6 +545,7 @@ async fn main() -> std::process::ExitCode {
                     cli_project,
                     cli_environment,
                     cli.config_file,
+                    junit,
                     Box::new(serde_json::Value::Null),
                 )
                 .await,
@@ -544,6 +556,7 @@ async fn main() -> std::process::ExitCode {
             tags_or,
             recursive,
             paths,
+            junit,
         } => {
             updater::check_for_updates().await;
             log::logger().flush();
@@ -557,6 +570,7 @@ async fn main() -> std::process::ExitCode {
                     cli_project,
                     cli_environment,
                     cli.config_file,
+                    junit,
                     cli_args,
                 )
                 .await,
@@ -579,6 +593,7 @@ async fn main() -> std::process::ExitCode {
                     cli_project,
                     cli_environment,
                     cli.config_file,
+                    None,
                     cli_args,
                 )
                 .await,
