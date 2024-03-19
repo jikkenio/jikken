@@ -259,6 +259,9 @@ pub struct StageDescriptor {
     pub response: Option<ResponseDescriptor>,
     pub variables: Vec<test::Variable>,
     pub name: Option<String>,
+    //I would prefer to do this is Option<chrono::duration>
+    //But it requires too much effort in serialization/deserialization
+    pub delay: Option<u64>,
 
     #[serde(skip_serializing)]
     pub source_path: String,
@@ -276,6 +279,7 @@ impl StageDescriptor {
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             source_path: source_path.to_string(),
             name: stage.name,
+            delay: stage.delay,
         })
     }
 
@@ -297,6 +301,7 @@ impl StageDescriptor {
                 variables: Vec::new(),
                 source_path: source_path.to_string(),
                 name: Some("request".to_string()),
+                delay: None,
             });
             count += 1;
         }

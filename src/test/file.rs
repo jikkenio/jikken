@@ -87,6 +87,7 @@ pub struct UnvalidatedStage {
     pub response: Option<UnvalidatedResponse>,
     pub variables: Option<Vec<UnvalidatedVariable>>,
     pub name: Option<String>,
+    pub delay: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
