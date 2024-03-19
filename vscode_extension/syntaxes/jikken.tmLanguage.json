@@ -49,6 +49,9 @@
 				},
 				{
 					"include": "#cleanup-keywords"
+				},
+				{
+					"include": "#stage-keywords"
 				}
 			]
 		},
@@ -90,6 +93,14 @@
 				},
 				{
 					"include": "#headers-keywords"
+				}
+			]
+		},
+		"stage-keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.jikken",
+					"match": "\\b(delay)\\b"
 				}
 			]
 		},

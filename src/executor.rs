@@ -1448,6 +1448,10 @@ async fn validate_stage(
         }
     }
 
+    if stage.delay.is_some_and(|d| d > 0) {
+        tokio::time::sleep(tokio::time::Duration::from_millis(stage.delay.unwrap())).await;
+    }
+
     Ok(result)
 }
 

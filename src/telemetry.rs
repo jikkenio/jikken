@@ -453,6 +453,7 @@ mod tests {
                     ignore_params: vec![],
                     params: vec![],
                 }),
+                delay: None,
             }],
             setup: Some(RequestResponseDescriptor {
                 response: None,
