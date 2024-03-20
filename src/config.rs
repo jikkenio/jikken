@@ -96,7 +96,7 @@ fn get_config_impl(config_sources_ascending_priority: Vec<Option<File>>) -> Conf
     let specified_config = config_sources_ascending_priority
         .into_iter()
         .fold(None, combine_config_files);
-    return apply_config_file(Config::default(), specified_config);
+    apply_config_file(Config::default(), specified_config)
 }
 
 async fn load_config_file(file: &str) -> Option<File> {
@@ -225,10 +225,10 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
                 });
             }
 
-            return Some(File {
+            Some(File {
                 settings: existing_file.settings,
                 globals: Some(merged_globals),
-            });
+            })
         }
     }
 }

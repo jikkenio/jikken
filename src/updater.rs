@@ -1,7 +1,6 @@
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, warn};
-use regex;
 use regex::Regex;
 use remove_dir_all::remove_dir_all;
 use serde::Deserialize;
@@ -33,7 +32,7 @@ impl Version {
             .map(|(start, _)| self.0[..start].to_string())
             .unwrap_or(self.0.clone());
 
-        return ret;
+        ret
     }
 }
 
@@ -42,11 +41,11 @@ impl PartialEq for Version {
         let lhs_val = self.normalized();
         let rhs_val = other.normalized();
 
-        return lhs_val == rhs_val;
+        lhs_val == rhs_val
     }
 
     fn ne(&self, other: &Self) -> bool {
-        return !self.eq(other);
+        !self.eq(other)
     }
 }
 
@@ -63,13 +62,13 @@ impl Ord for Version {
             return Ordering::Less;
         }
 
-        return Ordering::Equal;
+        Ordering::Equal
     }
 }
 
 impl PartialOrd for Version {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        return Some(self.cmp(other));
+        Some(self.cmp(other))
     }
 }
 

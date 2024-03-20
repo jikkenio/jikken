@@ -301,14 +301,11 @@ async fn get_files(
     }
 
     let ignore_patterns = get_ignore_files(ignore_file).await;
-    results = results
-        .into_iter()
-        .filter(|f| {
-            !ignore_patterns
-                .iter()
-                .any(|ignore| ignore_matches(ignore.as_str(), f.as_str()))
-        })
-        .collect();
+    results.retain(|f| {
+        !ignore_patterns
+            .iter()
+            .any(|ignore| ignore_matches(ignore.as_str(), f.as_str()))
+    });
 
     for r in results.clone() {
         debug!("file: {}", r);
@@ -492,11 +489,7 @@ async fn main() -> std::process::ExitCode {
     let my_logger = SimpleLogger::new(
         log_level,
         cli.quiet,
-        match cli.command {
-            Commands::Run { .. } => true,
-            Commands::DryRun { .. } => true,
-            _ => false,
-        },
+        matches!(cli.command, Commands::Run { .. } | Commands::DryRun { .. }),
     );
 
     if let Err(e) = log::set_boxed_logger(Box::new(my_logger)) {
