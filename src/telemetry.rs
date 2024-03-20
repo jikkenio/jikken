@@ -92,16 +92,14 @@ fn redact_string(_val: &str) -> String {
     REDACTED_VALUE.to_string()
 }
 
-fn redact_headers(headers: &mut Vec<Header>) {
-    let should_redact = |s: &str| {
-        return s.to_lowercase() == "authorization";
-    };
+fn redact_headers(headers: &mut [Header]) {
+    let should_redact = |s: &str| s.to_lowercase() == "authorization";
 
     headers
         .iter_mut()
         .filter(|h| should_redact(h.header.as_str()))
         .for_each(|h| {
-            return h.value = redact_string(&h.value);
+            h.value = redact_string(&h.value);
         });
 }
 
@@ -129,7 +127,7 @@ fn redact_definition(mut td: test::Definition) -> test::Definition {
 }
 
 fn redact_result_details(mut rd: ResultDetails) -> ResultDetails {
-    redact_headers((&mut rd.request).headers.as_mut());
+    redact_headers(rd.request.headers.as_mut());
     rd.compare_request
         .as_mut()
         .map(|c| redact_headers(c.headers.as_mut()));
@@ -227,7 +225,7 @@ pub async fn create_test(
 
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: (&redacted_definition).id.clone(),
+        identifier: redacted_definition.id.clone(),
         definition: definition_json,
     };
 

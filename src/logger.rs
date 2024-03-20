@@ -11,9 +11,9 @@ pub struct SimpleLogger {
 impl SimpleLogger {
     pub fn new(level: Level, disabled: bool, buffered: bool) -> SimpleLogger {
         SimpleLogger {
-            level: level,
-            disabled: disabled,
-            buffered: buffered,
+            level,
+            disabled,
+            buffered,
             queue: Mutex::new(vec![]),
         }
     }

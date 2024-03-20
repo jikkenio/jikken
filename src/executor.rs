@@ -25,20 +25,11 @@ use std::vec;
 use url::Url;
 use validated::Validated::{self, Good};
 
+#[derive(Default)]
 pub struct Report {
     pub run: u16,
     pub passed: u16,
     pub failed: u16,
-}
-
-impl Default for Report {
-    fn default() -> Self {
-        Report {
-            run: 0,
-            passed: 0,
-            failed: 0,
-        }
-    }
 }
 
 impl Report {
@@ -79,7 +70,7 @@ fn formatted_result_to_file<T: ExecutionResultFormatter>(
         .write(true)
         .create_new(true)
         .open(file)
-        .and_then(|mut f| f.write(formatter.format(&execution_result).0.as_bytes()))
+        .and_then(|mut f| f.write(formatter.format(execution_result).0.as_bytes()))
         .map(|_| ())
 }
 
@@ -387,7 +378,7 @@ impl ResultData {
                 .get_body(&r.body, variables, iteration)
                 .unwrap_or(serde_json::Value::Null),
         })
-        .unwrap_or(ResultData::default())
+        .unwrap_or_default()
     }
 
     pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
@@ -580,11 +571,7 @@ fn construct_test_execution_graph_v2(
                 if required_def.unwrap().disabled {
                     warn!(
                         "Test \"{}\" requires a disabled test: \"{}\"",
-                        definition
-                            .name
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or(id.as_str()),
+                        definition.name.as_deref().unwrap_or(id.as_str()),
                         required_def.unwrap().id
                     );
                     //should we do transitive disablement?
@@ -648,7 +635,7 @@ fn construct_test_execution_graph_v2(
             .collect::<Vec<String>>()
             .join(",");
 
-        if missing_tests.len() > 0 {
+        if !missing_tests.is_empty() {
             warn!("Warning: Required tests not found.");
             warn!(
                 "Check the 'requires' tag in the following test definition(s): {}.\n\n",
@@ -1076,7 +1063,7 @@ async fn validate_setup(
         debug!("executing setup stage: {}", req_url);
 
         let expected =
-            ResultData::from_request(setup.response.clone(), &td, &td.variables, iteration);
+            ResultData::from_request(setup.response.clone(), td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1172,7 +1159,7 @@ async fn run_cleanup(
                 success_body.clone(),
             );
 
-            let expected = ResultData::from_request(None, &td, &td.variables, iteration);
+            let expected = ResultData::from_request(None, td, &td.variables, iteration);
             let start_time = Instant::now();
             let req_response = process_request(state, resolved_request).await?;
             let runtime = start_time.elapsed().as_millis() as u32;
@@ -1221,7 +1208,7 @@ async fn run_cleanup(
             failure_body.clone(),
         );
 
-        let expected = ResultData::from_request(None, &td, &td.variables, iteration);
+        let expected = ResultData::from_request(None, td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1271,7 +1258,7 @@ async fn run_cleanup(
             req_body.clone(),
         );
 
-        let expected = ResultData::from_request(None, &td, &td.variables, iteration);
+        let expected = ResultData::from_request(None, td, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1343,7 +1330,7 @@ async fn validate_stage(
     debug!("executing test stage {stage_name}: {req_url}");
     let expected = ResultData::from_request(
         stage.response.clone(),
-        &td,
+        td,
         &[&stage.variables[..], &td.variables[..]].concat(),
         iteration,
     );
