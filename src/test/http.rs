@@ -63,7 +63,7 @@ impl Hash for Parameter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Verb {
     #[serde(alias = "get", alias = "GET")]
     Get,

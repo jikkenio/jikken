@@ -145,13 +145,13 @@ mod openapi_legacy {
         root_servers: &[Server],
         path: &PathItem,
         path_string: &str,
-        test_factory: impl Fn(&str, &openapiv3::Operation) -> Option<File>,
+        verb: test::http::Verb,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
-                    .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
+                    .map(|url| create_test(format!("{}{}", url, path_string).as_str(), &op, verb))
                     .flatten()
                     .collect::<Vec<File>>()
             })
@@ -174,38 +174,18 @@ mod openapi_legacy {
         })
     }
 
-    fn create_get_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Get)
-    }
-
-    fn create_post_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Post)
-    }
-
-    fn create_delete_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Delete)
-    }
-
-    fn create_put_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Put)
-    }
-
-    fn create_patch_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Patch)
-    }
-
     fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
-        let stuff: [(&Option<Operation>, fn(&str, &Operation) -> Option<File>); 5] = [
-            (&path.get, create_get_test),
-            (&path.post, create_post_test),
-            (&path.delete, create_delete_test),
-            (&path.patch, create_patch_test),
-            (&path.put, create_put_test),
+        let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
+            (&path.get, test::http::Verb::Get),
+            (&path.post, test::http::Verb::Post),
+            (&path.delete, test::http::Verb::Delete),
+            (&path.patch, test::http::Verb::Patch),
+            (&path.put, test::http::Verb::Put),
         ];
 
         stuff
             .into_iter()
-            .map(|(op, factory)| create_tests_for_op(op, root_servers, path, path_string, factory))
+            .map(|(op, verb)| create_tests_for_op(op, root_servers, path, path_string, verb))
             .flatten()
             .collect()
     }
@@ -386,38 +366,18 @@ mod openapi_v31 {
         })
     }
 
-    fn create_get_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Get)
-    }
-
-    fn create_post_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Post)
-    }
-
-    fn create_delete_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Delete)
-    }
-
-    fn create_put_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Put)
-    }
-
-    fn create_patch_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-        create_test(resolved_path, op, test::http::Verb::Patch)
-    }
-
     fn create_tests_for_op(
         op: &Option<Operation>,
         root_servers: &[Server],
         path: &PathItem,
         path_string: &str,
-        test_factory: impl Fn(&str, &oas3::spec::Operation) -> Option<File>,
+        verb: test::http::Verb,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
-                    .iter()
-                    .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
+                    .into_iter()
+                    .map(|url| create_test(format!("{}{}", url, path_string).as_str(), &op, verb))
                     .flatten()
                     .collect::<Vec<File>>()
             })
@@ -425,20 +385,17 @@ mod openapi_v31 {
     }
 
     fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
-        let stuff: [(
-            &Option<Operation>,
-            fn(&str, &oas3::spec::Operation) -> Option<File>,
-        ); 5] = [
-            (&path.get, create_get_test),
-            (&path.post, create_post_test),
-            (&path.delete, create_delete_test),
-            (&path.patch, create_patch_test),
-            (&path.put, create_put_test),
+        let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
+            (&path.get, test::http::Verb::Get),
+            (&path.post, test::http::Verb::Post),
+            (&path.delete, test::http::Verb::Delete),
+            (&path.patch, test::http::Verb::Patch),
+            (&path.put, test::http::Verb::Put),
         ];
 
         stuff
             .into_iter()
-            .map(|(op, factory)| create_tests_for_op(op, root_servers, path, path_string, factory))
+            .map(|(op, verb)| create_tests_for_op(op, root_servers, path, path_string, verb))
             .flatten()
             .collect()
     }
