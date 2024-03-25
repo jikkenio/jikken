@@ -1,249 +1,496 @@
-use crate::test;
-use crate::test::file::UnvalidatedRequest;
-use crate::test::file::UnvalidatedResponse;
-use crate::test::Definition;
-use crate::test::File;
-
 use super::errors::GenericError;
 use super::test::template;
 use log::{error, info};
-use oas3;
-use oas3::spec::Header;
-use oas3::spec::ObjectOrReference;
-use oas3::spec::Operation;
-use oas3::spec::PathItem;
-use oas3::spec::Response;
-use oas3::spec::Server;
-use std::collections::BTreeMap;
+
 use std::error::Error;
 use std::str::FromStr;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
-pub fn get_test_paths(
-    root_servers: &[Server],
-    path_servers: &[Server],
-    op_servers: &[Server],
-    fallback: &str,
-) -> Vec<String> {
-    let url_extractor = |servers: &[Server]| -> Option<Vec<String>> {
-        if servers.is_empty() {
+mod openapi_legacy {
+    use crate::test::file::UnvalidatedRequest;
+    use openapiv3::v2::ReferenceOrSchema::Reference;
+    use openapiv3::IndexMap;
+    use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
+    use std::collections::hash_map::RandomState;
+    use std::error::Error;
+    //use std::fs::File;
+    use crate::test;
+    use crate::test::file::UnvalidatedResponse;
+    use crate::test::File;
+    use std::io::BufReader;
+    use std::path::Path;
+
+    fn create_tags(tags: &[String]) -> Option<String> {
+        if tags.is_empty() {
             None
         } else {
-            Some(servers.into_iter().map(|s| s.url.clone()).collect())
+            Some(tags.join(","))
         }
-    };
-
-    url_extractor(path_servers)
-        .or(url_extractor(root_servers))
-        .or(url_extractor(op_servers))
-        .unwrap_or(vec![fallback.to_string()])
-}
-
-fn create_tags(tags: &[String]) -> Option<String> {
-    if tags.is_empty() {
-        None
-    } else {
-        Some(tags.join(","))
     }
-}
 
-fn create_status_code(status_code_pattern: &str) -> Option<u16> {
-    if status_code_pattern == "2XX" {
-        Some(200)
-    } else {
-        status_code_pattern.parse().ok()
+    fn create_status_code(status_code_pattern: &str) -> Option<u16> {
+        if status_code_pattern == "2XX" {
+            Some(200)
+        } else {
+            status_code_pattern.parse().ok()
+        }
     }
-}
 
-fn create_headers(
-    headers: &BTreeMap<String, ObjectOrReference<Header>>,
-) -> Option<Vec<test::http::Header>> {
-    let ret: Vec<test::http::Header> = headers
-        .iter()
-        .map(|(name, _)| test::http::Header {
-            header: name.clone(),
-            matches_variable: std::cell::Cell::new(false),
-            value: "".to_string(),
-        })
-        .collect();
+    fn create_headers(
+        headers: &IndexMap<String, RefOr<openapiv3::Header>, RandomState>,
+    ) -> Option<Vec<test::http::Header>> {
+        let ret: Vec<test::http::Header> = headers
+            .iter()
+            .map(|(name, _)| test::http::Header {
+                header: name.clone(),
+                matches_variable: std::cell::Cell::new(false),
+                value: String::default(),
+            })
+            .collect();
 
-    if !ret.is_empty() {
-        Some(ret)
-    } else {
-        None
+        if !ret.is_empty() {
+            Some(ret)
+        } else {
+            None
+        }
     }
-}
 
-fn create_response(
-    responses: &BTreeMap<String, ObjectOrReference<Response>>,
-) -> Option<UnvalidatedResponse> {
-    responses
-        .iter()
-        .filter(|(status_code_pattern, obj_or_ref)| status_code_pattern.starts_with("2"))
-        .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
-            ObjectOrReference::Object(t) => Some(UnvalidatedResponse {
-                status: create_status_code(status_code_pattern),
-                body: None, //would need a way to validate against a provided schema
-                headers: create_headers(&t.headers),
-                extract: None,
-                ignore: None,
-            }),
-            _ => None,
-        })
-        .last()
-        .flatten()
-}
-
-fn create_request(
-    url: &str,
-    verb: test::http::Verb,
-    op: &oas3::spec::Operation,
-) -> UnvalidatedRequest {
-    let mut headers: Vec<test::http::Header> = vec![];
-    //If you have url parameters in your path, you have to do this a bit diffferently
-    //create_test may need to change to return multiple? we resovle the path prior!
-    let mut parameters: Vec<test::http::Parameter> = vec![];
-
-    op.parameters.iter().for_each(|f| match f {
-        ObjectOrReference::Object(t) => {
-            match t.location.as_str() {
-                "query" => parameters.push(test::http::Parameter {
-                    param: t.name.clone(),
-                    value: "".to_string(),
-                    matches_variable: std::cell::Cell::new(false),
+    fn create_response(responses: &Responses) -> Option<UnvalidatedResponse> {
+        responses
+            .responses
+            .iter()
+            .map(|(sc, obj_or_ref)| (sc.to_string(), obj_or_ref))
+            .filter(|(status_code_pattern, obj_or_ref)| status_code_pattern.starts_with("2"))
+            .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
+                RefOr::Item(t) => Some(UnvalidatedResponse {
+                    status: create_status_code(status_code_pattern.as_str()),
+                    body: None, //would need a way to validate against a provided schema
+                    headers: create_headers(&t.headers),
+                    extract: None,
+                    ignore: None,
                 }),
-                "header" => headers.push(test::http::Header {
-                    header: t.name.clone(),
-                    value: "".to_string(),
-                    matches_variable: std::cell::Cell::new(false),
-                }),
-                "path" => (),   //we have to handle this higher up
-                "cookie" => (), //no cookie support
-                _ => (),
+                _ => None,
+            })
+            .last()
+            .flatten()
+    }
+
+    fn create_request(
+        url: &str,
+        verb: test::http::Verb,
+        op: &openapiv3::Operation,
+    ) -> UnvalidatedRequest {
+        let mut headers: Vec<test::http::Header> = vec![];
+        let mut parameters: Vec<test::http::Parameter> = vec![];
+
+        op.parameters.iter().for_each(|f| match f {
+            RefOr::Item(t) => {
+                match &t.kind {
+                    openapiv3::ParameterKind::Query { .. } => {
+                        parameters.push(test::http::Parameter {
+                            param: t.name.clone(),
+                            value: String::default(),
+                            matches_variable: std::cell::Cell::new(false),
+                        })
+                    }
+                    openapiv3::ParameterKind::Header { .. } => headers.push(test::http::Header {
+                        header: t.name.clone(),
+                        value: String::default(),
+                        matches_variable: std::cell::Cell::new(false),
+                    }),
+                    openapiv3::ParameterKind::Path { style } => (), //user will have to do this themselves, based upon generated template
+                    openapiv3::ParameterKind::Cookie { style } => (), //no cookie support
+                }
+            }
+            _ => (),
+        });
+
+        UnvalidatedRequest {
+            body: None,
+            method: Some(verb),
+            url: url.to_string(),
+            headers: if headers.is_empty() {
+                None
+            } else {
+                Some(headers)
+            },
+            params: if parameters.is_empty() {
+                None
+            } else {
+                Some(parameters)
+            },
+        }
+    }
+
+    pub fn get_test_paths(
+        root_servers: &[Server],
+        path_servers: &[Server],
+        op_servers: &[Server],
+        fallback: &str,
+    ) -> Vec<String> {
+        let url_extractor = |servers: &[Server]| -> Option<Vec<String>> {
+            if servers.is_empty() {
+                None
+            } else {
+                Some(servers.into_iter().map(|s| s.url.clone()).collect())
+            }
+        };
+
+        url_extractor(path_servers)
+            .or(url_extractor(root_servers))
+            .or(url_extractor(op_servers))
+            .unwrap_or(vec![fallback.to_string()])
+    }
+
+    fn create_tests_for_op(
+        op: &Option<Operation>,
+        root_servers: &[Server],
+        path: &PathItem,
+        path_string: &str,
+        test_factory: impl Fn(&str, &openapiv3::Operation) -> Option<File>,
+    ) -> Vec<File> {
+        op.clone()
+            .map(|op| {
+                get_test_paths(root_servers, &path.servers, &op.servers, "$url")
+                    .iter()
+                    .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
+                    .flatten()
+                    .collect::<Vec<File>>()
+            })
+            .unwrap_or_default()
+    }
+
+    fn create_test(
+        resolved_path: &str,
+        op: &openapiv3::Operation,
+        verb: test::http::Verb,
+    ) -> Option<File> {
+        println!("CREATING TEST {resolved_path}");
+
+        Some(File {
+            cleanup: None,
+            compare: None,
+            disabled: None,
+            env: None,
+            name: op.summary.clone(),
+            id: op.operation_id.clone(),
+            project: None,
+            tags: create_tags(&op.tags),
+            requires: None,
+            filename: String::default(),
+            iterate: None,
+            variables: None,
+            stages: None,
+            setup: None,
+            request: Some(create_request(resolved_path, verb, op)),
+            response: create_response(&op.responses),
+        })
+    }
+
+    fn create_get_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Get)
+    }
+
+    fn create_post_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Post)
+    }
+
+    fn create_delete_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Delete)
+    }
+
+    fn create_put_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Put)
+    }
+
+    fn create_patch_test(resolved_path: &str, op: &openapiv3::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Patch)
+    }
+
+    fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
+        let stuff: [(&Option<Operation>, fn(&str, &Operation) -> Option<File>); 5] = [
+            (&path.get, create_get_test),
+            (&path.post, create_post_test),
+            (&path.delete, create_delete_test),
+            (&path.patch, create_patch_test),
+            (&path.put, create_put_test),
+        ];
+
+        stuff
+            .into_iter()
+            .map(|(op, factory)| create_tests_for_op(op, root_servers, path, path_string, factory))
+            .flatten()
+            .collect()
+    }
+
+    pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
+        // Open the file in read-only mode with buffer.
+        let file = std::fs::File::open(file).ok()?;
+        let reader = BufReader::new(file);
+
+        let versioned_openapi: Result<VersionedOpenAPI, serde_json::Error> =
+            serde_json::from_reader(reader);
+        match versioned_openapi {
+            Err(e) => {
+                println!("ERROR IS {}", e);
+                None
+            }
+            Ok(v) => {
+                let openapi = v.upgrade();
+                Some(
+                    openapi
+                        .paths
+                        .iter()
+                        .map(|(path_string, ref_or_path)| match ref_or_path {
+                            RefOr::Item(path) => create_tests(&openapi.servers, path_string, path),
+                            RefOr::Reference { .. } => Vec::default(),
+                        })
+                        .flatten()
+                        .collect(),
+                )
             }
         }
-        ObjectOrReference::Ref { .. } => (),
-    });
-
-    UnvalidatedRequest {
-        body: None,
-        method: Some(verb),
-        url: url.to_string(),
-        headers: if headers.is_empty() {
-            None
-        } else {
-            Some(headers)
-        },
-        params: if parameters.is_empty() {
-            None
-        } else {
-            Some(parameters)
-        },
     }
 }
 
-fn create_test(
-    resolved_path: &str,
-    op: &oas3::spec::Operation,
-    verb: test::http::Verb,
-) -> Option<File> {
-    println!("CREATING TEST {resolved_path}");
+mod openapi_v31 {
+    use crate::test;
+    use crate::test::file::UnvalidatedRequest;
+    use crate::test::file::UnvalidatedResponse;
+    use crate::test::Definition;
+    use crate::test::File;
+    use oas3;
+    use oas3::spec::Header;
+    use oas3::spec::ObjectOrReference;
+    use oas3::spec::Operation;
+    use oas3::spec::PathItem;
+    use oas3::spec::Response;
+    use oas3::spec::Server;
+    use std::collections::BTreeMap;
+    pub fn get_test_paths(
+        root_servers: &[Server],
+        path_servers: &[Server],
+        op_servers: &[Server],
+        fallback: &str,
+    ) -> Vec<String> {
+        let url_extractor = |servers: &[Server]| -> Option<Vec<String>> {
+            if servers.is_empty() {
+                None
+            } else {
+                Some(servers.into_iter().map(|s| s.url.clone()).collect())
+            }
+        };
 
-    Some(File {
-        cleanup: None,
-        compare: None,
-        disabled: None,
-        env: None,
-        name: None,
-        id: None,
-        project: None,
-        tags: create_tags(&op.tags),
-        requires: None,
-        filename: "".to_string(),
-        iterate: None,
-        variables: None,
-        stages: None,
-        setup: None,
-        request: Some(create_request(resolved_path, verb, op)),
-        response: create_response(&op.responses),
-    })
-}
+        url_extractor(path_servers)
+            .or(url_extractor(root_servers))
+            .or(url_extractor(op_servers))
+            .unwrap_or(vec![fallback.to_string()])
+    }
 
-fn create_get_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-    create_test(resolved_path, op, test::http::Verb::Get)
-}
+    fn create_tags(tags: &[String]) -> Option<String> {
+        if tags.is_empty() {
+            None
+        } else {
+            Some(tags.join(","))
+        }
+    }
 
-fn create_post_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-    create_test(resolved_path, op, test::http::Verb::Post)
-}
+    fn create_status_code(status_code_pattern: &str) -> Option<u16> {
+        if status_code_pattern == "2XX" {
+            Some(200)
+        } else {
+            status_code_pattern.parse().ok()
+        }
+    }
 
-fn create_delete_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-    create_test(resolved_path, op, test::http::Verb::Delete)
-}
+    fn create_headers(
+        headers: &BTreeMap<String, ObjectOrReference<Header>>,
+    ) -> Option<Vec<test::http::Header>> {
+        let ret: Vec<test::http::Header> = headers
+            .iter()
+            .map(|(name, _)| test::http::Header {
+                header: name.clone(),
+                matches_variable: std::cell::Cell::new(false),
+                value: String::default(),
+            })
+            .collect();
 
-fn create_put_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-    create_test(resolved_path, op, test::http::Verb::Put)
-}
-
-fn create_patch_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
-    create_test(resolved_path, op, test::http::Verb::Patch)
-}
-
-fn create_tests_for_op(
-    op: &Option<Operation>,
-    root_servers: &[Server],
-    path: &PathItem,
-    path_string: &str,
-    test_factory: impl Fn(&str, &oas3::spec::Operation) -> Option<File>,
-) -> Vec<File> {
-    op.clone()
-        .map(|op| {
-            get_test_paths(root_servers, &path.servers, &op.servers, "$url")
-                .iter()
-                .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
-                .flatten()
-                .collect::<Vec<File>>()
-        })
-        .unwrap_or_default()
-}
-
-fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
-    let stuff: [(
-        &Option<Operation>,
-        fn(&str, &oas3::spec::Operation) -> Option<File>,
-    ); 5] = [
-        (&path.get, create_get_test),
-        (&path.post, create_post_test),
-        (&path.delete, create_delete_test),
-        (&path.patch, create_patch_test),
-        (&path.put, create_put_test),
-    ];
-
-    stuff
-        .into_iter()
-        .map(|(op, factory)| create_tests_for_op(op, root_servers, path, path_string, factory))
-        .flatten()
-        .collect()
-}
-
-pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
-    let f = oas3::from_path(file);
-    match f {
-        Err(e) => {
-            println!("ERROR IS {}", e);
+        if !ret.is_empty() {
+            Some(ret)
+        } else {
             None
         }
-        Ok(s) => Some(
-            s.paths
-                .iter()
-                .map(|(path_string, path)| {
-                    println!("IN PATH: {path_string}");
-                    create_tests(&s.servers, path_string, path)
-                })
-                .flatten()
-                .collect(),
-        ),
+    }
+
+    fn create_response(
+        responses: &BTreeMap<String, ObjectOrReference<Response>>,
+    ) -> Option<UnvalidatedResponse> {
+        responses
+            .iter()
+            .filter(|(status_code_pattern, obj_or_ref)| status_code_pattern.starts_with("2"))
+            .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
+                ObjectOrReference::Object(t) => Some(UnvalidatedResponse {
+                    status: create_status_code(status_code_pattern),
+                    body: None, //would need a way to validate against a provided schema
+                    headers: create_headers(&t.headers),
+                    extract: None,
+                    ignore: None,
+                }),
+                _ => None,
+            })
+            .last()
+            .flatten()
+    }
+
+    fn create_request(
+        url: &str,
+        verb: test::http::Verb,
+        op: &oas3::spec::Operation,
+    ) -> UnvalidatedRequest {
+        let mut headers: Vec<test::http::Header> = vec![];
+        let mut parameters: Vec<test::http::Parameter> = vec![];
+
+        op.parameters.iter().for_each(|f| match f {
+            ObjectOrReference::Object(t) => {
+                match t.location.as_str() {
+                    "query" => parameters.push(test::http::Parameter {
+                        param: t.name.clone(),
+                        value: String::default(),
+                        matches_variable: std::cell::Cell::new(false),
+                    }),
+                    "header" => headers.push(test::http::Header {
+                        header: t.name.clone(),
+                        value: String::default(),
+                        matches_variable: std::cell::Cell::new(false),
+                    }),
+                    "path" => (), //user will have to do this themselves, based upon generated template
+                    "cookie" => (), //no cookie support
+                    _ => (),
+                }
+            }
+            ObjectOrReference::Ref { .. } => (),
+        });
+
+        UnvalidatedRequest {
+            body: None,
+            method: Some(verb),
+            url: url.to_string(),
+            headers: if headers.is_empty() {
+                None
+            } else {
+                Some(headers)
+            },
+            params: if parameters.is_empty() {
+                None
+            } else {
+                Some(parameters)
+            },
+        }
+    }
+
+    fn create_test(
+        resolved_path: &str,
+        op: &oas3::spec::Operation,
+        verb: test::http::Verb,
+    ) -> Option<File> {
+        println!("CREATING TEST {resolved_path}");
+
+        Some(File {
+            cleanup: None,
+            compare: None,
+            disabled: None,
+            env: None,
+            name: op.summary.clone(),
+            id: op.operation_id.clone(),
+            project: None,
+            tags: create_tags(&op.tags),
+            requires: None,
+            filename: String::default(),
+            iterate: None,
+            variables: None,
+            stages: None,
+            setup: None,
+            request: Some(create_request(resolved_path, verb, op)),
+            response: create_response(&op.responses),
+        })
+    }
+
+    fn create_get_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Get)
+    }
+
+    fn create_post_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Post)
+    }
+
+    fn create_delete_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Delete)
+    }
+
+    fn create_put_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Put)
+    }
+
+    fn create_patch_test(resolved_path: &str, op: &oas3::spec::Operation) -> Option<File> {
+        create_test(resolved_path, op, test::http::Verb::Patch)
+    }
+
+    fn create_tests_for_op(
+        op: &Option<Operation>,
+        root_servers: &[Server],
+        path: &PathItem,
+        path_string: &str,
+        test_factory: impl Fn(&str, &oas3::spec::Operation) -> Option<File>,
+    ) -> Vec<File> {
+        op.clone()
+            .map(|op| {
+                get_test_paths(root_servers, &path.servers, &op.servers, "$url")
+                    .iter()
+                    .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
+                    .flatten()
+                    .collect::<Vec<File>>()
+            })
+            .unwrap_or_default()
+    }
+
+    fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
+        let stuff: [(
+            &Option<Operation>,
+            fn(&str, &oas3::spec::Operation) -> Option<File>,
+        ); 5] = [
+            (&path.get, create_get_test),
+            (&path.post, create_post_test),
+            (&path.delete, create_delete_test),
+            (&path.patch, create_patch_test),
+            (&path.put, create_put_test),
+        ];
+
+        stuff
+            .into_iter()
+            .map(|(op, factory)| create_tests_for_op(op, root_servers, path, path_string, factory))
+            .flatten()
+            .collect()
+    }
+
+    pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
+        let f = oas3::from_path(file);
+        match f {
+            Err(e) => {
+                println!("ERROR IS {}", e);
+                None
+            }
+            Ok(s) => Some(
+                s.paths
+                    .iter()
+                    .map(|(path_string, path)| {
+                        println!("IN PATH: {path_string}");
+                        create_tests(&s.servers, path_string, path)
+                    })
+                    .flatten()
+                    .collect(),
+            ),
+        }
     }
 }
 
@@ -261,7 +508,7 @@ pub async fn create_test_template(
         serde_yaml::to_string(&template::template()?)?
     };
     let template = template.replace("''", "");
-    let mut result = "".to_string();
+    let mut result = String::default();
 
     for line in template.lines() {
         if !line.contains("null") {
@@ -321,9 +568,28 @@ mod tests {
     fn basic() {
         println!("HERE");
         //.to_str().unwrap();
-        let tests =
-            create_tests_from_openapi_spec(get_spec_path("openapi1.json").to_str().unwrap());
+        let tests = openapi_v31::create_tests_from_openapi_spec(
+            get_spec_path("openapi1.json").to_str().unwrap(),
+        );
 
+        let ret = tests
+            .map(|f| {
+                f.iter()
+                    .map(|f| format!("{}", serde_yaml::to_string(f).unwrap()))
+                    .collect::<Vec<String>>()
+                    .join("\n----------\n")
+            })
+            .unwrap_or_default();
+
+        println!("\n\n\n{ret}");
+    }
+
+    #[test]
+    fn basic2() {
+        println!("HERE");
+        let tests = openapi_legacy::create_tests_from_openapi_spec(
+            get_spec_path("bitbucket.json").to_str().unwrap(),
+        );
         let ret = tests
             .map(|f| {
                 f.iter()

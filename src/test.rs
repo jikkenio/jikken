@@ -16,20 +16,35 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub requires: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub iterate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub setup: Option<file::UnvalidatedRequestResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<file::UnvalidatedRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compare: Option<file::UnvalidatedCompareRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<file::UnvalidatedResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Vec<file::UnvalidatedStage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cleanup: Option<file::UnvalidatedCleanup>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
 
     #[serde(skip_serializing, skip_deserializing)]
