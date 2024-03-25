@@ -13,12 +13,13 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use uuid::Uuid;
+
+use self::file::{UnvalidatedRequest, UnvalidatedResponse};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -49,6 +50,29 @@ pub struct File {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
+}
+
+impl Default for File {
+    fn default() -> Self {
+        Self {
+            filename: "".to_string(),
+            name: Some("".to_string()),
+            id: Some(Uuid::new_v4().to_string()),
+            project: None,
+            env: None,
+            tags: None,
+            requires: None,
+            iterate: None,
+            setup: None,
+            request: Some(UnvalidatedRequest::default()),
+            compare: None,
+            response: Some(UnvalidatedResponse::default()),
+            stages: None,
+            cleanup: None,
+            variables: None,
+            disabled: None,
+        }
+    }
 }
 
 impl File {

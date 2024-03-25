@@ -14,6 +14,7 @@ mod openapi_legacy {
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
     use std::error::Error;
+    use uuid::Uuid;
     //use std::fs::File;
     use crate::test;
     use crate::test::file::UnvalidatedResponse;
@@ -167,24 +168,16 @@ mod openapi_legacy {
         verb: test::http::Verb,
     ) -> Option<File> {
         println!("CREATING TEST {resolved_path}");
-
+        let default = test::File::default();
         Some(File {
-            cleanup: None,
-            compare: None,
-            disabled: None,
-            env: None,
-            name: op.summary.clone(),
-            id: op.operation_id.clone(),
-            project: None,
+            name: op.summary.clone().or(default.name),
+            id: op.operation_id.clone().or(default.id),
             tags: create_tags(&op.tags),
-            requires: None,
             filename: String::default(),
-            iterate: None,
             variables: None,
-            stages: None,
-            setup: None,
             request: Some(create_request(resolved_path, verb, op)),
-            response: create_response(&op.responses),
+            response: create_response(&op.responses).or(default.response),
+            ..default
         })
     }
 
@@ -268,6 +261,7 @@ mod openapi_v31 {
     use oas3::spec::Response;
     use oas3::spec::Server;
     use std::collections::BTreeMap;
+    use uuid::Uuid;
     pub fn get_test_paths(
         root_servers: &[Server],
         path_servers: &[Server],
@@ -395,24 +389,16 @@ mod openapi_v31 {
         verb: test::http::Verb,
     ) -> Option<File> {
         println!("CREATING TEST {resolved_path}");
-
+        let default = test::File::default();
         Some(File {
-            cleanup: None,
-            compare: None,
-            disabled: None,
-            env: None,
-            name: op.summary.clone(),
-            id: op.operation_id.clone(),
-            project: None,
+            name: op.summary.clone().or(default.name),
+            id: op.operation_id.clone().or(default.id),
             tags: create_tags(&op.tags),
-            requires: None,
             filename: String::default(),
-            iterate: None,
             variables: None,
-            stages: None,
-            setup: None,
             request: Some(create_request(resolved_path, verb, op)),
-            response: create_response(&op.responses),
+            response: create_response(&op.responses).or(default.response),
+            ..default
         })
     }
 
