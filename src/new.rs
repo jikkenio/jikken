@@ -2,6 +2,7 @@ use super::errors::GenericError;
 use super::test::template;
 use log::{error, info};
 
+use crate::test::File;
 use std::error::Error;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -209,30 +210,27 @@ mod openapi_legacy {
             .collect()
     }
 
-    pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
-        let file = std::fs::File::open(file).ok()?;
+    pub fn create_tests_from_openapi_spec(
+        file: &str,
+    ) -> Result<Vec<File>, Box<dyn std::error::Error + Send + Sync>> {
+        let file = std::fs::File::open(file)?;
         let reader = BufReader::new(file);
 
         let versioned_openapi: Result<VersionedOpenAPI, serde_json::Error> =
             serde_json::from_reader(reader);
         match versioned_openapi {
-            Err(e) => {
-                println!("ERROR IS {}", e);
-                None
-            }
+            Err(e) => Err(Box::from(e)),
             Ok(v) => {
                 let openapi = v.upgrade();
-                Some(
-                    openapi
-                        .paths
-                        .iter()
-                        .map(|(path_string, ref_or_path)| match ref_or_path {
-                            RefOr::Item(path) => create_tests(&openapi.servers, path_string, path),
-                            RefOr::Reference { .. } => Vec::default(),
-                        })
-                        .flatten()
-                        .collect(),
-                )
+                Ok(openapi
+                    .paths
+                    .iter()
+                    .map(|(path_string, ref_or_path)| match ref_or_path {
+                        RefOr::Item(path) => create_tests(&openapi.servers, path_string, path),
+                        RefOr::Reference { .. } => Vec::default(),
+                    })
+                    .flatten()
+                    .collect())
             }
         }
     }
@@ -445,22 +443,26 @@ mod openapi_v31 {
             .collect()
     }
 
-    pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
-        let f = oas3::from_path(file);
-        match f {
-            Err(e) => {
-                println!("ERROR IS {}", e);
-                None
-            }
-            Ok(s) => Some(
+    pub fn create_tests_from_openapi_spec(
+        file: &str,
+    ) -> Result<Vec<File>, Box<dyn std::error::Error + Send + Sync>> {
+        oas3::from_path(file)
+            .map(|s| {
                 s.paths
                     .iter()
                     .map(|(path_string, path)| create_tests(&s.servers, path_string, path))
                     .flatten()
-                    .collect(),
-            ),
-        }
+                    .collect()
+            })
+            .map_err(|e| Box::from(e))
     }
+}
+
+pub fn create_tests_from_openapi_spec(
+    file: &str,
+) -> Result<Vec<File>, Box<dyn Error + Send + Sync>> {
+    openapi_v31::create_tests_from_openapi_spec(file)
+        .or(openapi_legacy::create_tests_from_openapi_spec(file))
 }
 
 pub async fn create_test_template(
@@ -522,8 +524,6 @@ pub async fn create_test_template(
 
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
-
     use super::*;
 
     fn get_spec_path(p: &str) -> std::path::PathBuf {
@@ -556,6 +556,22 @@ mod tests {
         let tests = openapi_legacy::create_tests_from_openapi_spec(
             get_spec_path("bitbucket.json").to_str().unwrap(),
         );
+        let ret = tests
+            .map(|f| {
+                f.iter()
+                    .map(|f| format!("{}", serde_yaml::to_string(f).unwrap()))
+                    .collect::<Vec<String>>()
+                    .join("\n----------\n")
+            })
+            .unwrap_or_default();
+
+        println!("\n\n\n{ret}");
+    }
+
+    #[test]
+    fn basic3() {
+        let tests =
+            create_tests_from_openapi_spec(get_spec_path("bitbucket.json").to_str().unwrap());
         let ret = tests
             .map(|f| {
                 f.iter()
