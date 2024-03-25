@@ -3,24 +3,19 @@ use super::test::template;
 use log::{error, info};
 
 use std::error::Error;
-use std::str::FromStr;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 mod openapi_legacy {
+    use crate::test;
     use crate::test::file::UnvalidatedRequest;
+    use crate::test::file::UnvalidatedResponse;
+    use crate::test::File;
     use openapiv3::v2::ReferenceOrSchema::Reference;
     use openapiv3::IndexMap;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
-    use std::error::Error;
-    use uuid::Uuid;
-    //use std::fs::File;
-    use crate::test;
-    use crate::test::file::UnvalidatedResponse;
-    use crate::test::File;
     use std::io::BufReader;
-    use std::path::Path;
 
     fn create_tags(tags: &[String]) -> Option<String> {
         if tags.is_empty() {
@@ -62,7 +57,7 @@ mod openapi_legacy {
             .responses
             .iter()
             .map(|(sc, obj_or_ref)| (sc.to_string(), obj_or_ref))
-            .filter(|(status_code_pattern, obj_or_ref)| status_code_pattern.starts_with("2"))
+            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with("2"))
             .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
                 RefOr::Item(t) => Some(UnvalidatedResponse {
                     status: create_status_code(status_code_pattern.as_str()),
@@ -100,8 +95,8 @@ mod openapi_legacy {
                         value: String::default(),
                         matches_variable: std::cell::Cell::new(false),
                     }),
-                    openapiv3::ParameterKind::Path { style } => (), //user will have to do this themselves, based upon generated template
-                    openapiv3::ParameterKind::Cookie { style } => (), //no cookie support
+                    openapiv3::ParameterKind::Path { .. } => (), //user will have to do this themselves, based upon generated template
+                    openapiv3::ParameterKind::Cookie { .. } => (), //no cookie support
                 }
             }
             _ => (),
@@ -153,7 +148,7 @@ mod openapi_legacy {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "$url")
+                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
                     .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
                     .flatten()
@@ -167,14 +162,11 @@ mod openapi_legacy {
         op: &openapiv3::Operation,
         verb: test::http::Verb,
     ) -> Option<File> {
-        println!("CREATING TEST {resolved_path}");
         let default = test::File::default();
         Some(File {
             name: op.summary.clone().or(default.name),
             id: op.operation_id.clone().or(default.id),
             tags: create_tags(&op.tags),
-            filename: String::default(),
-            variables: None,
             request: Some(create_request(resolved_path, verb, op)),
             response: create_response(&op.responses).or(default.response),
             ..default
@@ -218,7 +210,6 @@ mod openapi_legacy {
     }
 
     pub fn create_tests_from_openapi_spec(file: &str) -> Option<Vec<File>> {
-        // Open the file in read-only mode with buffer.
         let file = std::fs::File::open(file).ok()?;
         let reader = BufReader::new(file);
 
@@ -251,7 +242,6 @@ mod openapi_v31 {
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
-    use crate::test::Definition;
     use crate::test::File;
     use oas3;
     use oas3::spec::Header;
@@ -261,7 +251,6 @@ mod openapi_v31 {
     use oas3::spec::Response;
     use oas3::spec::Server;
     use std::collections::BTreeMap;
-    use uuid::Uuid;
     pub fn get_test_paths(
         root_servers: &[Server],
         path_servers: &[Server],
@@ -322,7 +311,7 @@ mod openapi_v31 {
     ) -> Option<UnvalidatedResponse> {
         responses
             .iter()
-            .filter(|(status_code_pattern, obj_or_ref)| status_code_pattern.starts_with("2"))
+            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with("2"))
             .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
                 ObjectOrReference::Object(t) => Some(UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
@@ -388,14 +377,11 @@ mod openapi_v31 {
         op: &oas3::spec::Operation,
         verb: test::http::Verb,
     ) -> Option<File> {
-        println!("CREATING TEST {resolved_path}");
         let default = test::File::default();
         Some(File {
             name: op.summary.clone().or(default.name),
             id: op.operation_id.clone().or(default.id),
             tags: create_tags(&op.tags),
-            filename: String::default(),
-            variables: None,
             request: Some(create_request(resolved_path, verb, op)),
             response: create_response(&op.responses).or(default.response),
             ..default
@@ -431,7 +417,7 @@ mod openapi_v31 {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "$url")
+                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
                     .map(|url| test_factory(format!("{}{}", url, path_string).as_str(), &op))
                     .flatten()
@@ -469,10 +455,7 @@ mod openapi_v31 {
             Ok(s) => Some(
                 s.paths
                     .iter()
-                    .map(|(path_string, path)| {
-                        println!("IN PATH: {path_string}");
-                        create_tests(&s.servers, path_string, path)
-                    })
+                    .map(|(path_string, path)| create_tests(&s.servers, path_string, path))
                     .flatten()
                     .collect(),
             ),
@@ -552,8 +535,6 @@ mod tests {
 
     #[test]
     fn basic() {
-        println!("HERE");
-        //.to_str().unwrap();
         let tests = openapi_v31::create_tests_from_openapi_spec(
             get_spec_path("openapi1.json").to_str().unwrap(),
         );
@@ -572,7 +553,6 @@ mod tests {
 
     #[test]
     fn basic2() {
-        println!("HERE");
         let tests = openapi_legacy::create_tests_from_openapi_spec(
             get_spec_path("bitbucket.json").to_str().unwrap(),
         );
