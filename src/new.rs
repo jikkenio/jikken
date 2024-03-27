@@ -151,7 +151,7 @@ mod openapi_legacy {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
+                get_test_paths(root_servers, &path.servers, &op.servers, "${url}")
                     .iter()
                     .map(|url| {
                         create_test(
@@ -160,6 +160,7 @@ mod openapi_legacy {
                             verb,
                             full,
                             multistage,
+                            path_string,
                         )
                     })
                     .flatten()
@@ -168,12 +169,31 @@ mod openapi_legacy {
             .unwrap_or_default()
     }
 
+    fn create_filename(path_string: &str, verb: &test::http::Verb) -> String {
+        let mut path = path_string
+            .split('/')
+            .filter(|s| *s != "")
+            .collect::<Vec<&str>>()
+            .join(std::path::MAIN_SEPARATOR_STR);
+
+        if path == "" {
+            path = "ROOT".to_string();
+        }
+
+        std::path::PathBuf::from(path)
+            .join(format!("{:?}.jkt", verb))
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
     fn create_test(
         resolved_path: &str,
         op: &openapiv3::Operation,
         verb: test::http::Verb,
         full: bool,
         multistage: bool,
+        path_string: &str,
     ) -> Option<File> {
         let default = if full {
             test::template::template_full().unwrap()
@@ -199,6 +219,7 @@ mod openapi_legacy {
                     name: None,
                     delay: None,
                 }]),
+                filename: create_filename(path_string, &verb),
                 ..default
             })
         } else {
@@ -208,6 +229,7 @@ mod openapi_legacy {
                 tags: create_tags(&op.tags),
                 response,
                 request: Some(request),
+                filename: create_filename(path_string, &verb),
                 ..default
             })
         }
@@ -401,12 +423,70 @@ mod openapi_v31 {
         }
     }
 
+    fn create_filename(path_string: &str, verb: &test::http::Verb) -> String {
+        let mut path = path_string
+            .split('/')
+            .filter(|s| *s != "")
+            .collect::<Vec<&str>>()
+            .join(std::path::MAIN_SEPARATOR_STR);
+
+        if path == "" {
+            path = "ROOT".to_string();
+        }
+
+        std::path::PathBuf::from(path)
+            .join(format!("{:?}.jkt", verb))
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn filename_only_slash() {
+        assert_eq!(
+            format!("ROOT{}Get.jkt", std::path::MAIN_SEPARATOR_STR),
+            create_filename("/", &test::http::Verb::Get)
+        );
+    }
+
+    #[test]
+    fn filename_one_component() {
+        assert_eq!(
+            format!("foo{}Delete.jkt", std::path::MAIN_SEPARATOR_STR),
+            create_filename("/foo", &test::http::Verb::Delete)
+        );
+    }
+
+    #[test]
+    fn filename_multiple_components() {
+        assert_eq!(
+            format!(
+                "foo{}bar{}Post.jkt",
+                std::path::MAIN_SEPARATOR_STR,
+                std::path::MAIN_SEPARATOR_STR
+            ),
+            create_filename("foo/bar/", &test::http::Verb::Post)
+        );
+    }
+
+    #[test]
+    fn filename_multiple_components_with_params() {
+        assert_eq!(
+            format!(
+                "foo{0}bars{0}{{bar}}{0}Post.jkt",
+                std::path::MAIN_SEPARATOR_STR
+            ),
+            create_filename("foo/bars/{bar}", &test::http::Verb::Post)
+        );
+    }
+
     fn create_test(
         resolved_path: &str,
         op: &oas3::spec::Operation,
         verb: test::http::Verb,
         full: bool,
         multistage: bool,
+        path_string: &str,
     ) -> Option<File> {
         let default = if full {
             test::template::template_full().unwrap()
@@ -431,6 +511,7 @@ mod openapi_v31 {
                     name: None,
                     delay: None,
                 }]),
+                filename: create_filename(path_string, &verb),
                 ..default
             })
         } else {
@@ -440,6 +521,7 @@ mod openapi_v31 {
                 tags: create_tags(&op.tags),
                 response,
                 request: Some(request),
+                filename: create_filename(path_string, &verb),
                 ..default
             })
         }
@@ -456,7 +538,7 @@ mod openapi_v31 {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
+                get_test_paths(root_servers, &path.servers, &op.servers, "${url}")
                     .into_iter()
                     .map(|url| {
                         create_test(
@@ -465,6 +547,7 @@ mod openapi_v31 {
                             verb,
                             full,
                             multistage,
+                            path_string,
                         )
                     })
                     .flatten()
@@ -546,20 +629,10 @@ pub fn create_tests_from_openapi_spec(
             let mut tests_generated = 0;
             let ret = tests.and_then(|f| {
                 f.iter()
-                    .enumerate()
-                    .map(|(it, f)| -> Result<(), Box<dyn Error + Send + Sync>> {
-                        /*let req = f
-                            .request
-                            .or(f.stages.and_then(|s| s.first().map(|s| s.request)))
-                            .unwrap();
-
-                        //let op = req.method.clone().unwrap();
-                        //No way for me to determine path
-                        //let path = req.url.split('/')
-                        let nested = root.join(req.format!("{:?}", op);
-                        create_dir_all(ne));
-                        std::fs::File::create()*/
-                        std::fs::File::create(root.join(it.to_string()))
+                    .map(|f| -> Result<(), Box<dyn Error + Send + Sync>> {
+                        let file_path = root.join(f.filename.as_str());
+                        std::fs::create_dir_all(file_path.parent().unwrap())?;
+                        std::fs::File::create(file_path)
                             .map(|mut o| o.write(serde_yaml::to_string(f).unwrap().as_bytes()))
                             .map(|_| tests_generated += 1)
                             .map_err(|e| Box::from(e))
