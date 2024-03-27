@@ -4,6 +4,7 @@ use log::{error, info};
 
 use crate::test::File;
 use std::error::Error;
+use std::io::Write;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -12,7 +13,6 @@ mod openapi_legacy {
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
     use crate::test::File;
-    use openapiv3::v2::ReferenceOrSchema::Reference;
     use openapiv3::IndexMap;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
@@ -146,12 +146,22 @@ mod openapi_legacy {
         path: &PathItem,
         path_string: &str,
         verb: test::http::Verb,
+        full: bool,
+        multistage: bool,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
-                    .map(|url| create_test(format!("{}{}", url, path_string).as_str(), &op, verb))
+                    .map(|url| {
+                        create_test(
+                            format!("{}{}", url, path_string).as_str(),
+                            &op,
+                            verb,
+                            full,
+                            multistage,
+                        )
+                    })
                     .flatten()
                     .collect::<Vec<File>>()
             })
@@ -162,19 +172,54 @@ mod openapi_legacy {
         resolved_path: &str,
         op: &openapiv3::Operation,
         verb: test::http::Verb,
+        full: bool,
+        multistage: bool,
     ) -> Option<File> {
-        let default = test::File::default();
-        Some(File {
-            name: op.summary.clone().or(default.name),
-            id: op.operation_id.clone().or(default.id),
-            tags: create_tags(&op.tags),
-            request: Some(create_request(resolved_path, verb, op)),
-            response: create_response(&op.responses).or(default.response),
-            ..default
-        })
+        let default = if full {
+            test::template::template_full().unwrap()
+        } else if multistage {
+            test::template::template_staged().unwrap()
+        } else {
+            test::File::default()
+        };
+
+        let request = create_request(resolved_path, verb, op);
+        let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
+
+        if multistage {
+            Some(File {
+                name: op.summary.clone().or(default.name),
+                id: op.operation_id.clone().or(default.id),
+                tags: create_tags(&op.tags),
+                stages: Some(vec![test::file::UnvalidatedStage {
+                    request: request,
+                    compare: None,
+                    response: response,
+                    variables: None,
+                    name: None,
+                    delay: None,
+                }]),
+                ..default
+            })
+        } else {
+            Some(File {
+                name: op.summary.clone().or(default.name),
+                id: op.operation_id.clone().or(default.id),
+                tags: create_tags(&op.tags),
+                response,
+                request: Some(request),
+                ..default
+            })
+        }
     }
 
-    fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
+    fn create_tests(
+        root_servers: &[Server],
+        path_string: &str,
+        path: &PathItem,
+        full: bool,
+        multistage: bool,
+    ) -> Vec<File> {
         let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
             (&path.post, test::http::Verb::Post),
@@ -185,13 +230,17 @@ mod openapi_legacy {
 
         stuff
             .into_iter()
-            .map(|(op, verb)| create_tests_for_op(op, root_servers, path, path_string, verb))
+            .map(|(op, verb)| {
+                create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
+            })
             .flatten()
             .collect()
     }
 
     pub fn create_tests_from_openapi_spec(
         file: &str,
+        full: bool,
+        multistage: bool,
     ) -> Result<Vec<File>, Box<dyn std::error::Error + Send + Sync>> {
         let file = std::fs::File::open(file)?;
         let reader = BufReader::new(file);
@@ -206,7 +255,9 @@ mod openapi_legacy {
                     .paths
                     .iter()
                     .map(|(path_string, ref_or_path)| match ref_or_path {
-                        RefOr::Item(path) => create_tests(&openapi.servers, path_string, path),
+                        RefOr::Item(path) => {
+                            create_tests(&openapi.servers, path_string, path, full, multistage)
+                        }
                         RefOr::Reference { .. } => Vec::default(),
                     })
                     .flatten()
@@ -354,16 +405,44 @@ mod openapi_v31 {
         resolved_path: &str,
         op: &oas3::spec::Operation,
         verb: test::http::Verb,
+        full: bool,
+        multistage: bool,
     ) -> Option<File> {
-        let default = test::File::default();
-        Some(File {
-            name: op.summary.clone().or(default.name),
-            id: op.operation_id.clone().or(default.id),
-            tags: create_tags(&op.tags),
-            request: Some(create_request(resolved_path, verb, op)),
-            response: create_response(&op.responses).or(default.response),
-            ..default
-        })
+        let default = if full {
+            test::template::template_full().unwrap()
+        } else if multistage {
+            test::template::template_staged().unwrap()
+        } else {
+            test::File::default()
+        };
+        let request = create_request(resolved_path, verb, op);
+        let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
+
+        if multistage {
+            Some(File {
+                name: op.summary.clone().or(default.name),
+                id: op.operation_id.clone().or(default.id),
+                tags: create_tags(&op.tags),
+                stages: Some(vec![test::file::UnvalidatedStage {
+                    request: request,
+                    compare: None,
+                    response: response,
+                    variables: None,
+                    name: None,
+                    delay: None,
+                }]),
+                ..default
+            })
+        } else {
+            Some(File {
+                name: op.summary.clone().or(default.name),
+                id: op.operation_id.clone().or(default.id),
+                tags: create_tags(&op.tags),
+                response,
+                request: Some(request),
+                ..default
+            })
+        }
     }
 
     fn create_tests_for_op(
@@ -372,19 +451,35 @@ mod openapi_v31 {
         path: &PathItem,
         path_string: &str,
         verb: test::http::Verb,
+        full: bool,
+        multistage: bool,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .into_iter()
-                    .map(|url| create_test(format!("{}{}", url, path_string).as_str(), &op, verb))
+                    .map(|url| {
+                        create_test(
+                            format!("{}{}", url, path_string).as_str(),
+                            &op,
+                            verb,
+                            full,
+                            multistage,
+                        )
+                    })
                     .flatten()
                     .collect::<Vec<File>>()
             })
             .unwrap_or_default()
     }
 
-    fn create_tests(root_servers: &[Server], path_string: &str, path: &PathItem) -> Vec<File> {
+    fn create_tests(
+        root_servers: &[Server],
+        path_string: &str,
+        path: &PathItem,
+        full: bool,
+        multistage: bool,
+    ) -> Vec<File> {
         let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
             (&path.post, test::http::Verb::Post),
@@ -395,19 +490,25 @@ mod openapi_v31 {
 
         stuff
             .into_iter()
-            .map(|(op, verb)| create_tests_for_op(op, root_servers, path, path_string, verb))
+            .map(|(op, verb)| {
+                create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
+            })
             .flatten()
             .collect()
     }
 
     pub fn create_tests_from_openapi_spec(
         file: &str,
+        full: bool,
+        multistage: bool,
     ) -> Result<Vec<File>, Box<dyn std::error::Error + Send + Sync>> {
         oas3::from_path(file)
             .map(|s| {
                 s.paths
                     .iter()
-                    .map(|(path_string, path)| create_tests(&s.servers, path_string, path))
+                    .map(|(path_string, path)| {
+                        create_tests(&s.servers, path_string, path, full, multistage)
+                    })
                     .flatten()
                     .collect()
             })
@@ -415,11 +516,65 @@ mod openapi_v31 {
     }
 }
 
+fn create_tests_from_openapi_spec_imp(
+    file: &str,
+    full: bool,
+    multistage: bool,
+) -> Result<Vec<File>, Box<dyn Error + Send + Sync>> {
+    openapi_v31::create_tests_from_openapi_spec(file, full, multistage).or(
+        openapi_legacy::create_tests_from_openapi_spec(file, full, multistage),
+    )
+}
+
 pub fn create_tests_from_openapi_spec(
     file: &str,
-) -> Result<Vec<File>, Box<dyn Error + Send + Sync>> {
-    openapi_v31::create_tests_from_openapi_spec(file)
-        .or(openapi_legacy::create_tests_from_openapi_spec(file))
+    full: bool,
+    multistage: bool,
+    output_path: Option<String>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    match output_path {
+        None => {
+            error!("<NAME> of output is required for open api document ingestion.");
+            Err(Box::new(GenericError {
+                reason: "missing cli parameter".to_string(),
+            }))
+        }
+        Some(p) => {
+            let _ = std::fs::create_dir_all(&p)?;
+            let root = std::path::PathBuf::from(&p);
+            let tests = create_tests_from_openapi_spec_imp(file, full, multistage);
+            let mut tests_generated = 0;
+            let ret = tests.and_then(|f| {
+                f.iter()
+                    .enumerate()
+                    .map(|(it, f)| -> Result<(), Box<dyn Error + Send + Sync>> {
+                        /*let req = f
+                            .request
+                            .or(f.stages.and_then(|s| s.first().map(|s| s.request)))
+                            .unwrap();
+
+                        //let op = req.method.clone().unwrap();
+                        //No way for me to determine path
+                        //let path = req.url.split('/')
+                        let nested = root.join(req.format!("{:?}", op);
+                        create_dir_all(ne));
+                        std::fs::File::create()*/
+                        std::fs::File::create(root.join(it.to_string()))
+                            .map(|mut o| o.write(serde_yaml::to_string(f).unwrap().as_bytes()))
+                            .map(|_| tests_generated += 1)
+                            .map_err(|e| Box::from(e))
+                    })
+                    .collect::<Vec<Result<(), Box<dyn Error + Send + Sync>>>>()
+                    .into_iter()
+                    .collect()
+            });
+            match &ret {
+                Ok(_) => info!("Tests generated:{tests_generated}"),
+                Err(e) => error!("{e}"),
+            }
+            return ret;
+        }
+    }
 }
 
 pub async fn create_test_template(
@@ -494,6 +649,8 @@ mod tests {
     fn basic() {
         let tests = openapi_v31::create_tests_from_openapi_spec(
             get_spec_path("openapi1.json").to_str().unwrap(),
+            false,
+            false,
         );
 
         let ret = tests
@@ -512,6 +669,8 @@ mod tests {
     fn basic2() {
         let tests = openapi_legacy::create_tests_from_openapi_spec(
             get_spec_path("bitbucket.json").to_str().unwrap(),
+            false,
+            false,
         );
         let ret = tests
             .map(|f| {
@@ -527,8 +686,11 @@ mod tests {
 
     #[test]
     fn basic3() {
-        let tests =
-            create_tests_from_openapi_spec(get_spec_path("bitbucket.json").to_str().unwrap());
+        let tests = create_tests_from_openapi_spec_imp(
+            get_spec_path("bitbucket.json").to_str().unwrap(),
+            false,
+            false,
+        );
         let ret = tests
             .map(|f| {
                 f.iter()
