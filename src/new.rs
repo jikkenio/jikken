@@ -8,7 +8,24 @@ use std::io::Write;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
+fn create_tags(tags: &[String]) -> Option<String> {
+    if tags.is_empty() {
+        None
+    } else {
+        Some(tags.join(","))
+    }
+}
+
+fn create_status_code(status_code_pattern: &str) -> Option<u16> {
+    if status_code_pattern == "2XX" {
+        Some(200)
+    } else {
+        status_code_pattern.parse().ok()
+    }
+}
+
 mod openapi_legacy {
+    use super::*;
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
@@ -17,22 +34,6 @@ mod openapi_legacy {
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
     use std::io::BufReader;
-
-    fn create_tags(tags: &[String]) -> Option<String> {
-        if tags.is_empty() {
-            None
-        } else {
-            Some(tags.join(","))
-        }
-    }
-
-    fn create_status_code(status_code_pattern: &str) -> Option<u16> {
-        if status_code_pattern == "2XX" {
-            Some(200)
-        } else {
-            status_code_pattern.parse().ok()
-        }
-    }
 
     fn create_headers(
         headers: &IndexMap<String, RefOr<openapiv3::Header>, RandomState>,
@@ -319,6 +320,7 @@ mod openapi_legacy {
 }
 
 mod openapi_v31 {
+    use super::*;
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
@@ -349,22 +351,6 @@ mod openapi_v31 {
             .or(url_extractor(root_servers))
             .or(url_extractor(op_servers))
             .unwrap_or(vec![fallback.to_string()])
-    }
-
-    fn create_tags(tags: &[String]) -> Option<String> {
-        if tags.is_empty() {
-            None
-        } else {
-            Some(tags.join(","))
-        }
-    }
-
-    fn create_status_code(status_code_pattern: &str) -> Option<u16> {
-        if status_code_pattern == "2XX" {
-            Some(200)
-        } else {
-            status_code_pattern.parse().ok()
-        }
     }
 
     fn create_headers(
