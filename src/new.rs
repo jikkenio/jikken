@@ -206,7 +206,7 @@ mod openapi_legacy {
         let request = create_request(resolved_path, verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
 
-        if multistage {
+        if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
                 id: op.operation_id.clone().or(default.id),
@@ -498,7 +498,7 @@ mod openapi_v31 {
         let request = create_request(resolved_path, verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
 
-        if multistage {
+        if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
                 id: op.operation_id.clone().or(default.id),
