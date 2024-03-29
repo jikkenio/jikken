@@ -151,7 +151,7 @@ mod openapi_legacy {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "${url}")
+                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
                     .map(|url| {
                         create_test(
@@ -187,8 +187,34 @@ mod openapi_legacy {
             .to_string()
     }
 
+    fn create_variables(op: &openapiv3::Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
+        let ret = op
+            .parameters
+            .iter()
+            .map(|p_or_ref| match p_or_ref {
+                RefOr::Reference { .. } => None,
+                RefOr::Item(t) => Some(test::file::UnvalidatedVariable {
+                    name: t.name.clone(),
+                    data_type: None,
+                    file: None,
+                    format: None,
+                    modifier: None,
+                    value: None,
+                }),
+            })
+            .filter(Option::is_some)
+            .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
+            .unwrap_or_default();
+
+        if ret.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
+    }
+
     fn create_test(
-        resolved_path: &str,
+        path: &str,
         op: &openapiv3::Operation,
         verb: test::http::Verb,
         full: bool,
@@ -203,8 +229,10 @@ mod openapi_legacy {
             test::File::default()
         };
 
-        let request = create_request(resolved_path, verb, op);
+        let resolved_path = path.replace("{", "${").to_string();
+        let request = create_request(resolved_path.as_str(), verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
+        let variables = create_variables(&op);
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -215,7 +243,7 @@ mod openapi_legacy {
                     request: request,
                     compare: None,
                     response: response,
-                    variables: None,
+                    variables: variables,
                     name: None,
                     delay: None,
                 }]),
@@ -230,6 +258,7 @@ mod openapi_legacy {
                 response,
                 request: Some(request),
                 filename: create_filename(path_string, &verb),
+                variables,
                 ..default
             })
         }
@@ -480,8 +509,34 @@ mod openapi_v31 {
         );
     }
 
+    fn create_variables(op: &Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
+        let ret = op
+            .parameters
+            .iter()
+            .map(|p_or_ref| match p_or_ref {
+                ObjectOrReference::Ref { .. } => None,
+                ObjectOrReference::Object(t) => Some(test::file::UnvalidatedVariable {
+                    name: t.name.clone(),
+                    data_type: None,
+                    file: None,
+                    format: None,
+                    modifier: None,
+                    value: None,
+                }),
+            })
+            .filter(Option::is_some)
+            .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
+            .unwrap_or_default();
+
+        if ret.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
+    }
+
     fn create_test(
-        resolved_path: &str,
+        path: &str,
         op: &oas3::spec::Operation,
         verb: test::http::Verb,
         full: bool,
@@ -495,8 +550,11 @@ mod openapi_v31 {
         } else {
             test::File::default()
         };
-        let request = create_request(resolved_path, verb, op);
+
+        let resolved_path = path.replace("{", "${").to_string();
+        let request = create_request(resolved_path.as_str(), verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
+        let variables = create_variables(&op);
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -507,7 +565,7 @@ mod openapi_v31 {
                     request: request,
                     compare: None,
                     response: response,
-                    variables: None,
+                    variables: variables,
                     name: None,
                     delay: None,
                 }]),
@@ -522,6 +580,7 @@ mod openapi_v31 {
                 response,
                 request: Some(request),
                 filename: create_filename(path_string, &verb),
+                variables,
                 ..default
             })
         }
