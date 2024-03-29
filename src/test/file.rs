@@ -10,9 +10,24 @@ use std::hash::{Hash, Hasher};
 pub struct UnvalidatedRequest {
     pub method: Option<http::Verb>,
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Vec<http::Parameter>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
+}
+
+impl Default for UnvalidatedRequest {
+    fn default() -> Self {
+        Self {
+            method: None,
+            url: "".to_string(),
+            params: None,
+            headers: None,
+            body: None,
+        }
+    }
 }
 
 impl Hash for UnvalidatedRequest {
@@ -53,11 +68,28 @@ impl Hash for UnvalidatedCompareRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnvalidatedResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
+}
+
+impl Default for UnvalidatedResponse {
+    fn default() -> Self {
+        Self {
+            status: Some(200),
+            headers: None,
+            body: None,
+            ignore: None,
+            extract: None,
+        }
+    }
 }
 
 impl Hash for UnvalidatedResponse {
@@ -72,21 +104,30 @@ impl Hash for UnvalidatedResponse {
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedVariable {
     pub name: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub data_type: Option<variable::Type>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<serde_yaml::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub modifier: Option<variable::Modifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct UnvalidatedStage {
     pub request: UnvalidatedRequest,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compare: Option<UnvalidatedCompareRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<UnvalidatedResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<UnvalidatedVariable>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub delay: Option<u64>,
 }
 

@@ -13,27 +13,66 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use uuid::Uuid;
+
+use self::file::{UnvalidatedRequest, UnvalidatedResponse};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub requires: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub iterate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub setup: Option<file::UnvalidatedRequestResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<file::UnvalidatedRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compare: Option<file::UnvalidatedCompareRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<file::UnvalidatedResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Vec<file::UnvalidatedStage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cleanup: Option<file::UnvalidatedCleanup>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
+}
+
+impl Default for File {
+    fn default() -> Self {
+        Self {
+            filename: "".to_string(),
+            name: Some("".to_string()),
+            id: Some(Uuid::new_v4().to_string()),
+            project: None,
+            env: None,
+            tags: None,
+            requires: None,
+            iterate: None,
+            setup: None,
+            request: Some(UnvalidatedRequest::default()),
+            compare: None,
+            response: Some(UnvalidatedResponse::default()),
+            stages: None,
+            cleanup: None,
+            variables: None,
+            disabled: None,
+        }
+    }
 }
 
 impl File {

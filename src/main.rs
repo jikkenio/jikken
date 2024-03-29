@@ -149,6 +149,10 @@ pub enum Commands {
         /// The name of the test file to be created
         name: Option<String>,
 
+        /// OpenApi spec to derive tests from
+        #[arg(long = "from_openapi", name = "from_openapi")]
+        openapi_spec_path: Option<String>,
+
         /// Generate a test template with all available options
         #[arg(short, long = "full", name = "full")]
         full: bool,
@@ -472,7 +476,6 @@ fn report_to_exit_code(report: executor::Report) -> std::process::ExitCode {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    //Result<(), Box<dyn Error + Send + Sync>> {
     let _ = enable_ansi_support::enable_ansi_support();
 
     let cli = Cli::parse();
@@ -509,15 +512,22 @@ async fn main() -> std::process::ExitCode {
         }
         Commands::New {
             full,
+            openapi_spec_path,
             multistage,
             output,
             name,
         } => {
             updater::check_for_updates().await;
-            result_to_exit_code(
-                new::create_test_template(full, multistage, output, name).await,
-                false,
-            )
+            match openapi_spec_path {
+                Some(path) => result_to_exit_code(
+                    new::create_tests_from_openapi_spec(path.as_str(), full, multistage, name),
+                    false,
+                ),
+                None => result_to_exit_code(
+                    new::create_test_template(full, multistage, output, name).await,
+                    false,
+                ),
+            }
         }
         Commands::DryRun {
             tags,

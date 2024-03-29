@@ -4,49 +4,25 @@ use std::cell::Cell;
 use std::error::Error;
 use uuid::Uuid;
 
+use super::File;
+
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
-    Ok(test::File {
-        filename: "".to_string(),
-        name: Some("".to_string()),
-        id: Some(Uuid::new_v4().to_string()),
-        project: None,
-        env: None,
-        tags: None,
-        requires: None,
-        iterate: None,
-        setup: None,
-        request: Some(new_request()),
-        compare: None,
-        response: Some(new_response()),
-        stages: None,
-        cleanup: None,
-        variables: None,
-        disabled: None,
-    })
+    Ok(test::File::default())
 }
 
 pub fn template_staged() -> Result<test::File, Box<dyn Error + Send + Sync>> {
+    let default = File::default();
     Ok(test::File {
-        filename: "".to_string(),
-        name: Some("".to_string()),
-        id: Some(Uuid::new_v4().to_string()),
-        project: None,
-        env: None,
-        tags: None,
-        requires: None,
-        iterate: None,
-        setup: None,
         request: None,
-        compare: None,
         response: None,
         stages: Some(vec![new_stage()]),
-        cleanup: None,
-        variables: None,
-        disabled: None,
+        ..default
     })
 }
 
 pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
+    //Do not use default as a basis, as opposed to the others.
+    //Compilation error will serve as a reminder to init to "full" state
     Ok(test::File {
         filename: "".to_string(),
         name: Some("".to_string()),
@@ -117,13 +93,7 @@ fn new_full_variable() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send
 }
 
 fn new_response() -> file::UnvalidatedResponse {
-    file::UnvalidatedResponse {
-        status: Some(200),
-        headers: None,
-        body: None,
-        ignore: None,
-        extract: None,
-    }
+    file::UnvalidatedResponse::default()
 }
 
 fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send + Sync>> {
@@ -151,13 +121,7 @@ fn new_full_compare() -> Result<file::UnvalidatedCompareRequest, Box<dyn Error +
 }
 
 fn new_request() -> file::UnvalidatedRequest {
-    file::UnvalidatedRequest {
-        method: None,
-        url: "".to_string(),
-        params: None,
-        headers: None,
-        body: None,
-    }
+    file::UnvalidatedRequest::default()
 }
 
 fn new_full_request() -> Result<file::UnvalidatedRequest, Box<dyn Error + Send + Sync>> {

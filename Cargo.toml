@@ -51,5 +51,7 @@ glob = { version = "0.3.1" }
 validated ={ version = "0.4.0" }
 enable-ansi-support = "0.2.1"
 regex = "0.1.8"
+oas3 = "0.4.0"
+openapiv3-extended = { version="6.0.0", features = ["v2"] }
 [dev-dependencies]
 nonempty-collections = { version="0.1.5" }
