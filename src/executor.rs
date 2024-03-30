@@ -16,6 +16,8 @@ use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace, warn};
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
@@ -523,10 +525,10 @@ fn ignored_due_to_tag_filter(
 }
 
 fn schedule_impl(
-    graph: &HashMap<String, HashSet<String>>,
-    scheduled_nodes: &HashSet<String>,
-) -> HashSet<String> {
-    let mut ignore: HashSet<String> = HashSet::new();
+    graph: &BTreeMap<String, BTreeSet<String>>,
+    scheduled_nodes: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let mut ignore: BTreeSet<String> = BTreeSet::new();
     ignore.clone_from(scheduled_nodes);
 
     //Is there a way to do in 1 iteration?
@@ -557,7 +559,7 @@ fn construct_test_execution_graph_v2(
     trace!("determine test execution order based on dependency graph");
 
     //Nodes are IDs ; Directed edges imply ordering; i.e. A -> B; B depends on A
-    let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     tests_to_run
         .iter()
         .map(|td| (td.id.clone(), td))
@@ -580,13 +582,13 @@ fn construct_test_execution_graph_v2(
                 if let Some(edges) = graph.get_mut(req) {
                     edges.insert(id.clone());
                 } else {
-                    graph.insert(req.clone(), HashSet::from([id.clone()]));
+                    graph.insert(req.clone(), BTreeSet::from([id.clone()]));
                 }
             }
 
             let node_for_id = graph.get(&id);
             if node_for_id.is_none() {
-                graph.insert(id.clone(), HashSet::new());
+                graph.insert(id.clone(), BTreeSet::new());
             }
             //intution: if it already has a dependent, its simply a test
             //depended on by multiple other tests and not a duplicate ID made in error
@@ -595,8 +597,8 @@ fn construct_test_execution_graph_v2(
             }
         });
 
-    let mut jobs: Vec<HashSet<String>> = Vec::new();
-    let mut scheduled_nodes: HashSet<String> = HashSet::new();
+    let mut jobs: Vec<BTreeSet<String>> = Vec::new();
+    let mut scheduled_nodes: BTreeSet<String> = BTreeSet::new();
     while graph.len() != scheduled_nodes.len() {
         let job = schedule_impl(&graph, &scheduled_nodes);
         job.iter()
