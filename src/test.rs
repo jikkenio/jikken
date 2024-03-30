@@ -22,6 +22,8 @@ pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
@@ -47,8 +49,6 @@ pub struct File {
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
