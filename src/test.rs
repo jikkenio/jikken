@@ -594,9 +594,8 @@ impl Definition {
                 }
 
                 let replacement = variable.generate_value(iteration, self.global_variables.clone());
-                replaced_url = replaced_url
-                    .replace(var_pattern.as_str(), replacement.as_str())
-                    .clone()
+                replaced_url
+                    .clone_from(&replaced_url.replace(var_pattern.as_str(), replacement.as_str()))
             }
 
             replaced_url

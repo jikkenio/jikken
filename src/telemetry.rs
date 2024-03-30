@@ -22,7 +22,7 @@ const TELEMETRY_BASE_URL: &str = "https://ingestion.jikken.io/v1";
 pub struct Session {
     pub token: Uuid,
     pub session_id: Uuid,
-    pub start_time: chrono::DateTime<chrono::Utc>,
+    // pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -54,7 +54,7 @@ struct SessionResponse {
 pub struct Test {
     pub test_id: Uuid,
     pub session: Session,
-    pub start_time: chrono::DateTime<chrono::Utc>,
+    // pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -118,9 +118,9 @@ fn redact_definition(mut td: test::Definition) -> test::Definition {
 
     td.stages.iter_mut().for_each(|s| {
         redact_request(&mut s.request);
-        s.compare
-            .as_mut()
-            .map(|c| redact_headers(c.headers.as_mut()));
+        if let Some(c) = s.compare.as_mut() {
+            redact_headers(c.headers.as_mut())
+        };
     });
 
     td
@@ -128,9 +128,9 @@ fn redact_definition(mut td: test::Definition) -> test::Definition {
 
 fn redact_result_details(mut rd: ResultDetails) -> ResultDetails {
     redact_headers(rd.request.headers.as_mut());
-    rd.compare_request
-        .as_mut()
-        .map(|c| redact_headers(c.headers.as_mut()));
+    if let Some(c) = rd.compare_request.as_mut() {
+        redact_headers(c.headers.as_mut())
+    }
     rd
 }
 
@@ -197,7 +197,7 @@ pub async fn create_session(
         return Ok(Session {
             token,
             session_id,
-            start_time: chrono::Utc::now(),
+            // start_time: chrono::Utc::now(),
         });
     }
 
@@ -260,7 +260,7 @@ pub async fn create_test(
         return Ok(Test {
             test_id,
             session: session.clone(),
-            start_time: chrono::Utc::now(),
+            // start_time: chrono::Utc::now(),
         });
     }
 
@@ -438,7 +438,7 @@ mod tests {
             stages: vec![StageDescriptor {
                 name: None,
                 response: None,
-                source_path: "".to_string(),
+                // source_path: "".to_string(),
                 variables: vec![],
                 request: request.clone(),
                 compare: Some(CompareDescriptor {

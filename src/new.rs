@@ -28,11 +28,11 @@ fn create_status_code(status_code_pattern: &str) -> Option<u16> {
 fn create_filename(path_string: &str, verb: &http::Verb) -> String {
     let mut path = path_string
         .split('/')
-        .filter(|s| *s != "")
+        .filter(|s| !s.is_empty())
         .collect::<Vec<&str>>()
         .join(std::path::MAIN_SEPARATOR_STR);
 
-    if path == "" {
+    if path.is_empty() {
         path = "ROOT".to_string();
     }
 
@@ -48,7 +48,6 @@ mod openapi_legacy {
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
-    use crate::test::File;
     use openapiv3::IndexMap;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
@@ -78,7 +77,7 @@ mod openapi_legacy {
             .responses
             .iter()
             .map(|(sc, obj_or_ref)| (sc.to_string(), obj_or_ref))
-            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with("2"))
+            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with('2'))
             .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
                 RefOr::Item(t) => Some(UnvalidatedResponse {
                     status: create_status_code(status_code_pattern.as_str()),
@@ -101,8 +100,8 @@ mod openapi_legacy {
         let mut headers: Vec<test::http::Header> = vec![];
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
-        op.parameters.iter().for_each(|f| match f {
-            RefOr::Item(t) => {
+        op.parameters.iter().for_each(|f| {
+            if let RefOr::Item(t) = f {
                 match &t.kind {
                     openapiv3::ParameterKind::Query { .. } => {
                         parameters.push(test::http::Parameter {
@@ -120,7 +119,6 @@ mod openapi_legacy {
                     openapiv3::ParameterKind::Cookie { .. } => (), //no cookie support
                 }
             }
-            _ => (),
         });
 
         UnvalidatedRequest {
@@ -150,7 +148,7 @@ mod openapi_legacy {
             if servers.is_empty() {
                 None
             } else {
-                Some(servers.into_iter().map(|s| s.url.clone()).collect())
+                Some(servers.iter().map(|s| s.url.clone()).collect())
             }
         };
 
@@ -173,7 +171,7 @@ mod openapi_legacy {
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
                     .iter()
-                    .map(|url| {
+                    .flat_map(|url| {
                         create_test(
                             format!("{}{}", url, path_string).as_str(),
                             &op,
@@ -183,7 +181,6 @@ mod openapi_legacy {
                             path_string,
                         )
                     })
-                    .flatten()
                     .collect::<Vec<File>>()
             })
             .unwrap_or_default()
@@ -231,10 +228,10 @@ mod openapi_legacy {
             test::File::default()
         };
 
-        let resolved_path = path.replace("{", "${").to_string();
+        let resolved_path = path.replace('{', "${").to_string();
         let request = create_request(resolved_path.as_str(), verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
-        let variables = create_variables(&op);
+        let variables = create_variables(op);
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -243,10 +240,10 @@ mod openapi_legacy {
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),
                 stages: Some(vec![test::file::UnvalidatedStage {
-                    request: request,
+                    request,
                     compare: None,
-                    response: response,
-                    variables: variables,
+                    response,
+                    variables,
                     name: None,
                     delay: None,
                 }]),
@@ -285,10 +282,9 @@ mod openapi_legacy {
 
         stuff
             .into_iter()
-            .map(|(op, verb)| {
+            .flat_map(|(op, verb)| {
                 create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
             })
-            .flatten()
             .collect()
     }
 
@@ -309,13 +305,12 @@ mod openapi_legacy {
                 Ok(openapi
                     .paths
                     .iter()
-                    .map(|(path_string, ref_or_path)| match ref_or_path {
+                    .flat_map(|(path_string, ref_or_path)| match ref_or_path {
                         RefOr::Item(path) => {
                             create_tests(&openapi.servers, path_string, path, full, multistage)
                         }
                         RefOr::Reference { .. } => Vec::default(),
                     })
-                    .flatten()
                     .collect())
             }
         }
@@ -327,8 +322,6 @@ mod openapi_v31 {
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
-    use crate::test::File;
-    use oas3;
     use oas3::spec::Header;
     use oas3::spec::ObjectOrReference;
     use oas3::spec::Operation;
@@ -346,7 +339,7 @@ mod openapi_v31 {
             if servers.is_empty() {
                 None
             } else {
-                Some(servers.into_iter().map(|s| s.url.clone()).collect())
+                Some(servers.iter().map(|s| s.url.clone()).collect())
             }
         };
 
@@ -380,7 +373,7 @@ mod openapi_v31 {
     ) -> Option<UnvalidatedResponse> {
         responses
             .iter()
-            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with("2"))
+            .filter(|(status_code_pattern, _)| status_code_pattern.starts_with('2'))
             .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
                 ObjectOrReference::Object(t) => Some(UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
@@ -483,10 +476,10 @@ mod openapi_v31 {
             test::File::default()
         };
 
-        let resolved_path = path.replace("{", "${").to_string();
+        let resolved_path = path.replace('{', "${").to_string();
         let request = create_request(resolved_path.as_str(), verb, op);
         let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
-        let variables = create_variables(&op);
+        let variables = create_variables(op);
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -495,10 +488,10 @@ mod openapi_v31 {
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),
                 stages: Some(vec![test::file::UnvalidatedStage {
-                    request: request,
+                    request,
                     compare: None,
-                    response: response,
-                    variables: variables,
+                    response,
+                    variables,
                     name: None,
                     delay: None,
                 }]),
@@ -533,7 +526,7 @@ mod openapi_v31 {
             .map(|op| {
                 get_test_paths(root_servers, &path.servers, &op.servers, "${url}")
                     .into_iter()
-                    .map(|url| {
+                    .filter_map(|url| {
                         create_test(
                             format!("{}{}", url, path_string).as_str(),
                             &op,
@@ -543,7 +536,6 @@ mod openapi_v31 {
                             path_string,
                         )
                     })
-                    .flatten()
                     .collect::<Vec<File>>()
             })
             .unwrap_or_default()
@@ -566,10 +558,9 @@ mod openapi_v31 {
 
         stuff
             .into_iter()
-            .map(|(op, verb)| {
+            .flat_map(|(op, verb)| {
                 create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
             })
-            .flatten()
             .collect()
     }
 
@@ -582,13 +573,12 @@ mod openapi_v31 {
             .map(|s| {
                 s.paths
                     .iter()
-                    .map(|(path_string, path)| {
+                    .flat_map(|(path_string, path)| {
                         create_tests(&s.servers, path_string, path, full, multistage)
                     })
-                    .flatten()
                     .collect()
             })
-            .map_err(|e| Box::from(e))
+            .map_err(Box::from)
     }
 }
 
@@ -616,7 +606,7 @@ pub fn create_tests_from_openapi_spec(
             }))
         }
         Some(p) => {
-            let _ = std::fs::create_dir_all(&p)?;
+            std::fs::create_dir_all(&p)?;
             let root = std::path::PathBuf::from(&p);
             let tests = create_tests_from_openapi_spec_imp(file, full, multistage);
             let mut tests_generated = 0;
@@ -628,7 +618,7 @@ pub fn create_tests_from_openapi_spec(
                         std::fs::File::create(file_path)
                             .map(|mut o| o.write(serde_yaml::to_string(f).unwrap().as_bytes()))
                             .map(|_| tests_generated += 1)
-                            .map_err(|e| Box::from(e))
+                            .map_err(Box::from)
                     })
                     .collect::<Vec<Result<(), Box<dyn Error + Send + Sync>>>>()
                     .into_iter()
@@ -638,7 +628,8 @@ pub fn create_tests_from_openapi_spec(
                 Ok(_) => info!("Tests generated:{tests_generated}"),
                 Err(e) => error!("{e}"),
             }
-            return ret;
+
+            ret
         }
     }
 }

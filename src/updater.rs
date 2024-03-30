@@ -43,10 +43,6 @@ impl PartialEq for Version {
 
         lhs_val == rhs_val
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 
 impl Ord for Version {

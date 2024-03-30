@@ -224,15 +224,8 @@ impl ResponseDescriptor {
                     None => Vec::new(),
                 };
 
-                let validated_ignore = match res.ignore {
-                    Some(ignore) => ignore,
-                    None => Vec::new(),
-                };
-
-                let validated_extraction = match res.extract {
-                    Some(extract) => extract,
-                    None => Vec::new(),
-                };
+                let validated_ignore = res.ignore.unwrap_or_default();
+                let validated_extraction = res.extract.unwrap_or_default();
 
                 let response_body = res.body.map(|b| RequestBody {
                     data: b,
@@ -262,9 +255,8 @@ pub struct StageDescriptor {
     //I would prefer to do this is Option<chrono::duration>
     //But it requires too much effort in serialization/deserialization
     pub delay: Option<u64>,
-
-    #[serde(skip_serializing)]
-    pub source_path: String,
+    //#[serde(skip_serializing)]
+    //pub source_path: String,
 }
 
 impl StageDescriptor {
@@ -277,7 +269,7 @@ impl StageDescriptor {
             compare: CompareDescriptor::new_opt(stage.compare)?,
             response: ResponseDescriptor::new_opt(stage.response)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
-            source_path: source_path.to_string(),
+            // source_path: source_path.to_string(),
             name: stage.name,
             delay: stage.delay,
         })
@@ -299,7 +291,7 @@ impl StageDescriptor {
                 compare: CompareDescriptor::new_opt(compare_opt)?,
                 response: ResponseDescriptor::new_opt(response_opt)?,
                 variables: Vec::new(),
-                source_path: source_path.to_string(),
+                // source_path: source_path.to_string(),
                 name: Some("request".to_string()),
                 delay: None,
             });
