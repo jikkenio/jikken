@@ -29,7 +29,7 @@ impl Version {
 
         let ret = trailing_zero_regex
             .find(self.0.as_str())
-            .map(|(start, _)| self.0[..start].to_string())
+            .map(|mat| self.0[..mat.range().start].to_string())
             .unwrap_or(self.0.clone());
 
         ret
