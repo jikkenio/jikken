@@ -438,7 +438,7 @@ mod tests {
             stages: vec![StageDescriptor {
                 name: None,
                 response: None,
-                source_path: "".to_string(),
+                // source_path: "".to_string(),
                 variables: vec![],
                 request: request.clone(),
                 compare: Some(CompareDescriptor {
