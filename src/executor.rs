@@ -2114,6 +2114,7 @@ mod tests {
     ) -> test::Definition {
         test::Definition {
             name: None,
+            description: None,
             id: String::from(id),
             project: None,
             environment: None,
@@ -2199,6 +2200,7 @@ mod tests {
     fn default_definition_for_filtering() -> test::Definition {
         test::Definition {
             name: None,
+            description: None,
             id: String::from("id"),
             project: None,
             environment: None,

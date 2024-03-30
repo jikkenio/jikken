@@ -40,6 +40,7 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         cleanup: Some(new_full_cleanup()?),
         variables: Some(vec![new_full_variable()?]),
         disabled: Some(false),
+        description: Some("".to_string()),
     })
 }
 

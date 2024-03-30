@@ -33,7 +33,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|id|env|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
+					"match": "\\b(name|description|id|env|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
 				},
 				{
 					"include": "#request-keywords"
