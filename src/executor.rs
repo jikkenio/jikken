@@ -150,6 +150,7 @@ trait ExecutionPolicy {
         telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
+        config: &config::Config,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>;
 }
 
@@ -166,6 +167,7 @@ impl ExecutionPolicy for DryRunExecutionPolicy {
         _telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
+        _config: &config::Config,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         dry_run(state, test, iteration)
             .await
@@ -186,9 +188,10 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
         telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
+        config: &config::Config,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         let telemetry_test = if let Some(s) = &telemetry {
-            match telemetry::create_test(s, test.clone()).await {
+            match telemetry::create_test(s, test.clone(), config).await {
                 Ok(t) => Some(t),
                 Err(e) => {
                     debug!("telemetry failed: {}", e);
@@ -199,7 +202,7 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
             None
         };
 
-        run(state, test, iteration, telemetry_test).await
+        run(state, test, iteration, telemetry_test, config).await
     }
 }
 
@@ -228,10 +231,11 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         telemetry: &Option<telemetry::Session>,
         test: &test::Definition,
         iteration: u32,
+        config: &config::Config,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
         let ret = self
             .wrapped_policy
-            .execute(state, telemetry, test, iteration)
+            .execute(state, telemetry, test, iteration, config)
             .await;
         let passed = ret.as_ref().map(|(passed, _)| *passed).unwrap_or_default();
         self.failed = !passed;
@@ -243,7 +247,7 @@ async fn run_tests<T: ExecutionPolicy>(
     tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
     mut exec_policy: T,
-    continue_on_failure: bool,
+    config: &config::Config,
 ) -> ExecutionResult {
     let flattened_tests: Vec<test::Definition> = tests.into_iter().flatten().collect();
     let total_count = flattened_tests.len();
@@ -258,7 +262,7 @@ async fn run_tests<T: ExecutionPolicy>(
     let mut message_displayed = false;
 
     for (i, test) in flattened_tests.into_iter().enumerate() {
-        if any_failures && !continue_on_failure && !message_displayed {
+        if any_failures && !config.settings.continue_on_failure && !message_displayed {
             warn!("Skipping remaining tests due to continueOnFailure setting.");
             message_displayed = true;
         }
@@ -269,7 +273,7 @@ async fn run_tests<T: ExecutionPolicy>(
         for iteration in 0..test.iterate {
             // TODO: clean this up based on policies
             // I don't see a clean way to access it without refactoring
-            if any_failures && !continue_on_failure {
+            if any_failures && !config.settings.continue_on_failure {
                 break;
             }
 
@@ -289,7 +293,7 @@ async fn run_tests<T: ExecutionPolicy>(
             );
 
             let result = exec_policy
-                .execute(&mut state, &telemetry, &test, iteration)
+                .execute(&mut state, &telemetry, &test, iteration, config)
                 .await;
 
             match &result {
@@ -322,7 +326,7 @@ async fn run_tests<T: ExecutionPolicy>(
 
     if let Some(s) = &telemetry {
         let status = if any_failures { 2 } else { 1 };
-        _ = telemetry::complete_session(s, runtime, status).await;
+        _ = telemetry::complete_session(s, runtime, status, config).await;
     }
 
     ExecutionResult {
@@ -733,7 +737,7 @@ pub async fn execute_tests(
             tests_to_run_with_dependencies,
             session,
             FailurePolicy::new(DryRunExecutionPolicy),
-            config.settings.continue_on_failure,
+            &config,
         )
         .await
     } else {
@@ -741,7 +745,7 @@ pub async fn execute_tests(
             tests_to_run_with_dependencies,
             session,
             FailurePolicy::new(ActualRunExecutionPolicy),
-            config.settings.continue_on_failure,
+            &config,
         )
         .await
     };
@@ -777,6 +781,7 @@ async fn run(
     td: &test::Definition,
     iteration: u32,
     test: Option<telemetry::Test>,
+    config: &config::Config,
 ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
     let mut results = Vec::new();
     let mut setup_result = validate_setup(state, td, iteration).await?;
@@ -784,7 +789,8 @@ async fn run(
     if let Some(test_telemetry) = &test {
         if !setup_result.1.is_empty() {
             let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, &setup_result.1[0]).await;
+                telemetry::complete_stage(test_telemetry, iteration, &setup_result.1[0], config)
+                    .await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
@@ -794,7 +800,7 @@ async fn run(
     let mut success = setup_result.0;
 
     if success {
-        let td_results = validate_td(state, td, iteration, test.clone()).await;
+        let td_results = validate_td(state, td, iteration, test.clone(), config).await;
 
         match td_results {
             Ok(mut r) => {
@@ -813,7 +819,8 @@ async fn run(
                 if let Some(test_telemetry) = &test {
                     for result in r.1.iter() {
                         let telemetry_result =
-                            telemetry::complete_stage(test_telemetry, iteration, result).await;
+                            telemetry::complete_stage(test_telemetry, iteration, result, config)
+                                .await;
                         if let Err(e) = telemetry_result {
                             debug!("telemetry stage completion failed: {}", e);
                         }
@@ -887,6 +894,7 @@ async fn validate_td(
     td: &test::Definition,
     iteration: u32,
     test: Option<telemetry::Test>,
+    config: &config::Config,
 ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>> {
     let mut results = Vec::new();
 
@@ -895,7 +903,7 @@ async fn validate_td(
 
         if let Some(test_telemetry) = &test {
             let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, &stage_result).await;
+                telemetry::complete_stage(test_telemetry, iteration, &stage_result, config).await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }

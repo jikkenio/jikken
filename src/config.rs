@@ -21,6 +21,7 @@ pub struct Settings {
     pub environment: Option<String>,
     #[serde(skip_serializing)]
     pub api_key: Option<String>,
+    pub dev_mode: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +36,7 @@ struct File {
 struct FileSettings {
     pub continue_on_failure: Option<bool>,
     pub api_key: Option<String>,
+    pub dev_mode: Option<bool>,
     pub project: Option<String>,
     pub environment: Option<String>,
 }
@@ -74,6 +76,7 @@ impl Default for Config {
             settings: Settings {
                 continue_on_failure: false,
                 api_key: None,
+                dev_mode: None,
                 project: None,
                 environment: None,
             },
@@ -133,6 +136,9 @@ fn load_config_from_environment_variables_as_file() -> File {
         .and_then(|cfg| cfg.parse::<bool>().ok());
 
     let envvar_apikey = env::var("JIKKEN_API_KEY").ok();
+    let envvar_devmode = env::var("JIKKEN_DEV_MODE")
+        .ok()
+        .and_then(|cfg| cfg.parse::<bool>().ok());
 
     let envvar_project = env::var("JIKKEN_PROJECT").ok();
     let envvar_env = env::var("JIKKEN_ENVIRONMENT").ok();
@@ -148,6 +154,7 @@ fn load_config_from_environment_variables_as_file() -> File {
     File {
         settings: Some(FileSettings {
             api_key: envvar_apikey,
+            dev_mode: envvar_devmode,
             continue_on_failure: envvar_cof,
             project: envvar_project,
             environment: envvar_env,
@@ -171,6 +178,7 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                         .continue_on_failure
                         .unwrap_or(config.settings.continue_on_failure),
                     api_key: settings.api_key.or(config.settings.api_key),
+                    dev_mode: settings.dev_mode.or(config.settings.dev_mode),
                     project: settings.project.or(config.settings.project),
                     environment: settings.environment.or(config.settings.environment),
                 },
@@ -212,6 +220,9 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
                             .settings
                             .as_ref()
                             .and_then(|s| s.api_key.clone())),
+                        dev_mode: settings
+                            .dev_mode
+                            .or(existing_file.settings.as_ref().and_then(|s| s.dev_mode)),
                         project: settings.project.or(existing_file
                             .settings
                             .as_ref()

@@ -17,6 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 const TELEMETRY_BASE_URL: &str = "https://ingestion.jikken.io/v1";
+const TELEMETRY_DEV_BASE_URL: &str = "https://dev-ingestion.jikken.io/v1";
 
 #[derive(Clone)]
 pub struct Session {
@@ -134,6 +135,18 @@ fn redact_result_details(mut rd: ResultDetails) -> ResultDetails {
     rd
 }
 
+fn get_url(url: &str, config: &config::Config) -> String {
+    format!(
+        "{}{}",
+        if config.settings.dev_mode.unwrap_or(false) {
+            TELEMETRY_DEV_BASE_URL
+        } else {
+            TELEMETRY_BASE_URL
+        },
+        url
+    )
+}
+
 pub async fn create_session(
     token: Uuid,
     test_count: u32,
@@ -141,7 +154,7 @@ pub async fn create_session(
     config: &config::Config,
 ) -> Result<Session, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let uri = format!("{}/sessions", TELEMETRY_BASE_URL);
+    let uri = get_url("/sessions", config);
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
         Ok(_) => {}
@@ -209,9 +222,10 @@ pub async fn create_session(
 pub async fn create_test(
     session: &Session,
     definition: test::Definition,
+    config: &config::Config,
 ) -> Result<Test, Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let uri = format!("{}/tests", TELEMETRY_BASE_URL);
+    let uri = get_url("/tests", config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
         Ok(_) => {}
@@ -273,9 +287,10 @@ pub async fn complete_stage(
     test: &Test,
     iteration: u32,
     stage: &executor::StageResult,
+    config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let uri = format!("{}/tests/{}/completed", TELEMETRY_BASE_URL, test.test_id);
+    let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
         Ok(_) => {}
@@ -333,11 +348,12 @@ pub async fn complete_session(
     session: &Session,
     runtime: u32,
     status: u32,
+    config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let client = Client::builder().build::<_, Body>(HttpsConnector::new());
-    let uri = format!(
-        "{}/sessions/{}/completed",
-        TELEMETRY_BASE_URL, session.session_id
+    let uri = get_url(
+        &format!("/sessions/{}/completed", session.session_id),
+        config,
     );
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
