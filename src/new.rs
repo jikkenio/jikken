@@ -2,6 +2,7 @@ use super::errors::GenericError;
 use super::test::template;
 use log::{error, info};
 
+use crate::test::http;
 use crate::test::File;
 use std::error::Error;
 use std::io::Write;
@@ -22,6 +23,24 @@ fn create_status_code(status_code_pattern: &str) -> Option<u16> {
     } else {
         status_code_pattern.parse().ok()
     }
+}
+
+fn create_filename(path_string: &str, verb: &http::Verb) -> String {
+    let mut path = path_string
+        .split('/')
+        .filter(|s| *s != "")
+        .collect::<Vec<&str>>()
+        .join(std::path::MAIN_SEPARATOR_STR);
+
+    if path == "" {
+        path = "ROOT".to_string();
+    }
+
+    std::path::PathBuf::from(path)
+        .join(format!("{:?}.jkt", verb))
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 mod openapi_legacy {
@@ -168,24 +187,6 @@ mod openapi_legacy {
                     .collect::<Vec<File>>()
             })
             .unwrap_or_default()
-    }
-
-    fn create_filename(path_string: &str, verb: &test::http::Verb) -> String {
-        let mut path = path_string
-            .split('/')
-            .filter(|s| *s != "")
-            .collect::<Vec<&str>>()
-            .join(std::path::MAIN_SEPARATOR_STR);
-
-        if path == "" {
-            path = "ROOT".to_string();
-        }
-
-        std::path::PathBuf::from(path)
-            .join(format!("{:?}.jkt", verb))
-            .to_str()
-            .unwrap()
-            .to_string()
     }
 
     fn create_variables(op: &openapiv3::Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
@@ -436,63 +437,6 @@ mod openapi_v31 {
                 Some(parameters)
             },
         }
-    }
-
-    fn create_filename(path_string: &str, verb: &test::http::Verb) -> String {
-        let mut path = path_string
-            .split('/')
-            .filter(|s| *s != "")
-            .collect::<Vec<&str>>()
-            .join(std::path::MAIN_SEPARATOR_STR);
-
-        if path == "" {
-            path = "ROOT".to_string();
-        }
-
-        std::path::PathBuf::from(path)
-            .join(format!("{:?}.jkt", verb))
-            .to_str()
-            .unwrap()
-            .to_string()
-    }
-
-    #[test]
-    fn filename_only_slash() {
-        assert_eq!(
-            format!("ROOT{}Get.jkt", std::path::MAIN_SEPARATOR_STR),
-            create_filename("/", &test::http::Verb::Get)
-        );
-    }
-
-    #[test]
-    fn filename_one_component() {
-        assert_eq!(
-            format!("foo{}Delete.jkt", std::path::MAIN_SEPARATOR_STR),
-            create_filename("/foo", &test::http::Verb::Delete)
-        );
-    }
-
-    #[test]
-    fn filename_multiple_components() {
-        assert_eq!(
-            format!(
-                "foo{}bar{}Post.jkt",
-                std::path::MAIN_SEPARATOR_STR,
-                std::path::MAIN_SEPARATOR_STR
-            ),
-            create_filename("foo/bar/", &test::http::Verb::Post)
-        );
-    }
-
-    #[test]
-    fn filename_multiple_components_with_params() {
-        assert_eq!(
-            format!(
-                "foo{0}bars{0}{{bar}}{0}Post.jkt",
-                std::path::MAIN_SEPARATOR_STR
-            ),
-            create_filename("foo/bars/{bar}", &test::http::Verb::Post)
-        );
     }
 
     fn create_variables(op: &Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
@@ -749,5 +693,63 @@ pub async fn create_test_template(
                 }))
             }
         }
+    }
+}
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn create_status_code_number_ok() {
+        assert_eq!(Some(204), create_status_code("204"));
+    }
+
+    #[test]
+    fn create_status_code_pattern_ok() {
+        assert_eq!(Some(200), create_status_code("2XX"));
+    }
+
+    #[test]
+    fn create_status_code_non_number_none() {
+        assert_eq!(None, create_status_code("Foo"));
+    }
+
+    #[test]
+    fn filename_only_slash() {
+        assert_eq!(
+            format!("ROOT{}Get.jkt", std::path::MAIN_SEPARATOR_STR),
+            create_filename("/", &test::http::Verb::Get)
+        );
+    }
+
+    #[test]
+    fn filename_one_component() {
+        assert_eq!(
+            format!("foo{}Delete.jkt", std::path::MAIN_SEPARATOR_STR),
+            create_filename("/foo", &test::http::Verb::Delete)
+        );
+    }
+
+    #[test]
+    fn filename_multiple_components() {
+        assert_eq!(
+            format!(
+                "foo{}bar{}Post.jkt",
+                std::path::MAIN_SEPARATOR_STR,
+                std::path::MAIN_SEPARATOR_STR
+            ),
+            create_filename("foo/bar/", &test::http::Verb::Post)
+        );
+    }
+
+    #[test]
+    fn filename_multiple_components_with_params() {
+        assert_eq!(
+            format!(
+                "foo{0}bars{0}{{bar}}{0}Post.jkt",
+                std::path::MAIN_SEPARATOR_STR
+            ),
+            create_filename("foo/bars/{bar}", &test::http::Verb::Post)
+        );
     }
 }
