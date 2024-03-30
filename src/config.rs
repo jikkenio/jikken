@@ -288,6 +288,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: true,
                     api_key: None,
+                    dev_mode: None,
                     project: None,
                     environment: None,
                 },
@@ -319,6 +320,7 @@ mod tests {
             [settings]
             continueOnFailure=true
             apiKey="key"
+            devMode=true
             
             [globals]
             my_override_global="foo"
@@ -358,6 +360,7 @@ mod tests {
                 settings: Settings {
                     continue_on_failure: false,
                     api_key: Some(String::from("key")),
+                    dev_mode: Some(true),
                     project: Some(String::from("my_proj")),
                     environment: Some(String::from("magic")),
                 },

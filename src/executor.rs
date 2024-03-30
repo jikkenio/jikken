@@ -1800,7 +1800,6 @@ mod tests {
     use hyper::StatusCode;
     use nonempty_collections::*;
     use serde_json::json;
-    use validated::Validated::{self};
 
     #[test]
     fn process_response_multiple_failures() {
