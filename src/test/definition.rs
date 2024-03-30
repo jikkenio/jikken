@@ -224,15 +224,8 @@ impl ResponseDescriptor {
                     None => Vec::new(),
                 };
 
-                let validated_ignore = match res.ignore {
-                    Some(ignore) => ignore,
-                    None => Vec::new(),
-                };
-
-                let validated_extraction = match res.extract {
-                    Some(extract) => extract,
-                    None => Vec::new(),
-                };
+                let validated_ignore = res.ignore.unwrap_or_default();
+                let validated_extraction = res.extract.unwrap_or_default();
 
                 let response_body = res.body.map(|b| RequestBody {
                     data: b,
@@ -262,7 +255,6 @@ pub struct StageDescriptor {
     //I would prefer to do this is Option<chrono::duration>
     //But it requires too much effort in serialization/deserialization
     pub delay: Option<u64>,
-
     //#[serde(skip_serializing)]
     //pub source_path: String,
 }

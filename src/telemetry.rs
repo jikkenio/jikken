@@ -118,9 +118,9 @@ fn redact_definition(mut td: test::Definition) -> test::Definition {
 
     td.stages.iter_mut().for_each(|s| {
         redact_request(&mut s.request);
-        s.compare
-            .as_mut()
-            .map(|c| redact_headers(c.headers.as_mut()));
+        if let Some(c) = s.compare.as_mut() {
+            redact_headers(c.headers.as_mut())
+        };
     });
 
     td
@@ -128,9 +128,9 @@ fn redact_definition(mut td: test::Definition) -> test::Definition {
 
 fn redact_result_details(mut rd: ResultDetails) -> ResultDetails {
     redact_headers(rd.request.headers.as_mut());
-    rd.compare_request
-        .as_mut()
-        .map(|c| redact_headers(c.headers.as_mut()));
+    if let Some(c) = rd.compare_request.as_mut() {
+        redact_headers(c.headers.as_mut())
+    }
     rd
 }
 
