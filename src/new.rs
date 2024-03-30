@@ -48,7 +48,6 @@ mod openapi_legacy {
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
-    use crate::test::File;
     use openapiv3::IndexMap;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
@@ -327,8 +326,6 @@ mod openapi_v31 {
     use crate::test;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
-    use crate::test::File;
-    use oas3;
     use oas3::spec::Header;
     use oas3::spec::ObjectOrReference;
     use oas3::spec::Operation;

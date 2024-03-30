@@ -263,8 +263,8 @@ pub struct StageDescriptor {
     //But it requires too much effort in serialization/deserialization
     pub delay: Option<u64>,
 
-    #[serde(skip_serializing)]
-    pub source_path: String,
+    //#[serde(skip_serializing)]
+    //pub source_path: String,
 }
 
 impl StageDescriptor {
@@ -277,7 +277,7 @@ impl StageDescriptor {
             compare: CompareDescriptor::new_opt(stage.compare)?,
             response: ResponseDescriptor::new_opt(stage.response)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
-            source_path: source_path.to_string(),
+            // source_path: source_path.to_string(),
             name: stage.name,
             delay: stage.delay,
         })
@@ -299,7 +299,7 @@ impl StageDescriptor {
                 compare: CompareDescriptor::new_opt(compare_opt)?,
                 response: ResponseDescriptor::new_opt(response_opt)?,
                 variables: Vec::new(),
-                source_path: source_path.to_string(),
+                // source_path: source_path.to_string(),
                 name: Some("request".to_string()),
                 delay: None,
             });

@@ -22,7 +22,7 @@ const TELEMETRY_BASE_URL: &str = "https://ingestion.jikken.io/v1";
 pub struct Session {
     pub token: Uuid,
     pub session_id: Uuid,
-    pub start_time: chrono::DateTime<chrono::Utc>,
+    // pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -54,7 +54,7 @@ struct SessionResponse {
 pub struct Test {
     pub test_id: Uuid,
     pub session: Session,
-    pub start_time: chrono::DateTime<chrono::Utc>,
+    // pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -197,7 +197,7 @@ pub async fn create_session(
         return Ok(Session {
             token,
             session_id,
-            start_time: chrono::Utc::now(),
+            // start_time: chrono::Utc::now(),
         });
     }
 
@@ -260,7 +260,7 @@ pub async fn create_test(
         return Ok(Test {
             test_id,
             session: session.clone(),
-            start_time: chrono::Utc::now(),
+            // start_time: chrono::Utc::now(),
         });
     }
 
