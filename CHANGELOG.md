@@ -13,6 +13,7 @@ None for this release.
 Features:
 * Added a CLI argument which outputs test execution details in the common JUnit format.
 * Added support for the `new` command which generates JKT files based on OpenAPI Spec files.
+* Added a new command `jk list` which provides a helpful printout for discovered test files.
 * Created a VSCode extension for our JKT definition files.
 * Added support for variable embedding inside Request bodies.
 * Added support for a `.jikkenignore` which lets you specify test files to ignore when executing the test runner.
