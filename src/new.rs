@@ -2,6 +2,8 @@ use super::errors::GenericError;
 use super::test::template;
 use log::{error, info};
 
+use crate::test::file::Specification;
+use crate::test::file::ValueOrSpecification;
 use crate::test::http;
 use crate::test::File;
 use std::error::Error;
@@ -17,11 +19,20 @@ fn create_tags(tags: &[String]) -> Option<String> {
     }
 }
 
-fn create_status_code(status_code_pattern: &str) -> Option<u16> {
+fn create_status_code(status_code_pattern: &str) -> Option<ValueOrSpecification<u16>> {
     if status_code_pattern == "2XX" {
-        Some(200)
+        Some(ValueOrSpecification::Schema(Specification {
+            val: None,
+            min: Some(200),
+            max: Some(299),
+            one_of: None,
+            none_of: None,
+        }))
     } else {
-        status_code_pattern.parse().ok()
+        status_code_pattern
+            .parse()
+            .ok()
+            .map(|val| ValueOrSpecification::Value(val))
     }
 }
 
@@ -693,15 +704,28 @@ pub async fn create_test_template(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test::file::ValueOrSpecification;
 
     #[test]
     fn create_status_code_number_ok() {
-        assert_eq!(Some(204), create_status_code("204"));
+        assert_eq!(
+            Some(ValueOrSpecification::Value(204)),
+            create_status_code("204")
+        );
     }
 
     #[test]
     fn create_status_code_pattern_ok() {
-        assert_eq!(Some(200), create_status_code("2XX"));
+        assert_eq!(
+            Some(ValueOrSpecification::Schema(Specification::<u16> {
+                val: None,
+                min: Some(200),
+                max: Some(299),
+                none_of: None,
+                one_of: None
+            })),
+            create_status_code("2XX")
+        );
     }
 
     #[test]

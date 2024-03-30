@@ -99,7 +99,7 @@ fn new_response() -> file::UnvalidatedResponse {
 
 fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedResponse {
-        status: Some(200),
+        status: Some(test::file::ValueOrSpecification::Value(200)),
         headers: Some(vec![new_header()]),
         body: Some(serde_json::from_str("{}")?),
         ignore: Some(vec!["".to_string()]),

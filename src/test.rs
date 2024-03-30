@@ -4,8 +4,10 @@ pub mod http;
 pub mod template;
 pub mod validation;
 pub mod variable;
+use crate::test::file::ValueOrSchema;
 
 use crate::test::definition::RequestBody;
+use crate::test::file::DocumentSchema;
 use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
@@ -740,43 +742,96 @@ impl Definition {
         }
     }
 
-    pub fn get_body(
+    pub fn resolve_body_variables(
+        &self,
+        body: &ValueOrSchema,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<ValueOrSchema> {
+        return match body {
+            ValueOrSchema::Schema(s) => self.resolve_body_schema_variables(s, variables, iteration),
+            ValueOrSchema::Value(v) => self.resolve_body_value_variables(v, variables, iteration),
+        };
+    }
+
+    fn resolve_body_value_variables(
+        &self,
+        json_val: &serde_json::Value,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<ValueOrSchema> {
+        serde_json::to_string(&json_val)
+            .map(|jv| self.resolve_variables(jv.as_str(), variables, iteration))
+            .and_then(|rs| serde_json::from_str(rs.as_str()))
+            .ok()
+    }
+
+    fn resolve_body_schema_variables(
+        &self,
+        schema: &DocumentSchema,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<ValueOrSchema> {
+        serde_json::to_string(&schema)
+            .map(|jv| self.resolve_variables(jv.as_str(), variables, iteration))
+            .and_then(|rs| serde_json::from_str(rs.as_str()))
+            .ok()
+    }
+
+    fn resolve_variables(&self, json_val: &str, variables: &[Variable], iteration: u32) -> String {
+        let mut mut_string = json_val.to_string();
+
+        for variable in variables.iter().chain(self.global_variables.iter()) {
+            let var_pattern = format!("${{{}}}", variable.name);
+
+            if !mut_string.contains(var_pattern.as_str()) {
+                continue;
+            }
+
+            let replacement = variable.generate_value(iteration, self.global_variables.clone());
+            mut_string = mut_string
+                .replace(var_pattern.as_str(), replacement.as_str())
+                .trim()
+                .to_string();
+        }
+
+        mut_string
+    }
+
+    //Make a body for a request you will issue
+    //May need a separate one for compare since it may never
+    //make sense to specify a schema for comparisons?
+    pub fn get_request_body(
         &self,
         body: &Option<RequestBody>,
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        if let Some(body) = &body {
+        if let Some(body) = body {
+            return self
+                .resolve_body_variables(&body.data, variables, iteration)
+                .and_then(|b| match b {
+                    ValueOrSchema::Schema(..) => None, //Value generation would take place here
+                    ValueOrSchema::Value(v) => Some(v),
+                });
+        }
+
+        None
+    }
+
+    //Make a body for response validation!
+    pub fn get_expected_request_body(
+        &self,
+        body: &Option<RequestBody>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<ValueOrSchema> {
+        if let Some(body) = body {
             if !body.matches_variable.get() {
                 return Some(body.data.clone());
             }
 
-            let mut body_str = match serde_json::to_string(&body.data) {
-                Ok(s) => s,
-                Err(_) => "".to_string(),
-            };
-
-            for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${{{}}}", variable.name);
-
-                if !body_str.contains(var_pattern.as_str()) {
-                    continue;
-                }
-
-                let replacement = variable.generate_value(iteration, self.global_variables.clone());
-                body_str = body_str
-                    .replace(var_pattern.as_str(), replacement.as_str())
-                    .trim()
-                    .to_string();
-            }
-
-            return match serde_json::from_str(&body_str) {
-                Ok(result) => Some(result),
-                Err(e) => {
-                    error!("error formatting value: {}", e);
-                    None
-                }
-            };
+            return self.resolve_body_variables(&body.data, variables, iteration);
         }
 
         None
@@ -788,7 +843,7 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        self.get_body(&compare.body, variables, iteration)
+        self.get_request_body(&compare.body, variables, iteration)
     }
 }
 
@@ -825,7 +880,7 @@ mod tests {
             disabled: false,
             filename: "/a/path.jkt".to_string(),
         };
-        assert_eq!(None, td.get_body(&None, vars.as_slice(), 1))
+        assert_eq!(None, td.get_request_body(&None, vars.as_slice(), 1))
     }
 
     #[test]
@@ -862,13 +917,13 @@ mod tests {
         };
 
         let body = RequestBody {
-            data: serde_json::to_value("this_is_my_body").unwrap(),
+            data: ValueOrSchema::Value(serde_json::to_value("this_is_my_body").unwrap()),
             matches_variable: false.into(),
         };
 
         assert_eq!(
             serde_json::to_value("this_is_my_body").ok(),
-            td.get_body(&Some(body), vars.as_slice(), 1)
+            td.get_request_body(&Some(body), vars.as_slice(), 1)
         )
     }
 
@@ -924,14 +979,15 @@ mod tests {
         };
 
         let body = RequestBody {
-            data: serde_json::to_value(format!("this_is_my_body_${{my_var}}_${{my_var2}}"))
-                .unwrap(),
+            data: ValueOrSchema::Value(
+                serde_json::to_value(format!("this_is_my_body_${{my_var}}_${{my_var2}}")).unwrap(),
+            ),
             matches_variable: true.into(),
         };
 
         assert_eq!(
             serde_json::to_value("this_is_my_body_my_val2_my_val3").ok(),
-            td.get_body(&Some(body), vars.as_slice(), 1)
+            td.get_request_body(&Some(body), vars.as_slice(), 1)
         )
     }
 }

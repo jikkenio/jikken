@@ -1,12 +1,15 @@
 use crate::test;
+use crate::test::file::ValueOrSpecification;
 use crate::test::{file, http, validation};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+use super::file::ValueOrSchema;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestBody {
-    pub data: serde_json::Value,
+    pub data: ValueOrSchema,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub matches_variable: Cell<bool>,
@@ -198,7 +201,7 @@ impl ResponseExtraction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
-    pub status: Option<u16>,
+    pub status: Option<ValueOrSpecification<u16>>,
     pub headers: Vec<http::Header>,
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,

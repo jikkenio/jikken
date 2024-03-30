@@ -35,7 +35,6 @@ pub fn validate_file(
     environment: Option<String>,
 ) -> Result<test::Definition, Error> {
     validate_test_file(&file, global_variables)?;
-
     let new_tags = if let Some(tags) = file.tags.as_ref() {
         tags.to_lowercase()
             .split_whitespace()
