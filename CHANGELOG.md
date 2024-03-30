@@ -1,6 +1,36 @@
 Next (Version determined when release is cut)
 =====
 
+0.7.0
+=====
+This release marks a big milestone for Jikken. We've added support for JUnit output and the ability to generate
+tests based on OpenAPI Specs. While these functionalities are working, we plan to incrementally improve them
+over time based on feedback. We've also released a Jikken extension for VSCode to help with writing tests.
+
+Bugfixes:
+None for this release.
+
+Features:
+* Added a CLI argument which outputs test execution details in the common JUnit format.
+* Added support for the `new` command which generates JKT files based on OpenAPI Spec files.
+* Created a VSCode extension for our JKT definition files.
+* Added support for variable embedding inside Request bodies.
+* Added support for a `.jikkenignore` which lets you specify test files to ignore when executing the test runner.
+* Added a `disable` field to the test definition format which allows you to skip tests which would otherwise be included.
+* Added a `delay` field to the test definition format which allows you to pause after a test stage before continuing execution.
+* Added a `description` field to the test definition format.
+
+Changes:
+* Added local build scripts to support MacOS cross-compiling for Apple Silicon vs x86
+* Auth headers are now automatically redacted when enabling test execution telemetry. 
+Previously if you used variables for the auth header they were already being restricted but now even if you hardcode
+a secret/key/token in the header it will also be redacted upon telemetry transmission. We still recommend you use
+variables instead of hardcoding credentials in test files.
+* Added a badge which tracks our Homebrew release version in the github repo.
+* Improved messaging around which tests are executing, being skipped, and why.
+* Improved default messaging so that errors/details print after initial test pass/fail line.
+* The CLI tool now provides different exit codes based on test success/failure.
+
 0.6.2
 =====
 
