@@ -239,6 +239,7 @@ mod openapi_legacy {
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
+                description: op.description.clone(),
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),
                 stages: Some(vec![test::file::UnvalidatedStage {
@@ -255,6 +256,7 @@ mod openapi_legacy {
         } else {
             Some(File {
                 name: op.summary.clone().or(default.name),
+                description: op.description.clone(),
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),
                 response,
@@ -489,6 +491,7 @@ mod openapi_v31 {
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
+                description: op.description.clone(),
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),
                 stages: Some(vec![test::file::UnvalidatedStage {
@@ -504,6 +507,7 @@ mod openapi_v31 {
             })
         } else {
             Some(File {
+                description: op.description.clone(),
                 name: op.summary.clone().or(default.name),
                 id: op.operation_id.clone().or(default.id),
                 tags: create_tags(&op.tags),

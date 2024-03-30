@@ -47,6 +47,8 @@ pub struct File {
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
@@ -71,6 +73,7 @@ impl Default for File {
             cleanup: None,
             variables: None,
             disabled: None,
+            description: None,
         }
     }
 }
@@ -391,6 +394,7 @@ impl Variable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Definition {
     pub name: Option<String>,
+    pub description: Option<String>,
     pub id: String,
     pub project: Option<String>,
     pub environment: Option<String>,
@@ -803,6 +807,7 @@ mod tests {
         let vars: Vec<Variable> = vec![];
         let td = Definition {
             name: None,
+            description: None,
             id: "id".to_string(),
             project: None,
             environment: None,
@@ -829,6 +834,7 @@ mod tests {
         let vars: Vec<Variable> = vec![];
         let td = Definition {
             name: None,
+            description: None,
             id: "id".to_string(),
             project: None,
             environment: None,
@@ -882,6 +888,7 @@ mod tests {
         }];
         let td = Definition {
             name: None,
+            description: None,
             id: "id".to_string(),
             project: None,
             environment: None,

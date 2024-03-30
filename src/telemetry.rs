@@ -426,6 +426,7 @@ mod tests {
 
         let td = test::Definition {
             name: None,
+            description: None,
             id: String::from("id"),
             project: None,
             environment: None,
