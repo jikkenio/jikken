@@ -864,7 +864,7 @@ mod tests {
             disabled: false,
             filename: "/a/path.jkt".to_string(),
         };
-        assert_eq!(None, td.get_body(&None, vars.as_slice(), 1))
+        assert_eq!(None, td.get_body(&None, &HashMap::new(), vars.as_slice(), 1))
     }
 
     #[test]
@@ -907,7 +907,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value("this_is_my_body").ok(),
-            td.get_body(&Some(body), vars.as_slice(), 1)
+            td.get_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
         )
     }
 
@@ -970,7 +970,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value("this_is_my_body_my_val2_my_val3").ok(),
-            td.get_body(&Some(body), vars.as_slice(), 1)
+            td.get_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
         )
     }
 }
