@@ -848,7 +848,7 @@ dependencies = [
  "hyper-tls",
  "indicatif",
  "log",
- "nonempty-collections 0.1.5",
+ "nonempty-collections",
  "oas3",
  "openapiv3-extended",
  "regex",
@@ -982,12 +982,6 @@ dependencies = [
  "cfg-if",
  "libc",
 ]
-
-[[package]]
-name = "nonempty-collections"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e43b402eeca61e02116e70f2e70a60005ded2d8025c425788feb6e8fd36ddf60"
 
 [[package]]
 name = "nonempty-collections"
@@ -1931,7 +1925,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6655ffe598a4acbe9544d04d956c48a1f29e7c998a82b28a3093a93f5e3e38d3"
 dependencies = [
- "nonempty-collections 0.2.5",
+ "nonempty-collections",
 ]
 
 [[package]]
