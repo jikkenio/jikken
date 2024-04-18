@@ -599,7 +599,8 @@ impl Definition {
                 }
 
                 debug!("state variable match: {}", var_pattern);
-                replaced_url.clone_from(&replaced_url.replace(var_pattern.as_str(), value.as_str()));
+                replaced_url
+                    .clone_from(&replaced_url.replace(var_pattern.as_str(), value.as_str()));
             }
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
@@ -773,7 +774,7 @@ impl Definition {
                 Ok(s) => s,
                 Err(_) => "".to_string(),
             };
-            
+
             let state_vars: Vec<(String, &String)> = state_variables
                 .iter()
                 .map(|(k, v)| (format!("${{{}}}", k), v))
@@ -785,7 +786,10 @@ impl Definition {
                 }
 
                 debug!("state variable match: {}", var_pattern);
-                body_str = body_str.replace(var_pattern.as_str(), value.as_str()).trim().to_string();
+                body_str = body_str
+                    .replace(var_pattern.as_str(), value.as_str())
+                    .trim()
+                    .to_string();
             }
 
             for variable in variables.iter().chain(self.global_variables.iter()) {
@@ -794,7 +798,7 @@ impl Definition {
                 if !body_str.contains(var_pattern.as_str()) {
                     continue;
                 }
-                
+
                 debug!("variable match: {}", var_pattern);
 
                 let replacement = variable.generate_value(iteration, &self.global_variables);

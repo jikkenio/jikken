@@ -1063,7 +1063,12 @@ async fn validate_setup(
             &td.variables,
         );
         let req_headers = td.get_setup_request_headers(iteration);
-        let req_body = td.get_body(&setup.request.body, &state.variables, &td.variables, iteration);
+        let req_body = td.get_body(
+            &setup.request.body,
+            &state.variables,
+            &td.variables,
+            iteration,
+        );
 
         let resolved_request = test::definition::ResolvedRequest::new(
             req_url.clone(),
@@ -1074,8 +1079,13 @@ async fn validate_setup(
 
         debug!("executing setup stage: {}", req_url);
 
-        let expected =
-            ResultData::from_request(setup.response.clone(), td, &state.variables, &td.variables, iteration);
+        let expected = ResultData::from_request(
+            setup.response.clone(),
+            td,
+            &state.variables,
+            &td.variables,
+            iteration,
+        );
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1160,10 +1170,16 @@ async fn run_cleanup(
         if let Some(onsuccess) = &td.cleanup.onsuccess {
             debug!("execute onsuccess request");
             let success_method = onsuccess.method.as_method();
-            let success_url =
-                &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &state.variables, &td.variables);
+            let success_url = &td.get_url(
+                iteration,
+                &onsuccess.url,
+                &onsuccess.params,
+                &state.variables,
+                &td.variables,
+            );
             let success_headers = td.get_headers(&onsuccess.headers, iteration);
-            let success_body = td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
+            let success_body =
+                td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
             let resolved_request = test::definition::ResolvedRequest::new(
                 success_url.clone(),
                 success_method.clone(),
@@ -1171,7 +1187,8 @@ async fn run_cleanup(
                 success_body.clone(),
             );
 
-            let expected = ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+            let expected =
+                ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
             let start_time = Instant::now();
             let req_response = process_request(state, resolved_request).await?;
             let runtime = start_time.elapsed().as_millis() as u32;
@@ -1210,7 +1227,13 @@ async fn run_cleanup(
     } else if let Some(onfailure) = &td.cleanup.onfailure {
         debug!("execute onfailure request");
         let failure_method = onfailure.method.as_method();
-        let failure_url = &td.get_url(iteration, &onfailure.url, &onfailure.params, &state.variables, &td.variables);
+        let failure_url = &td.get_url(
+            iteration,
+            &onfailure.url,
+            &onfailure.params,
+            &state.variables,
+            &td.variables,
+        );
         let failure_headers = td.get_headers(&onfailure.headers, iteration);
         let failure_body = td.get_body(&onfailure.body, &state.variables, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
@@ -1220,7 +1243,8 @@ async fn run_cleanup(
             failure_body.clone(),
         );
 
-        let expected = ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+        let expected =
+            ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1260,7 +1284,13 @@ async fn run_cleanup(
     if let Some(request) = &td.cleanup.always {
         debug!("execute cleanup request");
         let req_method = request.method.as_method();
-        let req_url = &td.get_url(iteration, &request.url, &request.params, &state.variables, &td.variables);
+        let req_url = &td.get_url(
+            iteration,
+            &request.url,
+            &request.params,
+            &state.variables,
+            &td.variables,
+        );
         let req_headers = td.get_cleanup_request_headers(iteration);
         let req_body = td.get_body(&request.body, &state.variables, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
@@ -1270,7 +1300,8 @@ async fn run_cleanup(
             req_body.clone(),
         );
 
-        let expected = ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+        let expected =
+            ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
@@ -1536,7 +1567,12 @@ fn validate_dry_run(
             &td.variables,
         );
         let setup_headers = td.get_setup_request_headers(iteration);
-        let setup_body = td.get_body(&setup.request.body, &state.variables, &td.variables, iteration);
+        let setup_body = td.get_body(
+            &setup.request.body,
+            &state.variables,
+            &td.variables,
+            iteration,
+        );
         info!("setup: {} {}\n", setup_method, setup_url);
         if !setup_headers.is_empty() {
             info!("setup_headers:\n");
@@ -1742,10 +1778,16 @@ fn validate_dry_run(
     if let Some(onsuccess) = &td.cleanup.onsuccess {
         info!("when test successful, run onsuccess request:\n");
         let onsuccess_method = onsuccess.method.as_method();
-        let onsuccess_url =
-            &td.get_url(iteration, &onsuccess.url, &onsuccess.params, &state.variables, &td.variables);
+        let onsuccess_url = &td.get_url(
+            iteration,
+            &onsuccess.url,
+            &onsuccess.params,
+            &state.variables,
+            &td.variables,
+        );
         let onsuccess_headers = td.get_setup_request_headers(iteration);
-        let onsuccess_body = td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
+        let onsuccess_body =
+            td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
         info!("onsuccess: {} {}\n", onsuccess_method, onsuccess_url);
         if !onsuccess_headers.is_empty() {
             info!("onsuccess_headers:\n");
@@ -1762,10 +1804,16 @@ fn validate_dry_run(
     if let Some(onfailure) = &td.cleanup.onfailure {
         info!("when test fails, run onfailure request:\n");
         let onfailure_method = onfailure.method.as_method();
-        let onfailure_url =
-            &td.get_url(iteration, &onfailure.url, &onfailure.params, &state.variables, &td.variables);
+        let onfailure_url = &td.get_url(
+            iteration,
+            &onfailure.url,
+            &onfailure.params,
+            &state.variables,
+            &td.variables,
+        );
         let onfailure_headers = td.get_setup_request_headers(iteration);
-        let onfailure_body = td.get_body(&onfailure.body, &state.variables, &td.variables, iteration);
+        let onfailure_body =
+            td.get_body(&onfailure.body, &state.variables, &td.variables, iteration);
         info!("onfailure: {} {}\n", onfailure_method, onfailure_url);
         if !onfailure_headers.is_empty() {
             info!("onfailure_headers:\n");
@@ -1782,7 +1830,13 @@ fn validate_dry_run(
     if let Some(request) = &td.cleanup.always {
         info!("run cleanup requests:\n");
         let cleanup_method = request.method.as_method();
-        let cleanup_url = &td.get_url(iteration, &request.url, &request.params, &state.variables, &td.variables);
+        let cleanup_url = &td.get_url(
+            iteration,
+            &request.url,
+            &request.params,
+            &state.variables,
+            &td.variables,
+        );
         let cleanup_headers = td.get_setup_request_headers(iteration);
         let cleanup_body = td.get_body(&request.body, &state.variables, &td.variables, iteration);
         info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
