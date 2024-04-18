@@ -1,6 +1,9 @@
 Next (Version determined when release is cut)
 =====
 
+Features:
+* State Variables (extracted from responses) are now able to be embedded into Post Bodies and URLs for subsequent stage/test runs.
+
 0.7.0
 =====
 This release marks a big milestone for Jikken. We've added support for JUnit output and the ability to generate

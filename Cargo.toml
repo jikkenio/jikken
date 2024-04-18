@@ -55,4 +55,4 @@ oas3 = { version = "0.4.0" }
 openapiv3-extended = { version="6.0.0", features = ["v2"] }
 
 [dev-dependencies]
-nonempty-collections = { version="0.1.5" }
+nonempty-collections = { version="0.2.5" }
