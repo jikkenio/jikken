@@ -864,7 +864,10 @@ mod tests {
             disabled: false,
             filename: "/a/path.jkt".to_string(),
         };
-        assert_eq!(None, td.get_body(&None, &HashMap::new(), vars.as_slice(), 1))
+        assert_eq!(
+            None,
+            td.get_body(&None, &HashMap::new(), vars.as_slice(), 1)
+        )
     }
 
     #[test]
