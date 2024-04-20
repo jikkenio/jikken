@@ -1574,7 +1574,7 @@ fn http_request_from_test_spec(
             v.iter()
                 .map(|(_, cookie)| {
                     (
-                        "Cookie",
+                        "Cookie".to_string(),
                         format!("{}={}", cookie.key.clone(), cookie.value.clone()),
                     )
                 })
@@ -2257,13 +2257,16 @@ mod tests {
 
     #[test]
     fn http_request_from_test_spec_post() {
-        let mut vars = HashMap::new();
-        vars.insert("MY_VARIABLE".to_string(), "foo".to_string());
-        vars.insert("MY_VARIABLE2".to_string(), "bar".to_string());
+        let mut state = State{
+            variables: HashMap::new(),
+            cookies: HashMap::new(),
+        };
+        state.variables.insert("MY_VARIABLE".to_string(), "foo".to_string());
+        state.variables.insert("MY_VARIABLE2".to_string(), "bar".to_string());
 
         let body = serde_json::json!({ "an": "object" });
         let res = http_request_from_test_spec(
-            &vars,
+            &state,
             ResolvedRequest::new(
                 "https://google.com".to_string(),
                 http::Verb::Post.as_method(),
