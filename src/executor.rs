@@ -1570,7 +1570,7 @@ fn http_request_from_test_spec(
         .cookies
         .iter()
         .filter(|(k, _)| tld_prefix.starts_with(&k.to_lowercase()))
-        .map(|(_, v)| {
+        .flat_map(|(_, v)| {
             v.into_iter()
                 .map(|(_, cookie)| {
                     (
@@ -1578,7 +1578,7 @@ fn http_request_from_test_spec(
                         format!("{}={}", cookie.key.clone(), cookie.value.clone()),
                     )
                 })
-                .collect()
+                .collect::<Vec<(String, String)>>()
         })
         .collect::<Vec<(String, String)>>();
 
