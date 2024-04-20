@@ -1578,7 +1578,7 @@ fn http_request_from_test_spec(
                         format!("{}={}", cookie.key.clone(), cookie.value.clone()),
                     )
                 })
-                .collect::<(String, String)>()
+                .collect()
         })
         .collect::<Vec<(String, String)>>();
 
