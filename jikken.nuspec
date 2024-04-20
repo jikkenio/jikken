@@ -3,7 +3,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>jikken</id>
-    <version>0.7.0</version>
+    <version>0.7.1</version>
     <packageSourceUrl>https://github.com/jikkenio/jikken</packageSourceUrl>
     <owners>Jikken LLC</owners>
     <title>jikken (jk)</title>
