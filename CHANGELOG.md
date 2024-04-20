@@ -1,6 +1,13 @@
 Next (Version determined when release is cut)
 =====
 
+0.7.1
+=====
+
+Features:
+* State Variables (extracted from responses) are now able to be embedded into Post Bodies and URLs for subsequent stage/test runs.
+* Basic Cookie support. Cookies returned from API endpoints are now added to state and treated as Strict domain/path cookies which pass to future stages.
+
 0.7.0
 =====
 This release marks a big milestone for Jikken. We've added support for JUnit output and the ability to generate

@@ -14,3 +14,4 @@ target/
 .idea/
 releases/
 env.list
+.DS_Store

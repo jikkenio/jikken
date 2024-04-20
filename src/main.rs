@@ -134,7 +134,7 @@ pub enum Commands {
         #[arg(short)]
         recursive: bool,
 
-        /// Select tests to run based on tags
+        /// Select tests to list based on tags
         /// {n}By default, tests must match all given tags to be selected
         #[arg(short, long = "tag", name = "tag")]
         tags: Vec<String>,
