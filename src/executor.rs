@@ -1571,7 +1571,7 @@ fn http_request_from_test_spec(
         .iter()
         .filter(|(k, _)| tld_prefix.starts_with(&k.to_lowercase()))
         .map(|(_, v)| {
-            v.iter()
+            v.into_iter()
                 .map(|(_, cookie)| {
                     (
                         "Cookie".to_string(),
