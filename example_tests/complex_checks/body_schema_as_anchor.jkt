@@ -1,0 +1,17 @@
+name: Entire Body Schema As Anchor
+tags: regression flaky triaged
+#leveraging hooks and anchors
+#to make the schema easier to read
+schemas:
+  anime_response: &anime_schema
+    type: object
+    schema:
+      anime:
+        type: string
+      character:
+        type: string
+request:
+  url: https://animechan.xyz/api/random
+response:
+  status: 200
+  bodySchema: *anime_schema

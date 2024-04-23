@@ -25,16 +25,6 @@ pub struct Modifier {
     pub unit: String,
 }
 
-impl Modifier {
-    pub fn new() -> Modifier {
-        Modifier {
-            operation: "".to_string(),
-            value: "".to_string(),
-            unit: "".to_string(),
-        }
-    }
-}
-
 pub fn parse_source_path(path: &str) -> String {
     let index = path.rfind('/');
 

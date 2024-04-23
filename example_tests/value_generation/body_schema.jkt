@@ -1,0 +1,13 @@
+name: Body Schema
+request:
+  method: Post
+  url: https://api.postcodes.io/postcodes
+  bodySchema:
+    type: object
+    schema: 
+        postcodes: 
+            type: list
+            schema:
+                type: string
+response:
+  status: 200

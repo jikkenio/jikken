@@ -4,9 +4,11 @@ pub mod http;
 pub mod template;
 pub mod validation;
 pub mod variable;
+use crate::test::file::BodyOrSchema;
 
 use crate::test::definition::RequestBody;
-use chrono::{offset::TimeZone, Days, Local, Months, NaiveDate};
+use crate::test::file::DatumSchema;
+use crate::test::file::StringOrDatumOrFile;
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -15,7 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use uuid::Uuid;
 
-use self::file::{UnvalidatedRequest, UnvalidatedResponse};
+use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
@@ -80,22 +82,19 @@ impl Default for File {
 
 impl File {
     pub fn generate_id(&self) -> String {
+        //Uuid::new_v4().to_string()
         let mut s = DefaultHasher::new();
         self.hash(&mut s);
         format!("{}", s.finish())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Variable {
     pub name: String,
-    #[serde(rename = "type")]
-    pub data_type: variable::Type,
-    pub value: serde_yaml::Value,
-    pub modifier: Option<variable::Modifier>,
-    pub format: Option<String>,
-    pub file: Option<String>,
+    #[serde(flatten)]
+    pub value: StringOrDatumOrFile,
 
     #[serde(skip_serializing)]
     pub source_path: String,
@@ -109,14 +108,7 @@ impl Variable {
         // TODO: Add validation errors
         Ok(Variable {
             name: variable.name.clone(),
-            data_type: variable.data_type.unwrap_or(variable::Type::String).clone(),
-            value: variable
-                .value
-                .unwrap_or(serde_yaml::from_str("{}").unwrap())
-                .clone(),
-            modifier: variable.modifier.clone(),
-            format: variable.format,
-            file: variable.file,
+            value: variable.value,
             source_path: source_path.to_string(),
         })
     }
@@ -147,8 +139,59 @@ impl Variable {
             }
         }
     }
+    pub fn generate_value(
+        &self,
+        definition: &Definition,
+        iteration: u32,
+        global_variables: &[Variable],
+    ) -> String {
+        match &self.value {
+            StringOrDatumOrFile::File { file } => {
+                let file_path = if Path::new(file).exists() {
+                    file.clone()
+                } else {
+                    format!("{}{}", self.source_path, file)
+                };
 
-    pub fn generate_value(&self, iteration: u32, global_variables: &[Variable]) -> String {
+                return match std::fs::read_to_string(&file_path) {
+                    Ok(file_data) => file_data.trim().to_string(),
+                    Err(e) => {
+                        error!("error loading file ({}) content: {}", file_path, e);
+
+                        "".to_string()
+                    }
+                };
+            }
+            StringOrDatumOrFile::Value(str_val) => {
+                return definition.resolve_variables(
+                    str_val,
+                    &HashMap::new(),
+                    &global_variables,
+                    iteration,
+                );
+            }
+            StringOrDatumOrFile::Schema(d) => {
+                return serde_json::to_string(d)
+                    .map(|jv| {
+                        definition.resolve_variables(
+                            jv.as_str(),
+                            &HashMap::new(),
+                            &global_variables,
+                            iteration,
+                        )
+                    })
+                    .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
+                    .ok()
+                    .and_then(|ds| generate_value_from_schema(&ds, 10))
+                    .and_then(|v| serde_json::to_string(&v).ok())
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_string();
+            }
+        }
+    }
+    /*
+    pub fn generate_value(&self, iteration: u32, global_variables: Vec<Variable>) -> String {
         let result = match self.data_type {
             variable::Type::Int => self.generate_int_value(iteration),
             variable::Type::String => self.generate_string_value(iteration, global_variables),
@@ -389,7 +432,7 @@ impl Variable {
             }
             _ => String::from(""),
         }
-    }
+    }*/
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -610,8 +653,7 @@ impl Definition {
                     continue;
                 }
 
-                debug!("variable match: {}", var_pattern);
-                let replacement = variable.generate_value(iteration, &self.global_variables);
+                let replacement = variable.generate_value(self, iteration, &self.global_variables);
                 replaced_url
                     .clone_from(&replaced_url.replace(var_pattern.as_str(), replacement.as_str()))
             }
@@ -637,7 +679,7 @@ impl Definition {
                     continue;
                 }
 
-                let replacement = variable.generate_value(iteration, &self.global_variables);
+                let replacement = variable.generate_value(self, iteration, &self.global_variables);
                 return (
                     parameter.param.clone(),
                     parameter
@@ -658,7 +700,7 @@ impl Definition {
                 continue;
             }
 
-            let replacement = variable.generate_value(iteration, &self.global_variables);
+            let replacement = variable.generate_value(self, iteration, &self.global_variables);
             return (
                 header.header.clone(),
                 header
@@ -758,63 +800,158 @@ impl Definition {
         }
     }
 
-    pub fn get_body(
+    pub fn resolve_body_variables(
+        &self,
+        body: &BodyOrSchema,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<BodyOrSchema> {
+        return match body {
+            BodyOrSchema::Schema(s) => {
+                self.resolve_schema_variables(s, state_variables, variables, iteration)
+            }
+            BodyOrSchema::Body(v) => {
+                self.resolve_body_value_variables(v, state_variables, variables, iteration)
+            }
+        };
+    }
+
+    fn resolve_body_value_variables(
+        &self,
+        json_val: &serde_json::Value,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<BodyOrSchema> {
+        serde_json::to_string(&json_val)
+            .map(|jv| self.resolve_variables(jv.as_str(), state_variables, variables, iteration))
+            .and_then(|rs| serde_json::from_str::<serde_json::Value>(rs.as_str()))
+            .map(|val| BodyOrSchema::Body(val))
+            .ok()
+    }
+
+    fn resolve_schema_variables(
+        &self,
+        schema: &DatumSchema,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<BodyOrSchema> {
+        serde_json::to_string(&schema)
+            .map(|jv| self.resolve_variables(jv.as_str(), state_variables, variables, iteration))
+            .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
+            .map(|schema| BodyOrSchema::Schema(schema))
+            .ok()
+    }
+
+    fn resolve_variables(
+        &self,
+        json_val: &str,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> String {
+        let mut mut_string = json_val.to_string();
+
+        let state_vars: Vec<(String, &String)> = state_variables
+            .iter()
+            .map(|(k, v)| (format!("${{{}}}", k), v))
+            .collect();
+
+        for (var_pattern, value) in &state_vars {
+            if !mut_string.contains(var_pattern) {
+                continue;
+            }
+
+            debug!("state variable match: {}", var_pattern);
+            mut_string = mut_string
+                .replace(var_pattern.as_str(), value.as_str())
+                .trim()
+                .to_string();
+        }
+
+        for variable in variables.iter().chain(self.global_variables.iter()) {
+            let var_pattern = format!("${{{}}}", variable.name);
+            if !mut_string.contains(var_pattern.as_str()) {
+                continue;
+            }
+
+            debug!("variable match: {}", var_pattern);
+
+            let replacement = variable.generate_value(self, iteration, &self.global_variables);
+
+            //Do extra for non string stuff
+            let do_extra = match &variable.value {
+                StringOrDatumOrFile::Schema(ds) => match ds {
+                    DatumSchema::String { .. } => false,
+                    _ => true,
+                },
+                _ => false,
+            };
+
+            if do_extra {
+                mut_string = mut_string.trim_matches('"').to_string();
+                let expected_lead_pattern = "\"";
+                let expected_trail_pattern = "\"";
+
+                mut_string = mut_string
+                    .replace(
+                        format!(
+                            "{}{}{}",
+                            expected_lead_pattern, var_pattern, expected_trail_pattern
+                        )
+                        .as_str(),
+                        replacement.as_str(),
+                    )
+                    .trim()
+                    .to_string();
+            } else {
+                mut_string = mut_string
+                    .replace(var_pattern.as_str(), replacement.as_str())
+                    .trim()
+                    .to_string();
+            }
+        }
+        mut_string
+    }
+
+    //Make a body for a request you will issue
+    //May need a separate one for compare since it may never
+    //make sense to specify a schema for comparisons?
+    pub fn get_request_body(
         &self,
         body: &Option<RequestBody>,
         state_variables: &HashMap<String, String>,
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        if let Some(body) = &body {
+        if let Some(body) = body {
+            return self
+                .resolve_body_variables(&body.data, state_variables, variables, iteration)
+                .and_then(|b| match b {
+                    BodyOrSchema::Schema(s) => generate_value_from_schema(&s, 10),
+                    BodyOrSchema::Body(v) => Some(v),
+                });
+        }
+
+        None
+    }
+
+    //Make a body for response validation!
+    pub fn get_expected_request_body(
+        &self,
+        body: &Option<RequestBody>,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> Option<BodyOrSchema> {
+        if let Some(body) = body {
             if !body.matches_variable.get() && state_variables.is_empty() {
                 return Some(body.data.clone());
             }
 
-            let mut body_str = match serde_json::to_string(&body.data) {
-                Ok(s) => s,
-                Err(_) => "".to_string(),
-            };
-
-            let state_vars: Vec<(String, &String)> = state_variables
-                .iter()
-                .map(|(k, v)| (format!("${{{}}}", k), v))
-                .collect();
-
-            for (var_pattern, value) in &state_vars {
-                if !body_str.contains(var_pattern) {
-                    continue;
-                }
-
-                debug!("state variable match: {}", var_pattern);
-                body_str = body_str
-                    .replace(var_pattern.as_str(), value.as_str())
-                    .trim()
-                    .to_string();
-            }
-
-            for variable in variables.iter().chain(self.global_variables.iter()) {
-                let var_pattern = format!("${{{}}}", variable.name);
-
-                if !body_str.contains(var_pattern.as_str()) {
-                    continue;
-                }
-
-                debug!("variable match: {}", var_pattern);
-
-                let replacement = variable.generate_value(iteration, &self.global_variables);
-                body_str = body_str
-                    .replace(var_pattern.as_str(), replacement.as_str())
-                    .trim()
-                    .to_string();
-            }
-
-            return match serde_json::from_str(&body_str) {
-                Ok(result) => Some(result),
-                Err(e) => {
-                    error!("error formatting value: {}", e);
-                    None
-                }
-            };
+            return self.resolve_body_variables(&body.data, state_variables, variables, iteration);
         }
 
         None
@@ -827,7 +964,7 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
-        self.get_body(&compare.body, state_variables, variables, iteration)
+        self.get_request_body(&compare.body, state_variables, variables, iteration)
     }
 }
 
@@ -866,7 +1003,7 @@ mod tests {
         };
         assert_eq!(
             None,
-            td.get_body(&None, &HashMap::new(), vars.as_slice(), 1)
+            td.get_request_body(&None, &HashMap::new(), vars.as_slice(), 1)
         )
     }
 
@@ -884,11 +1021,7 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                data_type: variable::Type::String,
-                value: serde_yaml::to_value("my_val").unwrap(),
-                modifier: None,
-                format: None,
-                file: None,
+                value: StringOrDatumOrFile::Value("my_val".to_string()),
                 source_path: "path".to_string(),
             }],
             global_variables: vec![],
@@ -904,13 +1037,13 @@ mod tests {
         };
 
         let body = RequestBody {
-            data: serde_json::to_value("this_is_my_body").unwrap(),
+            data: BodyOrSchema::Body(serde_json::to_value("this_is_my_body").unwrap()),
             matches_variable: false.into(),
         };
 
         assert_eq!(
             serde_json::to_value("this_is_my_body").ok(),
-            td.get_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
+            td.get_request_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
         )
     }
 
@@ -920,11 +1053,12 @@ mod tests {
         //to the vars in the TD.
         let vars: Vec<Variable> = vec![Variable {
             name: "my_var".to_string(),
-            data_type: variable::Type::String,
-            value: serde_yaml::to_value("my_val2").unwrap(),
-            modifier: None,
-            format: None,
-            file: None,
+            value: StringOrDatumOrFile::Value("my_val2".to_string()),
+            //data_type: variable::Type::String,
+            //value: serde_yaml::to_value("my_val2").unwrap(),
+            //modifier: None,
+            //format: None,
+            //file: None,
             source_path: "path".to_string(),
         }];
         let td = Definition {
@@ -938,20 +1072,12 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                data_type: variable::Type::String,
-                value: serde_yaml::to_value("my_val").unwrap(),
-                modifier: None,
-                format: None,
-                file: None,
+                value: StringOrDatumOrFile::Value("my_val".to_string()),
                 source_path: "path".to_string(),
             }],
             global_variables: vec![Variable {
                 name: "my_var2".to_string(),
-                data_type: variable::Type::String,
-                value: serde_yaml::to_value("my_val3").unwrap(),
-                modifier: None,
-                format: None,
-                file: None,
+                value: StringOrDatumOrFile::Value("my_val3".to_string()),
                 source_path: "path".to_string(),
             }],
             stages: vec![],
@@ -966,14 +1092,15 @@ mod tests {
         };
 
         let body = RequestBody {
-            data: serde_json::to_value(format!("this_is_my_body_${{my_var}}_${{my_var2}}"))
-                .unwrap(),
+            data: BodyOrSchema::Body(
+                serde_json::to_value(format!("this_is_my_body_${{my_var}}_${{my_var2}}")).unwrap(),
+            ),
             matches_variable: true.into(),
         };
 
         assert_eq!(
             serde_json::to_value("this_is_my_body_my_val2_my_val3").ok(),
-            td.get_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
+            td.get_request_body(&Some(body), &HashMap::new(), vars.as_slice(), 1)
         )
     }
 }

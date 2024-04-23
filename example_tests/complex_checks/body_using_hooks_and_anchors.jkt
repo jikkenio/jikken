@@ -1,0 +1,20 @@
+name: Body Using Variables
+tags: regression flaky triaged
+#leveraging hooks and anchors
+#to make the schema easier to read
+schemas:
+  anime_name: &anime_name
+    name: anime
+    type: string
+  character_name: &character_name
+    name: character
+    type: string
+request:
+  url: https://animechan.xyz/api/random
+response:
+  status: 200
+  bodySchema: 
+    type: object
+    schema:
+      anime: *anime_name
+      character: *character_name  

@@ -1,0 +1,12 @@
+name: Inline Body Schema
+requires: auth
+tags: regression flaky triaged
+request:
+  url: https://animechan.xyz/api/random
+response:
+  status: 200
+  bodySchema:
+    type: object
+    schema:
+      anime: {"type" : "string"}
+      character: {"type" : "string"}  

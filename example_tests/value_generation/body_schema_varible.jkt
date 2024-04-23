@@ -1,0 +1,14 @@
+name: Generation Using Schema Defined in a Variable
+request:
+  method: Post
+  url: https://api.postcodes.io/postcodes
+  body: 
+    postcodes : ${postcodes}
+response:
+  status: 200
+variables:
+  - name: postcodes
+    type: list
+    schema:
+        type: string
+        
