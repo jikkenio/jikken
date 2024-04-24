@@ -398,7 +398,7 @@ pub enum TestStatus {
     Failed = 2,
 }
 
-#[derive(Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ResponseResultData {
     pub headers: Vec<http::Header>,
     pub status: u16,
@@ -448,7 +448,7 @@ impl ResponseResultData {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
     pub status: Option<ValueOrSpecification<u16>>,
@@ -474,7 +474,7 @@ impl ExpectedResultData {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RequestDetails {
     pub headers: Vec<http::Header>,
     pub url: String,
@@ -482,7 +482,7 @@ pub struct RequestDetails {
     pub body: serde_json::Value,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ResultDetails {
     pub request: RequestDetails,
     pub expected: ExpectedResultData,
@@ -932,6 +932,8 @@ fn process_response(
     project: Option<String>,
     environment: Option<String>,
 ) -> StageResult {
+    trace!("process_response()");
+
     let mut result = StageResult {
         stage,
         stage_type,
@@ -994,11 +996,13 @@ fn process_response(
     };
 
     if let Some(resp) = &details.actual {
-        let mut validation = vec![validate_headers(
+        let mut validation: Vec<Validated<(), String>> = vec![Good(())];
+
+        validation.push(validate_headers(
             "",
             &details.expected.headers,
             &resp.headers,
-        )];
+        ));
         validation.append(validate_status_code("", &details.expected.status, resp.status).as_mut());
         validation
             .append(validate_body("", &details.expected.body, &resp.body, ignore_body).as_mut());
