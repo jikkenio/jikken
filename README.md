@@ -70,9 +70,9 @@ Once you've installed jikken, using the tool is as simple as running the `jk run
 ```
 $ jk run
 Jikken found 2 tests.
-Running Test (1\2) `Test 1` Iteration(1\1)...PASSED!
-Running Test (2\2) `Test 2` Iteration(1\2)...PASSED!
-Running Test (2\2) `Test 2` Iteration(2\2)...PASSED!
+Running Test (1/2) `Test 1` Iteration(1/1)...PASSED!
+Running Test (2/2) `Test 2` Iteration(1/2)...PASSED!
+Running Test (2/2) `Test 2` Iteration(2/2)...PASSED!
 ```
 
 Tests are defined with the Test Definition Format. The convention is they are saved as `.jkt` files. Jikken will scan for `jkt` files in the current directory and recurse through child directories looking for all test definitions it can find. If tests are provided a name, the output will use the name when executing. If no name is given it will simply give the name `Test #`.
@@ -82,9 +82,9 @@ The following output shows an example where there are two JKT files located desc
 ```
 $ jk run
 Jikken found 2 tests.
-Running Test (1\2) `Fetch Auth Credentials` Iteration(1\1)...PASSED!
-Running Test (2\2) `My API Test` Iteration(1\2)...PASSED!
-Running Test (2\2) `My API Test` Iteration(2\2)...PASSED!
+Running Test (1/2) `Fetch Auth Credentials` Iteration(1/1)...PASSED!
+Running Test (2/2) `My API Test` Iteration(1/2)...PASSED!
+Running Test (2/2) `My API Test` Iteration(2/2)...PASSED!
 ```
 
 If you are working on developing new tests, or if you'd like to see what will run without actually running it, Jikken supports a `dryrun` command. This will print out a report of steps that would occur under a normal run.
@@ -92,19 +92,19 @@ If you are working on developing new tests, or if you'd like to see what will ru
 ```
 $ jk dryrun
 Jikken found 3 tests.
-Dry Run Test (1\3) `Test 1` Iteration(1\1)
+Dry Run Test (1/3) `Test 1` Iteration(1/1)
 request: POST https://api.jikken.io/v1/test_login
 request_headers:
 -- Content-Type: application/json
 request_body: { "username":"testuser", "password":"password" }
 validate request_status with defined status: 200
 attempt to extract value from response: token = valueOf(auth.token)
-Dry Run Test (2\3) `Check Status` Iteration(1\1)
+Dry Run Test (2/3) `Check Status` Iteration(1/1)
 request: GET https://api.jikken.io/v1/test_status
 request_headers:
 -- Authorization: ${token}
 validate request_status with defined status: 200
-Dry Run Test (3\3) `Compare StatusV2 and StatusV1` Iteration(1\1)
+Dry Run Test (3/3) `Compare StatusV2 and StatusV1` Iteration(1/1)
 request: GET https://api.jikken.io/v2/test_status
 request_headers:
 -- Authorization: ${token}

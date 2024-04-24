@@ -284,7 +284,7 @@ async fn run_tests<T: ExecutionPolicy>(
             }
 
             info!(
-                "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
+                "{} Test ({}/{}) `{}` Iteration({}/{})...",
                 exec_policy.name(),
                 i + 1,
                 total_count,
