@@ -1024,7 +1024,7 @@ fn process_response(
                          actual: &serde_json::Value,
                          ignore_body: &[String]|
      -> Validated<(), String> {
-        if details.expected.body == serde_json::Value::Null {
+        if expected == &serde_json::Value::Null {
             return Good(());
         }
         trace!("validating {}body", validation_type);
@@ -1057,13 +1057,13 @@ fn process_response(
                     vec![
                         validate_status_code(
                             "compare ",
-                            details.expected.status,
                             compare_request_result.status,
+                            resp.status,
                         ),
                         validate_body(
                             "compare ",
-                            &details.expected.body,
                             &compare_request_result.body,
+                            &resp.body,
                             ignore_body,
                         ),
                     ]
@@ -2002,10 +2002,7 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 }),
-                compare_actual: Option::from(ResultData {
-                    body: serde_json::Value::default(),
-                    ..expected.clone()
-                }),
+                compare_actual: Some(expected.clone()),
             },
             &ignore_body,
             None,
@@ -2257,12 +2254,16 @@ mod tests {
 
     #[test]
     fn http_request_from_test_spec_post() {
-        let mut state = State{
+        let mut state = State {
             variables: HashMap::new(),
             cookies: HashMap::new(),
         };
-        state.variables.insert("MY_VARIABLE".to_string(), "foo".to_string());
-        state.variables.insert("MY_VARIABLE2".to_string(), "bar".to_string());
+        state
+            .variables
+            .insert("MY_VARIABLE".to_string(), "foo".to_string());
+        state
+            .variables
+            .insert("MY_VARIABLE2".to_string(), "bar".to_string());
 
         let body = serde_json::json!({ "an": "object" });
         let res = http_request_from_test_spec(
