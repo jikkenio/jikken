@@ -1983,7 +1983,9 @@ mod tests {
                     url: "".to_string(),
                 }),
                 compare_actual: Some(ResponseResultData {
-                    body: serde_json::Value::default(),
+                    body: json!({
+                        "Name" : "Bob"
+                    }),
                     status: 200,
                     headers: Vec::default(),
                 }),
