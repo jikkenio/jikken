@@ -834,7 +834,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jikken"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "adjacent-pair-iterator",
  "assert-json-diff",

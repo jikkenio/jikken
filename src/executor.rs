@@ -284,7 +284,7 @@ async fn run_tests<T: ExecutionPolicy>(
             }
 
             info!(
-                "{} Test ({}\\{}) `{}` Iteration({}\\{})...",
+                "{} Test ({}/{}) `{}` Iteration({}/{})...",
                 exec_policy.name(),
                 i + 1,
                 total_count,
@@ -340,6 +340,7 @@ struct StateCookie {
     path: String,
     key: String,
     value: String,
+    secure: bool,
 }
 
 impl StateCookie {
@@ -356,6 +357,7 @@ impl StateCookie {
         let value: String = cookie_value.last().unwrap_or(&"").trim().to_string();
         let mut domain: String = "".to_string();
         let mut path: String = "/".to_string();
+        let mut secure: bool = false;
 
         for s in segments {
             let key_value: Vec<&str> = s.split('=').collect();
@@ -365,6 +367,7 @@ impl StateCookie {
             match k {
                 "Domain" => domain = v,
                 "Path" => path = v,
+                "Secure" => secure = true,
                 &_ => {}
             }
         }
@@ -374,6 +377,7 @@ impl StateCookie {
             path,
             key,
             value,
+            secure,
         })
     }
 
@@ -1024,7 +1028,7 @@ fn process_response(
                          actual: &serde_json::Value,
                          ignore_body: &[String]|
      -> Validated<(), String> {
-        if details.expected.body == serde_json::Value::Null {
+        if expected == &serde_json::Value::Null {
             return Good(());
         }
         trace!("validating {}body", validation_type);
@@ -1057,13 +1061,13 @@ fn process_response(
                     vec![
                         validate_status_code(
                             "compare ",
-                            details.expected.status,
                             compare_request_result.status,
+                            resp.status,
                         ),
                         validate_body(
                             "compare ",
-                            &details.expected.body,
                             &compare_request_result.body,
+                            &resp.body,
                             ignore_body,
                         ),
                     ]
@@ -1557,14 +1561,13 @@ fn http_request_from_test_spec(
         })
     };
 
-    let tld_prefix = if resolved_request.url.starts_with("http://") {
-        resolved_request.url[7..].to_string()
+    let (tld_prefix, is_secure) = if resolved_request.url.starts_with("http://") {
+        (resolved_request.url[7..].to_string().to_lowercase(), false)
     } else if resolved_request.url.starts_with("https://") {
-        resolved_request.url[8..].to_string()
+        (resolved_request.url[8..].to_string().to_lowercase(), true)
     } else {
-        resolved_request.url.clone()
-    }
-    .to_lowercase();
+        (resolved_request.url.clone().to_lowercase(), false)
+    };
 
     let cookies = state
         .cookies
@@ -1573,13 +1576,17 @@ fn http_request_from_test_spec(
         .flat_map(|(_, v)| {
             v.into_iter()
                 .map(|(_, cookie)| {
+                    if !(cookie.secure ^ is_secure) { 
                     (
                         "Cookie".to_string(),
                         format!("{}={}", cookie.key.clone(), cookie.value.clone()),
-                    )
+                    ) } else {
+                        ("".to_string(), "".to_string())
+                    }
                 })
                 .collect::<Vec<(String, String)>>()
         })
+        .filter(|(s, _)| !s.is_empty())
         .collect::<Vec<(String, String)>>();
 
     debug!("matched cookies: {:?}", cookies);
@@ -2002,10 +2009,7 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 }),
-                compare_actual: Option::from(ResultData {
-                    body: serde_json::Value::default(),
-                    ..expected.clone()
-                }),
+                compare_actual: Some(expected.clone()),
             },
             &ignore_body,
             None,
@@ -2257,12 +2261,16 @@ mod tests {
 
     #[test]
     fn http_request_from_test_spec_post() {
-        let mut state = State{
+        let mut state = State {
             variables: HashMap::new(),
             cookies: HashMap::new(),
         };
-        state.variables.insert("MY_VARIABLE".to_string(), "foo".to_string());
-        state.variables.insert("MY_VARIABLE2".to_string(), "bar".to_string());
+        state
+            .variables
+            .insert("MY_VARIABLE".to_string(), "foo".to_string());
+        state
+            .variables
+            .insert("MY_VARIABLE2".to_string(), "bar".to_string());
 
         let body = serde_json::json!({ "an": "object" });
         let res = http_request_from_test_spec(
