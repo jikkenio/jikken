@@ -7,6 +7,9 @@ Next (Version determined when release is cut)
 Bugfixes:
 * Fixed compare endpoints not properly comparing bodies.
 
+Features:
+* Cookie support now also respects `Secure` mode.
+
 0.7.1
 =====
 
