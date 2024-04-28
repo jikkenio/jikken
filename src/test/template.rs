@@ -101,6 +101,7 @@ fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send
         body: Some(serde_json::from_str("{}")?),
         ignore: Some(vec!["".to_string()]),
         extract: Some(vec![definition::ResponseExtraction::new()]),
+        strict: Some(true),
     })
 }
 
@@ -115,6 +116,7 @@ fn new_full_compare() -> Result<file::UnvalidatedCompareRequest, Box<dyn Error +
         add_headers: Some(vec![new_header()]),
         ignore_headers: Some(vec!["".to_string()]),
         body: Some(serde_json::from_str("{}")?),
+        strict: Some(true),
     })
 }
 

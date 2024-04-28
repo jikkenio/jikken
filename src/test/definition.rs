@@ -86,6 +86,7 @@ pub struct CompareDescriptor {
     pub add_headers: Vec<http::Header>,
     pub ignore_headers: Vec<String>,
     pub body: Option<RequestBody>,
+    pub strict: bool,
 }
 
 impl CompareDescriptor {
@@ -177,6 +178,7 @@ impl CompareDescriptor {
                     add_headers: validated_add_headers,
                     ignore_headers: validated_ignore_headers,
                     body: compare_body,
+                    strict: request.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),
@@ -206,6 +208,7 @@ pub struct ResponseDescriptor {
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,
     pub extract: Vec<ResponseExtraction>,
+    pub strict: bool,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -241,6 +244,7 @@ impl ResponseDescriptor {
                     body: response_body,
                     ignore: validated_ignore,
                     extract: validated_extraction,
+                    strict: res.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),

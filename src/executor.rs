@@ -448,14 +448,23 @@ impl ResponseResultData {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
     pub status: Option<ValueOrSpecification<u16>>,
     pub body: Option<BodyOrSchema>,
+    pub strict: bool,
 }
 
 impl ExpectedResultData {
+    pub fn new() -> Self {
+        Self {
+            headers: Vec::default(),
+            status: Option::default(),
+            body: Option::default(),
+            strict: true,
+        }
+    }
     //Consider making get_body a static method that
     //accepts the global vars. Passing the Definition seems wrong
     pub fn from_request(
@@ -469,8 +478,9 @@ impl ExpectedResultData {
             headers: r.headers,
             status: r.status,
             body: td.get_expected_request_body(&r.body, state_variables, variables, iteration), //.unwrap_or(serde_json::Value::Null),
+            strict: r.strict,
         })
-        .unwrap_or_default()
+        .unwrap_or(ExpectedResultData::new())
     }
 }
 
@@ -975,7 +985,8 @@ fn process_response(
     let validate_body = |validation_type: &str,
                          expected: &std::option::Option<BodyOrSchema>,
                          actual: &serde_json::Value,
-                         ignore_body: &[String]|
+                         ignore_body: &[String],
+                         strict: bool|
      -> Vec<Validated<(), String>> {
         trace!("In validate body");
         if let Some(exp) = expected {
@@ -983,6 +994,7 @@ fn process_response(
             BodyOrSchemaChecker {
                 value_or_schema: exp,
                 ignore_values: ignore_body,
+                strict,
             }
             .check(actual, &|e, a| {
                 format!(
@@ -1004,8 +1016,16 @@ fn process_response(
             &resp.headers,
         ));
         validation.append(validate_status_code("", &details.expected.status, resp.status).as_mut());
-        validation
-            .append(validate_body("", &details.expected.body, &resp.body, ignore_body).as_mut());
+        validation.append(
+            validate_body(
+                "",
+                &details.expected.body,
+                &resp.body,
+                ignore_body,
+                details.expected.strict,
+            )
+            .as_mut(),
+        );
 
         validation.append(
             //if a compare request was specified, validate it
@@ -1029,6 +1049,7 @@ fn process_response(
                             &Some(BodyOrSchema::Body(compare_request_result.body)),
                             &resp.body,
                             ignore_body,
+                            details.expected.strict,
                         )
                         .as_mut(),
                     );
@@ -1044,7 +1065,7 @@ fn process_response(
         } else {
             TestStatus::Passed
         };
-    } else if details.expected != ExpectedResultData::default() {
+    } else if details.expected != ExpectedResultData::new() {
         // a result was specified,
         //and we failed to get an actual response
         result.validation = Validated::fail("failed to get response".to_string());
@@ -1956,6 +1977,7 @@ mod tests {
                 "Name" : "Bob"
             }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2007,6 +2029,7 @@ mod tests {
             status: Some(ValueOrSpecification::Value(1)), //bc we coalesce status to 0 in ResultData::from_request
             body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2047,6 +2070,7 @@ mod tests {
                 "Name" : "Bob"
             }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2088,6 +2112,7 @@ mod tests {
                 "Name" : "Bob"
             }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2133,6 +2158,7 @@ mod tests {
             })),
             body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2170,6 +2196,7 @@ mod tests {
             status: Some(ValueOrSpecification::Value(200)),
             body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];

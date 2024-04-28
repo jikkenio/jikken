@@ -96,6 +96,7 @@ mod openapi_legacy {
                     headers: create_headers(&t.headers),
                     extract: None,
                     ignore: None,
+                    strict: None,
                 }),
                 _ => None,
             })
@@ -388,6 +389,7 @@ mod openapi_v31 {
                     headers: create_headers(&t.headers),
                     extract: None,
                     ignore: None,
+                    strict: None,
                 }),
                 _ => None,
             })

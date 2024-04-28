@@ -2,10 +2,10 @@ use crate::json::filter::filter_json;
 use crate::test;
 use crate::test::file::Validated::Good;
 use crate::test::{definition, http, variable};
-use chrono::Local;
 use chrono::NaiveDate;
 use chrono::TimeZone;
 use chrono::{DateTime, ParseError};
+use chrono::{Datelike, Local};
 use chrono::{Days, Months};
 use log::error;
 use log::trace;
@@ -53,7 +53,7 @@ pub struct FloatSpecification {
 }
 
 //How can I lift the default format into the type?
-#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
     #[serde(flatten)]
     pub specification: Specification<String>,
@@ -337,12 +337,16 @@ impl DateSpecification {
 
     fn check_min(
         &self,
-        actual: &String,
+        actual: &DateTime<Local>,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         match &self.specification.min {
             Some(t) => {
-                if self.str_to_time(t).unwrap() <= self.str_to_time(actual).unwrap() {
+                if self
+                    .str_to_time(t)
+                    .map(|min| min <= *actual)
+                    .unwrap_or_default()
+                {
                     Good(())
                 } else {
                     Validated::fail(formatter(
@@ -357,12 +361,16 @@ impl DateSpecification {
 
     fn check_max(
         &self,
-        actual: &String,
+        actual: &DateTime<Local>,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         match &self.specification.max {
             Some(t) => {
-                if self.str_to_time(t).unwrap() >= self.str_to_time(actual).unwrap() {
+                if self
+                    .str_to_time(t)
+                    .map(|max| max >= *actual)
+                    .unwrap_or_default()
+                {
                     Good(())
                 } else {
                     Validated::fail(formatter(
@@ -468,10 +476,17 @@ impl Checker for DateSpecification {
         val: &Self::Item,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
+        let maybe_time = self.str_to_time(val);
+        if maybe_time.is_err() {
+            return vec![Validated::fail(formatter("date type", "type"))];
+        }
+
+        let time = maybe_time.unwrap();
+
         vec![
             self.check_val(&val, formatter),
-            self.check_min(&val, formatter),
-            self.check_max(&val, formatter),
+            self.check_min(&time, formatter),
+            self.check_max(&time, formatter),
             self.check_none_of(&val, formatter),
             self.check_one_of(&val, formatter),
         ]
@@ -496,7 +511,7 @@ pub enum DatumSchema {
     },
     Date {
         #[serde(flatten)]
-        date: DateSpecification,
+        date: Option<DateSpecification>,
     },
     List {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -520,28 +535,28 @@ impl DatumSchema {
         ret.append(self.check_string(actual, formatter).as_mut());
         ret.append(self.check_list(actual, formatter).as_mut());
         ret.append(self.check_object(actual, formatter).as_mut());
+        ret.append(self.check_date(actual, formatter).as_mut());
         ret
     }
-    /*
+
     fn check_date(
         &self,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match self {
-            DatumSchema::String { specification } => {
+            DatumSchema::Date { date } => {
                 if !actual.is_string() {
                     return vec![Validated::fail(formatter("float type", "type"))];
                 }
 
-                specification
-                    .as_ref()
-                    .map(|s| s.check(&actual.as_f64().unwrap(), formatter))
+                date.as_ref()
+                    .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
                     .unwrap_or(vec![Good(())])
             }
             _ => vec![Good(())],
         }
-    }*/
+    }
 
     fn check_float(
         &self,
@@ -721,6 +736,7 @@ pub struct UnvalidatedCompareRequest {
     pub add_headers: Option<Vec<http::Header>>,
     pub ignore_headers: Option<Vec<String>>,
     pub body: Option<BodyOrSchema>,
+    pub strict: Option<bool>,
 }
 
 impl Hash for UnvalidatedCompareRequest {
@@ -800,13 +816,14 @@ pub enum StringOrDatumOrFile {
 pub struct BodyOrSchemaChecker<'a> {
     pub value_or_schema: &'a BodyOrSchema,
     pub ignore_values: &'a [String],
+    pub strict: bool,
 }
 
 impl<'a> BodyOrSchemaChecker<'a> {
     pub fn check_schema(
+        &self,
         actual: &serde_json::Value,
         schema: &DatumSchema,
-        _ignore: &[String],
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Result<Vec<Validated<(), String>>, Box<dyn Error + Send + Sync>> {
         trace!("validating response body using schema");
@@ -817,9 +834,9 @@ impl<'a> BodyOrSchemaChecker<'a> {
     }
 
     pub fn check_expected_value(
+        &self,
         actual: &serde_json::Value,
         expected: &serde_json::Value,
-        ignore: &[String],
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Result<Vec<Validated<(), String>>, Box<dyn Error + Send + Sync>> {
         trace!("validating response body");
@@ -827,34 +844,31 @@ impl<'a> BodyOrSchemaChecker<'a> {
         let mut modified_expected = expected.clone();
 
         // TODO: make this more efficient, with a single pass filter
-        for path in ignore.iter() {
+        for path in self.ignore_values.iter() {
             trace!("stripping path({}) from response", path);
             modified_actual = filter_json(path, 0, modified_actual)?;
             modified_expected = filter_json(path, 0, modified_expected)?;
         }
 
         trace!("compare json");
-        let r = modified_actual == modified_expected;
+        let compare_mode = if self.strict {
+            assert_json_diff::CompareMode::Strict
+        } else {
+            assert_json_diff::CompareMode::Inclusive
+        };
 
-        if !r {
-            let result = assert_json_diff::assert_json_matches_no_panic(
-                &modified_actual,
-                &modified_expected,
-                assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
-            );
-            return match result {
-                Ok(_) => Ok(vec![Validated::fail(formatter(
-                    format!("body {modified_expected}").as_str(),
-                    format!("body {modified_actual}").as_str(),
-                ))]),
-                Err(msg) => Ok(vec![Validated::fail(formatter(
-                    format!("body {modified_expected}").as_str(),
-                    format!("body {modified_actual} ; {msg}").as_str(),
-                ))]),
-            };
-        }
-
-        Ok(vec![Good(())])
+        let result = assert_json_diff::assert_json_matches_no_panic(
+            &modified_actual,
+            &modified_expected,
+            assert_json_diff::Config::new(compare_mode),
+        );
+        return match result {
+            Ok(_) => Ok(vec![Good(())]),
+            Err(msg) => Ok(vec![Validated::fail(formatter(
+                format!("body {modified_expected}").as_str(),
+                format!("body {modified_actual} ; {msg}").as_str(),
+            ))]),
+        };
     }
 }
 
@@ -867,11 +881,9 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
     ) -> Vec<Validated<(), String>> {
         let res = match self.value_or_schema {
             BodyOrSchema::Body(v) => {
-                BodyOrSchemaChecker::check_expected_value(val, v, self.ignore_values, formatter)
+                BodyOrSchemaChecker::check_expected_value(self, val, v, formatter)
             }
-            BodyOrSchema::Schema(s) => {
-                BodyOrSchemaChecker::check_schema(val, s, self.ignore_values, formatter)
-            }
+            BodyOrSchema::Schema(s) => BodyOrSchemaChecker::check_schema(self, val, s, formatter),
         };
 
         match res {
@@ -896,6 +908,7 @@ pub struct UnvalidatedResponse {
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
+    pub strict: Option<bool>,
 }
 
 impl Default for UnvalidatedResponse {
@@ -906,6 +919,7 @@ impl Default for UnvalidatedResponse {
             body: None,
             ignore: None,
             extract: None,
+            strict: None,
         }
     }
 }
@@ -961,7 +975,7 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
     }
 }
 
-pub fn generate_number<T>(spec: &Specification<T>, max_attemps: u16) -> Option<T>
+pub fn generate_number<T>(spec: &Specification<T>, max_attempts: u16) -> Option<T>
 where
     T: num::Num
         + rand::distributions::uniform::SampleUniform
@@ -979,7 +993,7 @@ where
     }
 
     let mut rng = rand::thread_rng();
-    (0..max_attemps)
+    (0..max_attempts)
         .map(|_| {
             return match spec.one_of.as_ref() {
                 Some(vals) => vals
@@ -1000,13 +1014,13 @@ where
         .nth(0)
 }
 
-pub fn generate_float(spec: &FloatSpecification, max_attemps: u16) -> Option<f64> {
+pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
     if spec.value.is_some() {
         return spec.value.clone();
     }
 
     let mut rng = rand::thread_rng();
-    (0..max_attemps)
+    (0..max_attempts)
         .map(|_| {
             return match spec.one_of.as_ref() {
                 Some(vals) => vals
@@ -1027,7 +1041,7 @@ pub fn generate_float(spec: &FloatSpecification, max_attemps: u16) -> Option<f64
         .nth(0)
 }
 
-pub fn generate_string(spec: &Specification<String>, max_attemps: u16) -> Option<String> {
+pub fn generate_string(spec: &Specification<String>, max_attempts: u16) -> Option<String> {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
@@ -1039,7 +1053,7 @@ pub fn generate_string(spec: &Specification<String>, max_attemps: u16) -> Option
     let mut rng = rand::thread_rng();
     let string_length: usize = rng.gen_range(1..50);
 
-    for _ in 0..max_attemps {
+    for _ in 0..max_attempts {
         let ret: String = match spec.one_of.as_ref() {
             Some(vals) => vals
                 .get(rng.gen_range(0..vals.len()))
@@ -1065,26 +1079,58 @@ pub fn generate_string(spec: &Specification<String>, max_attemps: u16) -> Option
     None
 }
 
-pub fn generate_date(spec: &DateSpecification, max_attemps: u16) -> Option<String> {
+pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<String> {
     if let Some(val) = &spec.specification.value {
         return spec.get(val).ok();
     }
 
-    //What we need for randomness below
-    //let mut rng = rand::thread_rng();
-    //let string_length: usize = rng.gen_range(DateTime::UNIX_EPOCH..DateTime::naive_local());
+    let min = spec
+        .specification
+        .min
+        .as_ref()
+        .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
+        .unwrap_or_default();
 
-    //Have to check it
-    for _ in 0..max_attemps {
-        if let Some(val) = generate_string(&spec.specification, 1) {
-            let ret = spec.str_to_time(&val);
-            if ret.is_ok() {
-                return ret.map(|v| spec.time_to_str(&v)).ok();
-            }
-        }
-    }
+    let max = spec
+        .specification
+        .max
+        .as_ref()
+        .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
+        .unwrap_or(Local::now());
 
-    None
+    let year_range = (min.year(), max.year());
+    let month_range = (max.month(), min.month());
+    let day_range = (max.day(), min.day());
+
+    let mut rng = rand::thread_rng();
+
+    (0..max_attempts)
+        .map(|_| {
+            let year = rng.gen_range(year_range.0..=year_range.1);
+
+            let month = if year == year_range.1 {
+                rng.gen_range(month_range.0..=month_range.1)
+            } else {
+                rng.gen_range(1..=12)
+            };
+
+            let day = rng.gen_range(day_range.0..=28);
+
+            chrono::NaiveDate::default()
+                .with_year(year)
+                .and_then(|d| d.with_month(month))
+                .and_then(|d| d.with_day(day))
+                .unwrap_or_default()
+        })
+        .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
+        .map(|d| spec.time_to_str(&d.unwrap()))
+        .filter(|date_str| {
+            spec.check(date_str, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        })
+        .nth(0)
 }
 
 pub fn generate_value_from_schema(
@@ -1113,9 +1159,11 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(|v| serde_json::Value::from(v)),
-        DatumSchema::Date { date } => {
-            generate_date(&date, max_attempts).map(|v| serde_json::Value::from(v))
-        }
+        DatumSchema::Date { date } => generate_date(
+            date.as_ref().unwrap_or(&DateSpecification::default()),
+            max_attempts,
+        )
+        .map(|v| serde_json::Value::from(v)),
         DatumSchema::List { schema } => Some(serde_json::Value::Array {
             0: schema
                 .as_ref()
@@ -1352,6 +1400,27 @@ mod tests {
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
+        );
+    }
+
+    #[test]
+    fn datum_date_type_validation() {
+        assert_eq!(
+            true,
+            DatumSchema::Date { date: None }
+                .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+
+        assert_eq!(
+            false,
+            DatumSchema::Date { date: None }
+                .check(&serde_json::json!("2024-12-08"), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
         );
     }
 
@@ -1615,6 +1684,18 @@ mod tests {
         let val = generate_value_from_schema(&schema, 10);
         assert!(val.is_some());
         assert!(schema
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn date_generation() {
+        let spec = DateSpecification::default();
+        let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()

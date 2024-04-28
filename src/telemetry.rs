@@ -467,6 +467,7 @@ mod tests {
                     ignore_headers: vec![],
                     ignore_params: vec![],
                     params: vec![],
+                    strict: true,
                 }),
                 delay: None,
             }],
@@ -536,6 +537,7 @@ mod tests {
                 body: None,
                 headers: vec![],
                 status: None,
+                ..ExpectedResultData::new()
             },
             compare_request: Some(rd.clone()),
         });
