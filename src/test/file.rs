@@ -1106,24 +1106,32 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
 
     (0..max_attempts)
         .map(|_| {
-            let year = rng.gen_range(year_range.0..=year_range.1);
+            return match spec.specification.one_of.as_ref() {
+                Some(vals) => vals
+                    .get(rng.gen_range(0..vals.len()))
+                    .unwrap_or(&String::default())
+                    .clone(),
+                None => {
+                    let year = rng.gen_range(year_range.0..=year_range.1);
 
-            let month = if year == year_range.1 {
-                rng.gen_range(month_range.0..=month_range.1)
-            } else {
-                rng.gen_range(1..=12)
+                    let month = if year == year_range.1 {
+                        rng.gen_range(month_range.0..=month_range.1)
+                    } else {
+                        rng.gen_range(1..=12)
+                    };
+
+                    let day = rng.gen_range(day_range.0..=28);
+
+                    return chrono::NaiveDate::default()
+                        .with_year(year)
+                        .and_then(|d| d.with_month(month))
+                        .and_then(|d| d.with_day(day))
+                        .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
+                        .map(|d| spec.time_to_str(&d.unwrap()))
+                        .unwrap_or_default();
+                }
             };
-
-            let day = rng.gen_range(day_range.0..=28);
-
-            chrono::NaiveDate::default()
-                .with_year(year)
-                .and_then(|d| d.with_month(month))
-                .and_then(|d| d.with_day(day))
-                .unwrap_or_default()
         })
-        .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
-        .map(|d| spec.time_to_str(&d.unwrap()))
         .filter(|date_str| {
             spec.check(date_str, &|_e, _a| "".to_string())
                 .into_iter()
