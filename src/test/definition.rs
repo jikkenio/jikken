@@ -1,12 +1,15 @@
 use crate::test;
+use crate::test::file::ValueOrSpecification;
 use crate::test::{file, http, validation};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+use super::file::BodyOrSchema;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestBody {
-    pub data: serde_json::Value,
+    pub data: BodyOrSchema,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub matches_variable: Cell<bool>,
@@ -83,6 +86,7 @@ pub struct CompareDescriptor {
     pub add_headers: Vec<http::Header>,
     pub ignore_headers: Vec<String>,
     pub body: Option<RequestBody>,
+    pub strict: bool,
 }
 
 impl CompareDescriptor {
@@ -174,6 +178,7 @@ impl CompareDescriptor {
                     add_headers: validated_add_headers,
                     ignore_headers: validated_ignore_headers,
                     body: compare_body,
+                    strict: request.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),
@@ -198,11 +203,12 @@ impl ResponseExtraction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseDescriptor {
-    pub status: Option<u16>,
+    pub status: Option<ValueOrSpecification<u16>>,
     pub headers: Vec<http::Header>,
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,
     pub extract: Vec<ResponseExtraction>,
+    pub strict: bool,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -238,6 +244,7 @@ impl ResponseDescriptor {
                     body: response_body,
                     ignore: validated_ignore,
                     extract: validated_extraction,
+                    strict: res.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),

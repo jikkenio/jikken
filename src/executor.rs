@@ -1,10 +1,12 @@
 use crate::config;
-use crate::errors::TestFailure;
 use crate::json::extractor::extract_json;
-use crate::json::filter::filter_json;
 use crate::telemetry;
 use crate::test;
 use crate::test::definition::ResponseDescriptor;
+use crate::test::file::BodyOrSchema;
+use crate::test::file::BodyOrSchemaChecker;
+use crate::test::file::Checker;
+use crate::test::file::ValueOrSpecification;
 use crate::test::http;
 use crate::test::http::Header;
 use crate::test::Definition;
@@ -15,7 +17,6 @@ use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, error, info, trace, warn};
 use serde::Serialize;
-use serde_json::Value;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
@@ -78,9 +79,6 @@ fn formatted_result_to_file<T: ExecutionResultFormatter>(
 
 struct JunitResultFormatter;
 
-//Find a way to
-//Treat it more like an accumulator for more efficient generation
-//of multiple formats
 impl ExecutionResultFormatter for JunitResultFormatter {
     fn format(&self, res: &ExecutionResult) -> FormattedExecutionResult {
         let mut lines: Vec<String> = Vec::new();
@@ -404,44 +402,15 @@ pub enum TestStatus {
     Failed = 2,
 }
 
-#[derive(Clone, Serialize, PartialEq, Eq)]
-pub struct ResultData {
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ResponseResultData {
     pub headers: Vec<http::Header>,
     pub status: u16,
     pub body: serde_json::Value,
 }
 
-impl Default for ResultData {
-    fn default() -> Self {
-        Self {
-            headers: Vec::new(),
-            status: 0,
-            body: serde_json::Value::Null,
-        }
-    }
-}
-
-impl ResultData {
-    //Consider making get_body a static method that
-    //accepts the global vars. Passing the Definition seems wrong
-    pub fn from_request(
-        req: Option<ResponseDescriptor>,
-        td: &test::Definition,
-        state_variables: &HashMap<String, String>,
-        variables: &[Variable],
-        iteration: u32,
-    ) -> ResultData {
-        req.map(|r| ResultData {
-            headers: r.headers,
-            status: r.status.unwrap_or(0),
-            body: td
-                .get_body(&r.body, state_variables, variables, iteration)
-                .unwrap_or(serde_json::Value::Null),
-        })
-        .unwrap_or_default()
-    }
-
-    pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResultData> {
+impl ResponseResultData {
+    pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResponseResultData> {
         debug!("Received response : {resp:?}");
 
         let response_status = resp.status();
@@ -458,7 +427,7 @@ impl ResultData {
             Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
                 Ok(data) => {
                     debug!("Body is {data}");
-                    Some(ResultData {
+                    Some(ResponseResultData {
                         headers,
                         status: response_status.as_u16(),
                         body: data,
@@ -468,7 +437,7 @@ impl ResultData {
                     // TODO: add support for non JSON responses
                     debug!("response is not valid JSON data: {}", e);
                     debug!("{}", std::str::from_utf8(&resp_data).unwrap_or(""));
-                    Some(ResultData {
+                    Some(ResponseResultData {
                         headers,
                         status: response_status.as_u16(),
                         body: serde_json::Value::Null,
@@ -483,7 +452,43 @@ impl ResultData {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExpectedResultData {
+    pub headers: Vec<http::Header>,
+    pub status: Option<ValueOrSpecification<u16>>,
+    pub body: Option<BodyOrSchema>,
+    pub strict: bool,
+}
+
+impl ExpectedResultData {
+    pub fn new() -> Self {
+        Self {
+            headers: Vec::default(),
+            status: Option::default(),
+            body: Option::default(),
+            strict: true,
+        }
+    }
+    //Consider making get_body a static method that
+    //accepts the global vars. Passing the Definition seems wrong
+    pub fn from_request(
+        req: Option<ResponseDescriptor>,
+        td: &test::Definition,
+        state_variables: &HashMap<String, String>,
+        variables: &[Variable],
+        iteration: u32,
+    ) -> ExpectedResultData {
+        req.map(|r| ExpectedResultData {
+            headers: r.headers,
+            status: r.status,
+            body: td.get_expected_request_body(&r.body, state_variables, variables, iteration), //.unwrap_or(serde_json::Value::Null),
+            strict: r.strict,
+        })
+        .unwrap_or(ExpectedResultData::new())
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct RequestDetails {
     pub headers: Vec<http::Header>,
     pub url: String,
@@ -491,13 +496,13 @@ pub struct RequestDetails {
     pub body: serde_json::Value,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ResultDetails {
     pub request: RequestDetails,
-    pub expected: ResultData,
-    pub actual: Option<ResultData>,
+    pub expected: ExpectedResultData,
+    pub actual: Option<ResponseResultData>,
     pub compare_request: Option<RequestDetails>,
-    pub compare_actual: Option<ResultData>,
+    pub compare_actual: Option<ResponseResultData>,
 }
 
 #[derive(Clone)]
@@ -901,48 +906,6 @@ async fn dry_run(
     validate_dry_run(state, td, iteration)
 }
 
-fn validate_body(
-    actual: &Value,
-    expected: &Value,
-    ignore: &[String],
-) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    trace!("validating response body");
-    let mut modified_actual = actual.clone();
-    let mut modified_expected = expected.clone();
-
-    // TODO: make this more efficient, with a single pass filter
-    for path in ignore.iter() {
-        trace!("stripping path({}) from response", path);
-        modified_actual = filter_json(path, 0, modified_actual)?;
-        modified_expected = filter_json(path, 0, modified_expected)?;
-    }
-
-    trace!("compare json");
-    let r = modified_actual == modified_expected;
-
-    if !r {
-        let result = assert_json_diff::assert_json_matches_no_panic(
-            &modified_actual,
-            &modified_expected,
-            assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
-        );
-        match result {
-            Ok(_) => {
-                return Err(Box::from(TestFailure {
-                    reason: "response body doesn't match".to_string(),
-                }));
-            }
-            Err(msg) => {
-                return Err(Box::from(TestFailure {
-                    reason: format!("response body doesn't match\n{}", msg),
-                }));
-            }
-        }
-    }
-
-    Ok(r)
-}
-
 async fn validate_td(
     state: &mut State,
     td: &test::Definition,
@@ -983,6 +946,8 @@ fn process_response(
     project: Option<String>,
     environment: Option<String>,
 ) -> StageResult {
+    trace!("process_response()");
+
     let mut result = StageResult {
         stage,
         stage_type,
@@ -1005,72 +970,94 @@ fn process_response(
         Good(())
     };
 
-    let validate_status_code =
-        |validation_type: &str, expected: u16, actual: u16| -> Validated<(), String> {
-            if expected == 0 {
-                return Good(());
-            }
+    let validate_status_code = |validation_type: &str,
+                                expected: &Option<ValueOrSpecification<u16>>,
+                                actual: u16|
+     -> Vec<Validated<(), String>> {
+        match &expected {
+            &None => vec![Good(())].into_iter().collect(),
+            &Some(t) => {
+                trace!("validating {}status codes", validation_type);
 
-            trace!("validating {}status codes", validation_type);
-
-            if expected == actual {
-                Good(())
-            } else {
-                Validated::fail(format!(
-                    "Expected status code {} but received {}",
-                    expected, actual
-                ))
+                t.check(&actual, &|expected, actual| -> String {
+                    format!("Expected status code {expected} but received {actual}")
+                })
             }
-        };
+        }
+    };
 
     let validate_body = |validation_type: &str,
-                         expected: &serde_json::Value,
+                         expected: &std::option::Option<BodyOrSchema>,
                          actual: &serde_json::Value,
-                         ignore_body: &[String]|
-     -> Validated<(), String> {
-        if expected == &serde_json::Value::Null {
-            return Good(());
-        }
-        trace!("validating {}body", validation_type);
-        match validate_body(actual, expected, ignore_body) {
-            Ok(passed) => {
-                if passed {
-                    Good(())
-                } else {
-                    Validated::fail(format!(
-                        "Expected {}body did not match actual body",
-                        validation_type
-                    ))
-                }
+                         ignore_body: &[String],
+                         strict: bool|
+     -> Vec<Validated<(), String>> {
+        trace!("In validate body");
+        if let Some(exp) = expected {
+            trace!("validating body");
+            BodyOrSchemaChecker {
+                value_or_schema: exp,
+                ignore_values: ignore_body,
+                strict,
             }
-            Err(e) => Validated::fail(format!("{}{}", validation_type, e)),
+            .check(actual, &|e, a| {
+                format!(
+                    "Expected {}{} did not match actual {}",
+                    validation_type, e, a
+                )
+            })
+        } else {
+            vec![Good(())]
         }
     };
 
     if let Some(resp) = &details.actual {
-        let mut validation = vec![
-            validate_headers("", &details.expected.headers, &resp.headers),
-            validate_status_code("", details.expected.status, resp.status),
-            validate_body("", &details.expected.body, &resp.body, ignore_body),
-        ];
+        let mut validation: Vec<Validated<(), String>> = vec![Good(())];
+
+        validation.push(validate_headers(
+            "",
+            &details.expected.headers,
+            &resp.headers,
+        ));
+        validation.append(validate_status_code("", &details.expected.status, resp.status).as_mut());
+        validation.append(
+            validate_body(
+                "",
+                &details.expected.body,
+                &resp.body,
+                ignore_body,
+                details.expected.strict,
+            )
+            .as_mut(),
+        );
+
         validation.append(
             //if a compare request was specified, validate it
             details
                 .compare_actual
                 .map(|compare_request_result| {
-                    vec![
+                    let mut ret = vec![];
+                    ret.append(
                         validate_status_code(
                             "compare ",
-                            compare_request_result.status,
+                            &Some(ValueOrSpecification::<u16>::Value(
+                                compare_request_result.status,
+                            )),
                             resp.status,
-                        ),
+                        )
+                        .as_mut(),
+                    );
+                    ret.append(
                         validate_body(
                             "compare ",
-                            &compare_request_result.body,
+                            &Some(BodyOrSchema::Body(compare_request_result.body)),
                             &resp.body,
                             ignore_body,
-                        ),
-                    ]
+                            details.expected.strict,
+                        )
+                        .as_mut(),
+                    );
+                    ret
                 })
                 .unwrap_or(vec![Good(())])
                 .as_mut(),
@@ -1082,7 +1069,7 @@ fn process_response(
         } else {
             TestStatus::Passed
         };
-    } else if details.expected != ResultData::default() {
+    } else if details.expected != ExpectedResultData::new() {
         // a result was specified,
         //and we failed to get an actual response
         result.validation = Validated::fail("failed to get response".to_string());
@@ -1116,7 +1103,7 @@ async fn validate_setup(
             &td.variables,
         );
         let req_headers = td.get_setup_request_headers(iteration);
-        let req_body = td.get_body(
+        let req_body = td.get_request_body(
             &setup.request.body,
             &state.variables,
             &td.variables,
@@ -1132,7 +1119,7 @@ async fn validate_setup(
 
         debug!("executing setup stage: {}", req_url);
 
-        let expected = ResultData::from_request(
+        let expected = ExpectedResultData::from_request(
             setup.response.clone(),
             td,
             &state.variables,
@@ -1142,7 +1129,7 @@ async fn validate_setup(
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response).await;
 
         let request = RequestDetails {
             headers: req_headers
@@ -1232,7 +1219,7 @@ async fn run_cleanup(
             );
             let success_headers = td.get_headers(&onsuccess.headers, iteration);
             let success_body =
-                td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
+                td.get_request_body(&onsuccess.body, &state.variables, &td.variables, iteration);
             let resolved_request = test::definition::ResolvedRequest::new(
                 success_url.clone(),
                 success_method.clone(),
@@ -1240,12 +1227,17 @@ async fn run_cleanup(
                 success_body.clone(),
             );
 
-            let expected =
-                ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+            let expected = ExpectedResultData::from_request(
+                None,
+                td,
+                &state.variables,
+                &td.variables,
+                iteration,
+            );
             let start_time = Instant::now();
             let req_response = process_request(state, resolved_request).await?;
             let runtime = start_time.elapsed().as_millis() as u32;
-            let actual = ResultData::from_response(req_response).await;
+            let actual = ResponseResultData::from_response(req_response).await;
 
             let request = RequestDetails {
                 headers: success_headers
@@ -1288,7 +1280,8 @@ async fn run_cleanup(
             &td.variables,
         );
         let failure_headers = td.get_headers(&onfailure.headers, iteration);
-        let failure_body = td.get_body(&onfailure.body, &state.variables, &td.variables, iteration);
+        let failure_body =
+            td.get_request_body(&onfailure.body, &state.variables, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
             failure_url.clone(),
             failure_method.clone(),
@@ -1297,11 +1290,11 @@ async fn run_cleanup(
         );
 
         let expected =
-            ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+            ExpectedResultData::from_request(None, td, &state.variables, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response).await;
 
         let request = RequestDetails {
             headers: failure_headers
@@ -1345,7 +1338,8 @@ async fn run_cleanup(
             &td.variables,
         );
         let req_headers = td.get_cleanup_request_headers(iteration);
-        let req_body = td.get_body(&request.body, &state.variables, &td.variables, iteration);
+        let req_body =
+            td.get_request_body(&request.body, &state.variables, &td.variables, iteration);
         let resolved_request = test::definition::ResolvedRequest::new(
             req_url.clone(),
             req_method.clone(),
@@ -1354,11 +1348,11 @@ async fn run_cleanup(
         );
 
         let expected =
-            ResultData::from_request(None, td, &state.variables, &td.variables, iteration);
+            ExpectedResultData::from_request(None, td, &state.variables, &td.variables, iteration);
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response).await;
 
         let request = RequestDetails {
             headers: req_headers
@@ -1412,7 +1406,7 @@ async fn validate_stage(
         &[&stage.variables[..], &td.variables[..]].concat(),
     );
     let req_headers = td.get_headers(&stage.request.headers, iteration);
-    let req_body = td.get_body(
+    let req_body = td.get_request_body(
         &stage.request.body,
         &state.variables,
         &[&stage.variables[..], &td.variables[..]].concat(),
@@ -1426,7 +1420,7 @@ async fn validate_stage(
         req_body.clone(),
     );
     debug!("executing test stage {stage_name}: {req_url}");
-    let expected = ResultData::from_request(
+    let expected = ExpectedResultData::from_request(
         stage.response.clone(),
         td,
         &state.variables,
@@ -1489,11 +1483,11 @@ async fn validate_stage(
     }
 
     let runtime = start_time.elapsed().as_millis() as u32;
-    let actual = ResultData::from_response(req_response).await;
+    let actual = ResponseResultData::from_response(req_response).await;
     let mut compare_actual = None;
 
     if let Some(compare_response) = compare_response_opt {
-        compare_actual = ResultData::from_response(compare_response).await;
+        compare_actual = ResponseResultData::from_response(compare_response).await;
     }
 
     let details = ResultDetails {
@@ -1676,7 +1670,7 @@ fn validate_dry_run(
             &td.variables,
         );
         let setup_headers = td.get_setup_request_headers(iteration);
-        let setup_body = td.get_body(
+        let setup_body = td.get_request_body(
             &setup.request.body,
             &state.variables,
             &td.variables,
@@ -1696,9 +1690,9 @@ fn validate_dry_run(
 
         if let Some(r) = &setup.response {
             // compare to response definition
-            if let Some(setup_response_status) = r.status {
+            if let Some(setup_response_status) = &r.status {
                 info!(
-                    "validate setup_response_status with defined_status: {}\n",
+                    "validate setup_response_status with defined_status: {:?}\n",
                     setup_response_status
                 );
             }
@@ -1720,12 +1714,12 @@ fn validate_dry_run(
             if let Some(b) = &r.body {
                 if !r.ignore.is_empty() {
                     info!(
-                        "validate filtered setup_response_body matches defined body: {}\n",
+                        "validate filtered setup_response_body matches defined body: {:?}\n",
                         b.data
                     );
                 } else {
                     info!(
-                        "validate setup_response_body matches defined body: {}\n",
+                        "validate setup_response_body matches defined body: {:?}\n",
                         b.data
                     );
                 }
@@ -1743,7 +1737,7 @@ fn validate_dry_run(
             &[&stage.variables[..], &td.variables[..]].concat(),
         );
         let stage_headers = td.get_headers(&stage.request.headers, iteration);
-        let stage_body = td.get_body(
+        let stage_body = td.get_request_body(
             &stage.request.body,
             &state.variables,
             &[&stage.variables[..], &td.variables[..]].concat(),
@@ -1768,9 +1762,9 @@ fn validate_dry_run(
 
         if let Some(r) = &stage.response {
             // compare to response definition
-            if let Some(stage_response_status) = r.status {
+            if let Some(stage_response_status) = &r.status {
                 info!(
-                    "validate response_status with defined_status: {}\n",
+                    "validate response_status with defined_status: {:?}\n",
                     stage_response_status
                 );
             }
@@ -1792,11 +1786,14 @@ fn validate_dry_run(
             if let Some(b) = &r.body {
                 if !r.ignore.is_empty() {
                     info!(
-                        "validate filtered response_body matches defined body: {}\n",
+                        "validate filtered response_body matches defined body: {:?}\n",
                         b.data
                     );
                 } else {
-                    info!("validate response_body matches defined body: {}\n", b.data);
+                    info!(
+                        "validate response_body matches defined body: {:?}\n",
+                        b.data
+                    );
                 }
             }
         }
@@ -1896,7 +1893,7 @@ fn validate_dry_run(
         );
         let onsuccess_headers = td.get_setup_request_headers(iteration);
         let onsuccess_body =
-            td.get_body(&onsuccess.body, &state.variables, &td.variables, iteration);
+            td.get_request_body(&onsuccess.body, &state.variables, &td.variables, iteration);
         info!("onsuccess: {} {}\n", onsuccess_method, onsuccess_url);
         if !onsuccess_headers.is_empty() {
             info!("onsuccess_headers:\n");
@@ -1922,7 +1919,7 @@ fn validate_dry_run(
         );
         let onfailure_headers = td.get_setup_request_headers(iteration);
         let onfailure_body =
-            td.get_body(&onfailure.body, &state.variables, &td.variables, iteration);
+            td.get_request_body(&onfailure.body, &state.variables, &td.variables, iteration);
         info!("onfailure: {} {}\n", onfailure_method, onfailure_url);
         if !onfailure_headers.is_empty() {
             info!("onfailure_headers:\n");
@@ -1947,7 +1944,8 @@ fn validate_dry_run(
             &td.variables,
         );
         let cleanup_headers = td.get_setup_request_headers(iteration);
-        let cleanup_body = td.get_body(&request.body, &state.variables, &td.variables, iteration);
+        let cleanup_body =
+            td.get_request_body(&request.body, &state.variables, &td.variables, iteration);
         info!("cleanup: {} {}\n", cleanup_method, cleanup_url);
         if !cleanup_headers.is_empty() {
             info!("cleanup_headers:\n");
@@ -1966,6 +1964,8 @@ fn validate_dry_run(
 
 #[cfg(test)]
 mod tests {
+    use crate::test::file::Specification;
+
     use self::test::definition::ResolvedRequest;
     use hyper::Response;
     use std::any::Any;
@@ -1978,12 +1978,13 @@ mod tests {
 
     #[test]
     fn process_response_multiple_failures() {
-        let expected = ResultData {
-            status: 200,
-            body: json!({
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Value(200)),
+            body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
-            }),
+            }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -1999,9 +2000,10 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
-                actual: Option::from(ResultData {
+                actual: Option::from(ResponseResultData {
                     body: serde_json::Value::default(),
-                    ..expected.clone()
+                    status: 200,
+                    headers: Vec::default(),
                 }),
                 compare_request: Some(RequestDetails {
                     body: serde_json::Value::default(),
@@ -2009,7 +2011,13 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 }),
-                compare_actual: Some(expected.clone()),
+                compare_actual: Some(ResponseResultData {
+                    body: json!({
+                        "Name" : "Bob"
+                    }),
+                    status: 200,
+                    headers: Vec::default(),
+                }),
             },
             &ignore_body,
             None,
@@ -2017,17 +2025,18 @@ mod tests {
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(actual.validation, Validated::Fail(nev![
-            String::from("response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"),
-            String::from("compare response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }")
+            String::from("Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"),
+            String::from("Expected compare body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }")
         ]));
     }
 
     #[test]
     fn process_response_no_result() {
-        let expected = ResultData {
-            status: 1, //bc we coalesce status to 0 in ResultData::from_request
-            body: serde_json::Value::default(),
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Value(1)), //bc we coalesce status to 0 in ResultData::from_request
+            body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2062,12 +2071,13 @@ mod tests {
     //note : no test for headers, we don't currently support it
     #[test]
     fn process_response_body_mismatch() {
-        let expected = ResultData {
-            status: 200,
-            body: json!({
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Value(200)),
+            body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
-            }),
+            }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2083,9 +2093,10 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
-                actual: Option::from(ResultData {
+                actual: Some(ResponseResultData {
                     body: serde_json::Value::default(),
-                    ..expected.clone()
+                    headers: Vec::default(),
+                    status: 200,
                 }),
                 compare_request: None,
                 compare_actual: None,
@@ -2096,18 +2107,19 @@ mod tests {
         );
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(actual.validation, Validated::fail(
-            String::from("response body doesn't match\njson atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
+            String::from("Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
         )));
     }
 
     #[test]
     fn process_response_body_match() {
-        let expected = ResultData {
-            status: 200,
-            body: json!({
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Value(200)),
+            body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
-            }),
+            }))),
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2123,7 +2135,13 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
-                actual: Option::from(ResultData { ..expected.clone() }),
+                actual: Some(ResponseResultData {
+                    status: 200,
+                    body: json!({
+                        "Name": "Bob"
+                    }),
+                    headers: Vec::default(),
+                }),
                 compare_request: None,
                 compare_actual: None,
             },
@@ -2137,10 +2155,17 @@ mod tests {
 
     #[test]
     fn process_response_status_match() {
-        let expected = ResultData {
-            status: 200,
-            body: serde_json::Value::default(),
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Schema(Specification::<u16> {
+                one_of: Some(vec![200, 201, 202]),
+                value: None,
+                min: None,
+                max: None,
+                none_of: None,
+            })),
+            body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2156,7 +2181,11 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
-                actual: Option::from(ResultData { ..expected.clone() }),
+                actual: Some(ResponseResultData {
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                    status: 200,
+                }),
                 compare_request: None,
                 compare_actual: None,
             },
@@ -2170,10 +2199,11 @@ mod tests {
 
     #[test]
     fn process_response_status_mismatch() {
-        let expected = ResultData {
-            status: 200,
-            body: serde_json::Value::default(),
+        let expected = ExpectedResultData {
+            status: Some(ValueOrSpecification::Value(200)),
+            body: None,
             headers: Vec::default(),
+            ..ExpectedResultData::new()
         };
 
         let ignore_body: [String; 0] = [];
@@ -2189,9 +2219,10 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
-                actual: Option::from(ResultData {
+                actual: Option::from(ResponseResultData {
                     status: 500,
-                    ..expected.clone()
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
                 }),
                 compare_request: None,
                 compare_actual: None,
@@ -2213,7 +2244,7 @@ mod tests {
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty());
 
-        let result = ResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap()).await;
         assert_eq!(400, result.as_ref().unwrap().status);
     }
 
@@ -2228,7 +2259,7 @@ mod tests {
             .status(StatusCode::OK)
             .body(Body::from(val.to_string()));
 
-        let result = ResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap()).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!(val.to_string(), result.as_ref().unwrap().body.to_string());
     }
@@ -2241,7 +2272,7 @@ mod tests {
             //could we detect this and possibly account for it?
             .body(Body::from("\"ok;\""));
 
-        let result = ResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap()).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!("ok;", result.as_ref().unwrap().body.as_str().unwrap());
     }
@@ -2253,7 +2284,7 @@ mod tests {
             .status(StatusCode::OK)
             .body(Body::empty());
 
-        let result = ResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap()).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!(1, result.as_ref().unwrap().headers.len());
         assert!(result.as_ref().unwrap().body.is_null());

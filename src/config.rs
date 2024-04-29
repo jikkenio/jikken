@@ -59,11 +59,12 @@ impl Config {
             .chain(self.globals.iter())
             .map(|i| test::Variable {
                 name: i.0.to_string(),
-                value: serde_yaml::Value::String(i.1.to_string()),
-                data_type: test::variable::Type::String,
-                modifier: None,
-                format: None,
-                file: None,
+                value: test::file::StringOrDatumOrFile::Value(i.1.to_string()),
+                //value: serde_yaml::Value::String(i.1.to_string()),
+                //data_type: test::variable::Type::String,
+                //modifier: None,
+                //format: None,
+                //file: None,
                 source_path: "./".to_string(),
             })
             .collect()
