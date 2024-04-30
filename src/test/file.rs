@@ -9,14 +9,19 @@ use chrono::{Datelike, Local};
 use chrono::{Days, Months};
 use log::error;
 use log::trace;
+use num::Num;
+use rand::distributions::uniform::SampleUniform;
+use rand::rngs::ThreadRng;
 use rand::Rng;
+use rnglib::Language;
+use rnglib::RNG;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::fmt::Display;
 use std::fmt::{self};
+use std::fmt::{Debug, Display};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
@@ -61,6 +66,12 @@ pub struct DateSpecification {
     pub modifier: Option<variable::Modifier>,
 }
 
+#[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
+pub struct NameSpecification {
+    #[serde(flatten)]
+    pub specification: Specification<String>,
+}
+
 pub trait Checker {
     type Item;
     fn check(
@@ -68,6 +79,17 @@ pub trait Checker {
         val: &Self::Item,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>>;
+}
+
+impl Checker for NameSpecification {
+    type Item = String;
+    fn check(
+        &self,
+        val: &Self::Item,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        self.specification.check(val, formatter)
+    }
 }
 
 impl<T> Specification<T>
@@ -513,6 +535,10 @@ pub enum DatumSchema {
         #[serde(flatten)]
         date: Option<DateSpecification>,
     },
+    Name {
+        #[serde(flatten)]
+        name: Option<NameSpecification>,
+    },
     List {
         #[serde(skip_serializing_if = "Option::is_none")]
         schema: Option<Box<DatumSchema>>,
@@ -536,7 +562,27 @@ impl DatumSchema {
         ret.append(self.check_list(actual, formatter).as_mut());
         ret.append(self.check_object(actual, formatter).as_mut());
         ret.append(self.check_date(actual, formatter).as_mut());
+        ret.append(self.check_name(actual, formatter).as_mut());
         ret
+    }
+
+    fn check_name(
+        &self,
+        actual: &serde_json::Value,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        match self {
+            DatumSchema::Name { name } => {
+                if !actual.is_string() {
+                    return vec![Validated::fail(formatter("string type", "type"))];
+                }
+
+                name.as_ref()
+                    .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+                    .unwrap_or(vec![Good(())])
+            }
+            _ => vec![Good(())],
+        }
     }
 
     fn check_date(
@@ -547,7 +593,7 @@ impl DatumSchema {
         match self {
             DatumSchema::Date { date } => {
                 if !actual.is_string() {
-                    return vec![Validated::fail(formatter("float type", "type"))];
+                    return vec![Validated::fail(formatter("string type", "type"))];
                 }
 
                 date.as_ref()
@@ -978,6 +1024,8 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
 pub fn generate_number<T>(spec: &Specification<T>, max_attempts: u16) -> Option<T>
 where
     T: num::Num
+        + num::Bounded
+        + Copy
         + rand::distributions::uniform::SampleUniform
         + std::cmp::PartialOrd
         + std::default::Default
@@ -1000,8 +1048,10 @@ where
                     .get(rng.gen_range(0..vals.len()))
                     .unwrap_or(&T::default())
                     .clone(),
-                None => rng.gen_range(
-                    spec.min.clone().unwrap_or_default()..spec.max.clone().unwrap_or_default(),
+                None => generate_number_in_range(
+                    spec.min.clone().unwrap_or(T::min_value()),
+                    spec.max.clone().unwrap_or(T::max_value()),
+                    &mut rng,
                 ),
             };
         })
@@ -1027,8 +1077,10 @@ pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f6
                     .get(rng.gen_range(0..vals.len()))
                     .unwrap_or(&f64::default())
                     .clone(),
-                None => rng.gen_range(
-                    spec.min.clone().unwrap_or_default()..spec.max.clone().unwrap_or_default(),
+                None => generate_number_in_range(
+                    spec.min.clone().unwrap_or(f64::MIN),
+                    spec.max.clone().unwrap_or(f64::MAX),
+                    &mut rng,
                 ),
             };
         })
@@ -1079,6 +1131,18 @@ pub fn generate_string(spec: &Specification<String>, max_attempts: u16) -> Optio
     None
 }
 
+fn generate_number_in_range<T: Num + SampleUniform + PartialOrd + Copy + Debug>(
+    min: T,
+    max: T,
+    rng: &mut ThreadRng,
+) -> T {
+    if min >= max {
+        min
+    } else {
+        rng.gen_range(min..=max)
+    }
+}
+
 pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<String> {
     if let Some(val) = &spec.specification.value {
         return spec.get(val).ok();
@@ -1089,7 +1153,13 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         .min
         .as_ref()
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
-        .unwrap_or_default();
+        .unwrap_or(
+            DateTime::<Local>::default()
+                .with_day(1)
+                .unwrap()
+                .with_month(1)
+                .unwrap(),
+        );
 
     let max = spec
         .specification
@@ -1112,15 +1182,19 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                     .unwrap_or(&String::default())
                     .clone(),
                 None => {
-                    let year = rng.gen_range(year_range.0..=year_range.1);
+                    let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
 
                     let month = if year == year_range.1 {
-                        rng.gen_range(month_range.0..=month_range.1)
+                        generate_number_in_range(month_range.0, month_range.1, &mut rng)
                     } else {
-                        rng.gen_range(1..=12)
+                        generate_number_in_range(1, 12, &mut rng)
                     };
 
-                    let day = rng.gen_range(day_range.0..=28);
+                    let day = if month == month_range.1 && year == year_range.1 {
+                        generate_number_in_range(day_range.0, day_range.1, &mut rng)
+                    } else {
+                        generate_number_in_range(day_range.0, 28, &mut rng)
+                    };
 
                     return chrono::NaiveDate::default()
                         .with_year(year)
@@ -1134,6 +1208,25 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         })
         .filter(|date_str| {
             spec.check(date_str, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        })
+        .nth(0)
+}
+
+pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
+    let rng = RNG::try_from(&Language::Fantasy).unwrap();
+    (0..max_attempts)
+        .map(|_| {
+            return match spec.specification.one_of.as_ref() {
+                Some(_) => generate_string(&spec.specification, max_attempts).unwrap_or_default(),
+                None => rng.generate_name(),
+            };
+        })
+        .filter(|v| {
+            spec.specification
+                .check(v, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_good()
@@ -1169,6 +1262,11 @@ pub fn generate_value_from_schema(
         .map(|v| serde_json::Value::from(v)),
         DatumSchema::Date { date } => generate_date(
             date.as_ref().unwrap_or(&DateSpecification::default()),
+            max_attempts,
+        )
+        .map(|v| serde_json::Value::from(v)),
+        DatumSchema::Name { name } => generate_name(
+            name.as_ref().unwrap_or(&NameSpecification::default()),
             max_attempts,
         )
         .map(|v| serde_json::Value::from(v)),
@@ -1699,9 +1797,35 @@ mod tests {
     }
 
     #[test]
+    fn number_generation_max_greater_than_min() {
+        let mut rng = rand::thread_rng();
+        let res = generate_number_in_range(10, 0, &mut rng);
+        assert_eq!(10, res);
+    }
+
+    #[test]
+    fn number_generation_range_of_1() {
+        let mut rng = rand::thread_rng();
+        let res = generate_number_in_range(10, 10, &mut rng);
+        assert_eq!(10, res);
+    }
+
+    #[test]
     fn date_generation() {
         let spec = DateSpecification::default();
         let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn name_generation() {
+        let spec = NameSpecification::default();
+        let val = generate_name(&spec, 10);
         assert!(val.is_some());
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
