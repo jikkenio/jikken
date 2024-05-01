@@ -30,14 +30,50 @@ use validated::Validated::{self, Good};
 
 #[derive(Default)]
 pub struct Report {
+    pub test_files: u16,
     pub run: u16,
     pub passed: u16,
     pub failed: u16,
+    pub skipped: u16,
 }
 
-impl Report {
-    pub fn skipped(&self) -> u16 {
-        self.run - (self.passed + self.failed)
+impl From<ExecutionResult> for Report {
+    fn from(execution_result: ExecutionResult) -> Self {
+        let test_files = execution_result.test_results.len();
+        let totals = execution_result
+            .test_results
+            .into_iter()
+            .map(|tr| {
+                if tr.iteration_results.is_empty() {
+                    return (0, 0, 1);
+                } else {
+                    return tr.iteration_results.into_iter().fold(
+                        (0, 0, 0),
+                        |(passed, failed, skipped), result| {
+                            let fail = result.is_err() || !result.unwrap().0;
+                            (passed + !fail as u16, failed + fail as u16, skipped as u16)
+                        },
+                    );
+                }
+            })
+            .fold(
+                (0, 0, 0),
+                |(total_passed, total_failed, total_skipped), (passed, failed, skipped)| {
+                    (
+                        total_passed + passed,
+                        total_failed + failed,
+                        total_skipped + skipped,
+                    )
+                },
+            );
+
+        Report {
+            skipped: totals.2,
+            failed: totals.1,
+            passed: totals.0,
+            test_files: test_files as u16,
+            run: totals.1 + totals.0,
+        }
     }
 }
 
@@ -818,21 +854,7 @@ pub async fn execute_tests(
             .ok()
     });
 
-    let run = execution_result.test_results.len();
-    let totals = execution_result
-        .test_results
-        .into_iter()
-        .flat_map(|tr| tr.iteration_results)
-        .fold((0, 0), |(passed, failed), result| {
-            let fail = result.is_err() || !result.unwrap().0;
-            (passed + !fail as u16, failed + fail as u16)
-        });
-
-    Report {
-        failed: totals.1,
-        passed: totals.0,
-        run: run as u16,
-    }
+    Report::from(execution_result)
 }
 
 async fn run(
@@ -1570,11 +1592,12 @@ fn http_request_from_test_spec(
         .flat_map(|(_, v)| {
             v.into_iter()
                 .map(|(_, cookie)| {
-                    if !(cookie.secure ^ is_secure) { 
-                    (
-                        "Cookie".to_string(),
-                        format!("{}={}", cookie.key.clone(), cookie.value.clone()),
-                    ) } else {
+                    if !(cookie.secure ^ is_secure) {
+                        (
+                            "Cookie".to_string(),
+                            format!("{}={}", cookie.key.clone(), cookie.value.clone()),
+                        )
+                    } else {
                         ("".to_string(), "".to_string())
                     }
                 })
@@ -2504,5 +2527,22 @@ mod tests {
             false,
             ignored_due_to_tag_filter(&test_definition, &tags, &tag_mode)
         );
+    }
+
+    #[test]
+    fn empty_execution_result_is_all_skips() {
+        let execution_result = ExecutionResult {
+            test_results: vec![TestResult {
+                test_name: "name".to_string(),
+                iteration_results: vec![],
+            }],
+        };
+
+        let report = Report::from(execution_result);
+        assert_eq!(0, report.failed);
+
+        assert_eq!(0, report.passed);
+
+        assert_eq!(1, report.skipped);
     }
 } //mod tests
