@@ -11,11 +11,12 @@ mod updater;
 
 use clap::{Parser, Subcommand};
 use glob::{glob_with, MatchOptions};
+use log::warn;
 use log::{debug, error, info, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -191,6 +192,22 @@ fn satisfies_potential_glob_filter(glob_pattern: &Option<glob::Pattern>, file_na
     match &glob_pattern {
         Some(p) => p.matches_with(file_name, MatchOptions::default()),
         None => true,
+    }
+}
+
+fn check_supplied_config_file_existence(config_file: &Option<String>) {
+    if let Some(file) = config_file {
+        check_supplied_file_existence("config", &PathBuf::from(file));
+    }
+}
+
+fn check_supplied_file_existence(file_description: &str, path: &Path) {
+    if !std::path::Path::try_exists(path).unwrap_or(false) {
+        warn!(
+            "Supplied {} file does not exist: {}",
+            file_description,
+            path.as_os_str().to_str().unwrap_or_default()
+        );
     }
 }
 
@@ -536,8 +553,11 @@ async fn main() -> std::process::ExitCode {
             paths,
             junit,
         } => {
+            // \todo create a runner function that takes an Fn trait and
+            // eliminates the duplicated code
             updater::check_for_updates().await;
             log::logger().flush();
+            check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
                 run_tests(
                     paths,
@@ -563,6 +583,7 @@ async fn main() -> std::process::ExitCode {
         } => {
             updater::check_for_updates().await;
             log::logger().flush();
+            check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
                 run_tests(
                     paths,
@@ -586,6 +607,7 @@ async fn main() -> std::process::ExitCode {
             paths,
         } => {
             updater::check_for_updates().await;
+            check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
                 run_tests(
                     paths,
