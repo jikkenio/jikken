@@ -41,9 +41,46 @@ impl Report {
     }
 }
 
+pub struct IterationResult {
+    pub iteration_number: u32,
+    pub status: TestStatus,
+    pub stage_results: Option<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>,
+}
+
+impl IterationResult {
+    pub fn new(
+        iteration_number: u32,
+        stage_results: Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>,
+    ) -> Self {
+        //Determine test status here and store in the status field
+        let passed = *stage_results
+            .as_ref()
+            .map(|(passed, _)| passed)
+            .unwrap_or(&false);
+
+        Self {
+            iteration_number,
+            status: if passed {
+                TestStatus::Passed
+            } else {
+                TestStatus::Failed
+            },
+            stage_results: Some(stage_results),
+        }
+    }
+
+    pub fn new_skipped(iteration_number: u32) -> Self {
+        Self {
+            iteration_number,
+            status: TestStatus::Skipped,
+            stage_results: None,
+        }
+    }
+}
+
 pub struct TestResult {
     pub test_name: String,
-    pub iteration_results: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>,
+    pub iteration_results: Vec<IterationResult>,
 }
 
 pub struct ExecutionResult {
@@ -87,46 +124,53 @@ impl ExecutionResultFormatter for JunitResultFormatter {
         lines.push(r#"<testsuites>"#.to_string());
         for test in res.test_results.iter() {
             lines.push(format!(r#"<testsuite name="{}">"#, test.test_name));
-            for (it_num, it) in test.iteration_results.iter().enumerate() {
-                let test_iteration_name =
-                    format!("{}.Iterations.{}", test.test_name.as_str(), it_num + 1);
+            for iteration_result in test.iteration_results.iter() {
+                let test_iteration_name = format!(
+                    "{}.Iterations.{}",
+                    test.test_name.as_str(),
+                    iteration_result.iteration_number + 1
+                );
                 lines.push(format!(
                     r#"<testsuite name="{}">"#,
                     test_iteration_name.as_str(),
                 ));
+                for stage_result in iteration_result.stage_results.iter() {
+                    match &stage_result {
+                        Ok((_passed, stage_results)) => {
+                            for (stage_number, stage_result) in stage_results.iter().enumerate() {
+                                if stage_result.status == TestStatus::Passed {
+                                    lines.push(format!(
+                                        r#"<testcase name="stage_{}" classname="{}"/>"#,
+                                        stage_number + 1,
+                                        test_iteration_name.as_str()
+                                    ));
+                                } else {
+                                    lines.push(format!(
+                                        r#"<testcase name="stage_{}" classname="{}">"#,
+                                        stage_number + 1,
+                                        test_iteration_name.as_str()
+                                    ));
 
-                match &it {
-                    Ok((_passed, stage_results)) => {
-                        for (stage_number, stage_result) in stage_results.iter().enumerate() {
-                            if stage_result.status == TestStatus::Passed {
-                                lines.push(format!(
-                                    r#"<testcase name="stage_{}" classname="{}"/>"#,
-                                    stage_number + 1,
-                                    test_iteration_name.as_str()
-                                ));
-                            } else {
-                                lines.push(format!(
-                                    r#"<testcase name="stage_{}" classname="{}">"#,
-                                    stage_number + 1,
-                                    test_iteration_name.as_str()
-                                ));
-
-                                if let validated::Validated::Fail(nec) = &stage_result.validation {
-                                    for i in nec {
-                                        lines.push(format!(
-                                            r#"<failure message="{}" type="AssertionError"/>"#,
-                                            i
-                                        ));
+                                    if let validated::Validated::Fail(nec) =
+                                        &stage_result.validation
+                                    {
+                                        for i in nec {
+                                            lines.push(format!(
+                                                r#"<failure message="{}" type="AssertionError"/>"#,
+                                                i
+                                            ));
+                                        }
                                     }
-                                }
 
-                                lines.push(r#"</testcase>"#.to_string());
+                                    lines.push(r#"</testcase>"#.to_string());
+                                }
                             }
                         }
-                    }
-                    Err(_) => {
-                        lines
-                            .push(r#"<testcase name="Initial" classname="Initial" />"#.to_string());
+                        Err(_) => {
+                            lines.push(
+                                r#"<testcase name="Initial" classname="Initial" />"#.to_string(),
+                            );
+                        }
                     }
                 }
 
@@ -266,17 +310,20 @@ async fn run_tests<T: ExecutionPolicy>(
             message_displayed = true;
         }
 
-        let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
-            Vec::new();
+        //let mut test_result: Vec<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>> =
+        //    Vec::new();
+        let mut iteration_results: Vec<IterationResult> = Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
             // TODO: clean this up based on policies
             // I don't see a clean way to access it without refactoring
             if any_failures && !config.settings.continue_on_failure {
+                iteration_results.push(IterationResult::new_skipped(iteration));
                 break;
             }
 
             if test.disabled {
+                iteration_results.push(IterationResult::new_skipped(iteration));
                 warn!("Skipping disabled test : {test_name}");
                 break;
             }
@@ -313,11 +360,11 @@ async fn run_tests<T: ExecutionPolicy>(
 
             log::logger().flush();
 
-            test_result.push(result);
+            iteration_results.push(IterationResult::new(iteration, result));
         }
         results.push(TestResult {
             test_name,
-            iteration_results: test_result,
+            iteration_results,
         });
     }
 
@@ -400,6 +447,7 @@ pub enum StageType {
 pub enum TestStatus {
     Passed = 1,
     Failed = 2,
+    Skipped = 5,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -770,7 +818,8 @@ pub async fn execute_tests(
 
     let total_tests = tests_to_run_with_dependencies
         .iter()
-        .fold(0, |acc, x| acc + x.len());
+        .flatten()
+        .fold(0, |acc, x| acc + x.iterate);
 
     let mut session: Option<telemetry::Session> = None;
 
@@ -824,8 +873,9 @@ pub async fn execute_tests(
         .into_iter()
         .flat_map(|tr| tr.iteration_results)
         .fold((0, 0), |(passed, failed), result| {
-            let fail = result.is_err() || !result.unwrap().0;
-            (passed + !fail as u16, failed + fail as u16)
+            let fail = result.status == TestStatus::Failed;
+            let pass = result.status == TestStatus::Passed;
+            (passed + pass as u16, failed + fail as u16)
         });
 
     Report {
@@ -1570,11 +1620,12 @@ fn http_request_from_test_spec(
         .flat_map(|(_, v)| {
             v.into_iter()
                 .map(|(_, cookie)| {
-                    if !(cookie.secure ^ is_secure) { 
-                    (
-                        "Cookie".to_string(),
-                        format!("{}={}", cookie.key.clone(), cookie.value.clone()),
-                    ) } else {
+                    if !(cookie.secure ^ is_secure) {
+                        (
+                            "Cookie".to_string(),
+                            format!("{}={}", cookie.key.clone(), cookie.value.clone()),
+                        )
+                    } else {
                         ("".to_string(), "".to_string())
                     }
                 })
