@@ -149,7 +149,12 @@ impl Variable {
                 let file_path = if Path::new(file).exists() {
                     file.clone()
                 } else {
-                    format!("{}{}", self.source_path, file)
+                    format!(
+                        "{}{}{}",
+                        self.source_path,
+                        std::path::MAIN_SEPARATOR_STR,
+                        file
+                    )
                 };
 
                 return match std::fs::read_to_string(&file_path) {
@@ -161,7 +166,7 @@ impl Variable {
                     }
                 };
             }
-            StringOrDatumOrFile::Value(str_val) => {
+            StringOrDatumOrFile::Value { value: str_val } => {
                 return definition.resolve_variables(
                     str_val,
                     &HashMap::new(),
@@ -582,7 +587,15 @@ impl Definition {
     ) -> Option<BodyOrSchema> {
         serde_json::to_string(&json_val)
             .map(|jv| self.resolve_variables(jv.as_str(), state_variables, variables, iteration))
-            .and_then(|rs| serde_json::from_str::<serde_json::Value>(rs.as_str()))
+            .and_then(|rs| {
+                let rsv = rs.replace("\n", "").replace("\r", "");
+                let ret = serde_json::from_str::<serde_json::Value>(rsv.as_str());
+                if ret.is_err() {
+                    return serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'));
+                } else {
+                    return ret;
+                }
+            })
             .map(|val| BodyOrSchema::Body(val))
             .ok()
     }
@@ -682,6 +695,7 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> Option<serde_json::Value> {
+        trace!("get_request_body({:?})", body);
         if let Some(body) = body {
             return self
                 .resolve_body_variables(&body.data, state_variables, variables, iteration)
@@ -777,7 +791,9 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFile::Value("my_val".to_string()),
+                value: StringOrDatumOrFile::Value {
+                    value: "my_val".to_string(),
+                },
                 source_path: "path".to_string(),
             }],
             global_variables: vec![],
@@ -809,7 +825,9 @@ mod tests {
         //to the vars in the TD.
         let vars: Vec<Variable> = vec![Variable {
             name: "my_var".to_string(),
-            value: StringOrDatumOrFile::Value("my_val2".to_string()),
+            value: StringOrDatumOrFile::Value {
+                value: "my_val2".to_string(),
+            },
             //data_type: variable::Type::String,
             //value: serde_yaml::to_value("my_val2").unwrap(),
             //modifier: None,
@@ -828,12 +846,16 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFile::Value("my_val".to_string()),
+                value: StringOrDatumOrFile::Value {
+                    value: "my_val".to_string(),
+                },
                 source_path: "path".to_string(),
             }],
             global_variables: vec![Variable {
                 name: "my_var2".to_string(),
-                value: StringOrDatumOrFile::Value("my_val3".to_string()),
+                value: StringOrDatumOrFile::Value {
+                    value: "my_val3".to_string(),
+                },
                 source_path: "path".to_string(),
             }],
             stages: vec![],

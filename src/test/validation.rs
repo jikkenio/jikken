@@ -2,6 +2,7 @@ use crate::test;
 use crate::test::definition;
 use crate::test::variable;
 use std::fmt;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Error {
@@ -57,7 +58,10 @@ pub fn validate_file(
         iterate: file.iterate.unwrap_or(1),
         variables: test::Variable::validate_variables_opt(
             file.variables,
-            &variable::parse_source_path(&file.filename),
+            PathBuf::from(&file.filename)
+                .parent()
+                .and_then(|p| p.to_str())
+                .unwrap_or(&file.filename),
         )?,
         global_variables: global_variables.to_vec(),
         stages: definition::StageDescriptor::validate_stages_opt(
