@@ -206,7 +206,9 @@ mod openapi_legacy {
                 RefOr::Reference { .. } => None,
                 RefOr::Item(t) => Some(test::file::UnvalidatedVariable {
                     name: t.name.clone(),
-                    value: test::file::StringOrDatumOrFile::Value("value".to_string()),
+                    value: test::file::StringOrDatumOrFile::Value {
+                        value: "value".to_string(),
+                    },
                 }),
             })
             .filter(Option::is_some)
@@ -457,7 +459,9 @@ mod openapi_v31 {
                     //file: None,
                     //format: None,
                     //modifier: None,
-                    value: test::file::StringOrDatumOrFile::Value("".to_string()),
+                    value: test::file::StringOrDatumOrFile::Value {
+                        value: "".to_string(),
+                    },
                 }),
             })
             .filter(Option::is_some)

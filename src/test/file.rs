@@ -533,11 +533,11 @@ pub enum DatumSchema {
     },
     Date {
         #[serde(flatten)]
-        date: Option<DateSpecification>,
+        specification: Option<DateSpecification>,
     },
     Name {
         #[serde(flatten)]
-        name: Option<NameSpecification>,
+        specification: Option<NameSpecification>,
     },
     List {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -572,7 +572,9 @@ impl DatumSchema {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match self {
-            DatumSchema::Name { name } => {
+            DatumSchema::Name {
+                specification: name,
+            } => {
                 if !actual.is_string() {
                     return vec![Validated::fail(formatter("string type", "type"))];
                 }
@@ -591,7 +593,9 @@ impl DatumSchema {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match self {
-            DatumSchema::Date { date } => {
+            DatumSchema::Date {
+                specification: date,
+            } => {
                 if !actual.is_string() {
                     return vec![Validated::fail(formatter("string type", "type"))];
                 }
@@ -856,7 +860,7 @@ impl Hash for BodyOrSchema {
 pub enum StringOrDatumOrFile {
     File { file: String },
     Schema(DatumSchema),
-    Value(String),
+    Value { value: String },
 }
 
 pub struct BodyOrSchemaChecker<'a> {
@@ -1011,6 +1015,7 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
     let result: Result<test::File, serde_yaml::Error> = serde_yaml::from_str(&file_data);
     match result {
         Ok(mut file) => {
+            trace!("File is {:?}", file);
             file.filename = String::from(filename);
             Ok(file)
         }
@@ -1260,12 +1265,16 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(|v| serde_json::Value::from(v)),
-        DatumSchema::Date { date } => generate_date(
+        DatumSchema::Date {
+            specification: date,
+        } => generate_date(
             date.as_ref().unwrap_or(&DateSpecification::default()),
             max_attempts,
         )
         .map(|v| serde_json::Value::from(v)),
-        DatumSchema::Name { name } => generate_name(
+        DatumSchema::Name {
+            specification: name,
+        } => generate_name(
             name.as_ref().unwrap_or(&NameSpecification::default()),
             max_attempts,
         )
@@ -1513,20 +1522,24 @@ mod tests {
     fn datum_date_type_validation() {
         assert_eq!(
             true,
-            DatumSchema::Date { date: None }
-                .check(&serde_json::json!({}), &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail(),
+            DatumSchema::Date {
+                specification: None
+            }
+            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_fail(),
         );
 
         assert_eq!(
             false,
-            DatumSchema::Date { date: None }
-                .check(&serde_json::json!("2024-12-08"), &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail(),
+            DatumSchema::Date {
+                specification: None
+            }
+            .check(&serde_json::json!("2024-12-08"), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_fail(),
         );
     }
 

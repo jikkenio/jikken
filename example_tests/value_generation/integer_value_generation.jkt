@@ -1,0 +1,10 @@
+name: A cat for every status code  
+request:
+  url: https://http.cat/${status_val}
+response:
+  status: 200
+variables:
+  - name: status_val
+    type: int
+    oneOf: [200,201,202,400,500]
+          

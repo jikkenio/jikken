@@ -1,0 +1,14 @@
+name: Using Variable to Inject File Json Contents 
+request:
+  method: Post
+  url: https://api.jikken.io/v1/test_login
+  body: ${body}
+response:
+  status: 200
+  extract:
+    - name: token
+      field: auth.token
+variables:
+  - name: body
+    file: login_data.json
+    

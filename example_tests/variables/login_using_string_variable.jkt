@@ -1,0 +1,17 @@
+name: Using Simple Variable  
+request:
+  method: Post
+  url: https://api.jikken.io/v1/test_login
+  body: {
+    "username": "testuser",
+    "password": "${password_val}"
+}
+response:
+  status: 200
+  extract:
+    - name: token
+      field: auth.token
+variables:
+  - name: password_val
+    value: password
+    

@@ -1065,7 +1065,7 @@ fn process_response(
                          ignore_body: &[String],
                          strict: bool|
      -> Vec<Validated<(), String>> {
-        trace!("In validate body");
+        trace!("In validate body({:?})", expected);
         if let Some(exp) = expected {
             trace!("validating body");
             BodyOrSchemaChecker {
