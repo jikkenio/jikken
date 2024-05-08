@@ -13,6 +13,7 @@ use num::Num;
 use rand::distributions::uniform::SampleUniform;
 use rand::rngs::ThreadRng;
 use rand::Rng;
+use regex::Regex;
 use rnglib::Language;
 use rnglib::RNG;
 use serde::{Deserialize, Serialize};
@@ -72,6 +73,12 @@ pub struct NameSpecification {
     pub specification: Specification<String>,
 }
 
+#[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
+pub struct EmailSpecification {
+    #[serde(flatten)]
+    pub specification: Specification<String>,
+}
+
 pub trait Checker {
     type Item;
     fn check(
@@ -89,6 +96,33 @@ impl Checker for NameSpecification {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         self.specification.check(val, formatter)
+    }
+}
+
+impl Checker for EmailSpecification {
+    type Item = String;
+    fn check(
+        &self,
+        val: &Self::Item,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        //standard browser regex for email
+        let email_regex: Regex = Regex::new(
+            r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+        )
+        .unwrap();
+
+        let matches = email_regex.is_match(val);
+
+        if !matches {
+            trace!("failed email regex");
+            vec![Validated::fail(formatter(
+                "email format",
+                format!("{}", val).as_str(),
+            ))]
+        } else {
+            self.specification.check(val, formatter)
+        }
     }
 }
 
@@ -539,6 +573,10 @@ pub enum DatumSchema {
         #[serde(flatten)]
         specification: Option<NameSpecification>,
     },
+    EmailSpecification {
+        #[serde(flatten)]
+        specification: Option<EmailSpecification>,
+    },
     List {
         #[serde(skip_serializing_if = "Option::is_none")]
         schema: Option<Box<DatumSchema>>,
@@ -556,177 +594,163 @@ impl DatumSchema {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         trace!("validating datum");
-        let mut ret = self.check_float(actual, formatter);
-        ret.append(self.check_int(actual, formatter).as_mut());
-        ret.append(self.check_string(actual, formatter).as_mut());
-        ret.append(self.check_list(actual, formatter).as_mut());
-        ret.append(self.check_object(actual, formatter).as_mut());
-        ret.append(self.check_date(actual, formatter).as_mut());
-        ret.append(self.check_name(actual, formatter).as_mut());
-        ret
+        match self {
+            DatumSchema::Date { specification } => {
+                Self::check_date(specification, actual, formatter)
+            }
+            DatumSchema::EmailSpecification { specification } => {
+                Self::check_email(specification, actual, formatter)
+            }
+            DatumSchema::Float { specification } => {
+                Self::check_float(specification, actual, formatter)
+            }
+            DatumSchema::Int { specification } => Self::check_int(specification, actual, formatter),
+            DatumSchema::List { schema } => Self::check_list(schema, actual, formatter),
+            DatumSchema::Object { schema } => Self::check_object(schema, actual, formatter),
+            DatumSchema::Name { specification } => {
+                Self::check_name(specification, actual, formatter)
+            }
+            DatumSchema::String { specification } => {
+                Self::check_string(specification, actual, formatter)
+            }
+        }
     }
 
     fn check_name(
-        &self,
+        spec: &Option<NameSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::Name {
-                specification: name,
-            } => {
-                if !actual.is_string() {
-                    return vec![Validated::fail(formatter("string type", "type"))];
-                }
-
-                name.as_ref()
-                    .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_string() {
+            return vec![Validated::fail(formatter("string type", "type"))];
         }
+
+        spec.as_ref()
+            .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+            .unwrap_or(vec![Good(())])
+            .clone()
+    }
+
+    fn check_email(
+        spec: &Option<EmailSpecification>,
+        actual: &serde_json::Value,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        if !actual.is_string() {
+            return vec![Validated::fail(formatter("string type", "type"))];
+        }
+
+        spec.as_ref()
+            .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+            .unwrap_or(vec![Good(())])
+            .clone()
     }
 
     fn check_date(
-        &self,
+        spec: &Option<DateSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::Date {
-                specification: date,
-            } => {
-                if !actual.is_string() {
-                    return vec![Validated::fail(formatter("string type", "type"))];
-                }
-
-                date.as_ref()
-                    .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_string() {
+            return vec![Validated::fail(formatter("string type", "type"))];
         }
+
+        spec.as_ref()
+            .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+            .unwrap_or(vec![Good(())])
     }
 
     fn check_float(
-        &self,
+        spec: &Option<FloatSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::Float { specification } => {
-                if !actual.is_f64() {
-                    return vec![Validated::fail(formatter("float type", "type"))];
-                }
-
-                specification
-                    .as_ref()
-                    .map(|s| s.check(&actual.as_f64().unwrap(), formatter))
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_f64() {
+            return vec![Validated::fail(formatter("float type", "type"))];
         }
+
+        spec.as_ref()
+            .map(|s| s.check(&actual.as_f64().unwrap(), formatter))
+            .unwrap_or(vec![Good(())])
     }
 
     fn check_int(
-        &self,
+        spec: &Option<Specification<i64>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::Int { specification } => {
-                if !actual.is_i64() {
-                    return vec![Validated::fail(formatter("int type", "type"))];
-                }
-
-                specification
-                    .as_ref()
-                    .map(|s| s.check(&actual.as_i64().unwrap(), formatter))
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_i64() {
+            return vec![Validated::fail(formatter("int type", "type"))];
         }
+
+        spec.as_ref()
+            .map(|s| s.check(&actual.as_i64().unwrap(), formatter))
+            .unwrap_or(vec![Good(())])
     }
 
     fn check_string(
-        &self,
+        spec: &Option<Specification<String>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::String { specification } => {
-                if !actual.is_string() {
-                    return vec![Validated::fail(formatter("string type", "type"))];
-                }
-
-                specification
-                    .as_ref()
-                    .map(|s| s.check(&actual.as_str().unwrap().to_string(), formatter))
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_string() {
+            return vec![Validated::fail(formatter("string type", "type"))];
         }
+
+        spec.as_ref()
+            .map(|s| s.check(&actual.as_str().unwrap().to_string(), formatter))
+            .unwrap_or(vec![Good(())])
     }
 
     fn check_list(
-        &self,
+        schema: &Option<Box<DatumSchema>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::List { schema } => {
-                if !actual.is_array() {
-                    return vec![Validated::fail(formatter("array type", "different type"))];
-                }
-
-                schema
-                    .as_ref()
-                    .map(|s| {
-                        actual
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|v| s.check(v, formatter))
-                            .flatten()
-                            .collect()
-                    })
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_array() {
+            return vec![Validated::fail(formatter("array type", "different type"))];
         }
+
+        schema
+            .as_ref()
+            .map(|s| {
+                actual
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| s.check(v, formatter))
+                    .flatten()
+                    .collect()
+            })
+            .unwrap_or(vec![Good(())])
     }
 
     fn check_object(
-        &self,
+        schema: &Option<BTreeMap<String, DatumSchema>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        match self {
-            DatumSchema::Object { schema } => {
-                if !actual.is_object() {
-                    return vec![Validated::fail(formatter("object type", "different type"))];
-                }
-
-                let vals = actual.as_object().unwrap();
-                schema
-                    .as_ref()
-                    .map(|bt| {
-                        bt.iter()
-                            .map(|(k, datum)| {
-                                vals.get(k)
-                                    .map(|v| datum.check(v, formatter))
-                                    .unwrap_or(vec![Validated::fail(formatter(
-                                        format!(r#"member "{k}""#).as_str(),
-                                        format!(r#"object with "{k}" missing"#).as_str(),
-                                    ))])
-                            })
-                            .flatten()
-                            .collect()
-                    })
-                    .unwrap_or(vec![Good(())])
-            }
-            _ => vec![Good(())],
+        if !actual.is_object() {
+            return vec![Validated::fail(formatter("object type", "different type"))];
         }
+
+        let vals = actual.as_object().unwrap();
+        schema
+            .as_ref()
+            .map(|bt| {
+                bt.iter()
+                    .map(|(k, datum)| {
+                        vals.get(k)
+                            .map(|v| datum.check(v, formatter))
+                            .unwrap_or(vec![Validated::fail(formatter(
+                                format!(r#"member "{k}""#).as_str(),
+                                format!(r#"object with "{k}" missing"#).as_str(),
+                            ))])
+                    })
+                    .flatten()
+                    .collect()
+            })
+            .unwrap_or(vec![Good(())])
     }
 }
 
@@ -1239,6 +1263,11 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
         .nth(0)
 }
 
+pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<String> {
+    generate_string(&spec.specification, max_attempts)
+        .map(|ran_string| format!("{}@gmail.com", ran_string))
+}
+
 pub fn generate_value_from_schema(
     schema: &DatumSchema,
     max_attempts: u16,
@@ -1276,6 +1305,13 @@ pub fn generate_value_from_schema(
             specification: name,
         } => generate_name(
             name.as_ref().unwrap_or(&NameSpecification::default()),
+            max_attempts,
+        )
+        .map(|v| serde_json::Value::from(v)),
+        DatumSchema::EmailSpecification {
+            specification: email,
+        } => generate_email(
+            email.as_ref().unwrap_or(&EmailSpecification::default()),
             max_attempts,
         )
         .map(|v| serde_json::Value::from(v)),
@@ -1839,6 +1875,18 @@ mod tests {
     fn name_generation() {
         let spec = NameSpecification::default();
         let val = generate_name(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn email_generation() {
+        let spec = EmailSpecification::default();
+        let val = generate_email(&spec, 10);
         assert!(val.is_some());
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
