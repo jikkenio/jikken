@@ -1,7 +1,7 @@
 name: Check Status
 requires: auth
 request:
-  url: https://api.jikken.io/v1/test_status
+  url: https://api.jikken.io/api/v1/examples/status
   headers:
     - header: Authorization
       value: ${token}
