@@ -1,11 +1,11 @@
-name: name: Using Variable to Inject File String Values  
+name: Using Variable to Inject File String Values  
 request:
   method: Post
-  url: https://api.jikken.io/v1/test_login
+  url: https://api.jikken.io/api/v1/examples/login
   body: {
     "username": "testuser",
     "password": "${password_val}"
-}
+  }
 response:
   status: 200
   extract:
@@ -14,4 +14,3 @@ response:
 variables:
   - name: password_val
     file: login_password
-    

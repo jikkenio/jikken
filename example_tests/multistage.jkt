@@ -3,7 +3,7 @@ tags: multi
 setup:
   request:
     method: Post
-    url: https://api.jikken.io/v1/test_login
+    url: https://api.jikken.io/api/v1/examples/login
     body: {
       "username": "testuser",
       "password": "password"
@@ -15,19 +15,19 @@ setup:
         field: auth.token
 stages:
   - request:
-      url: https://api.jikken.io/v1/test_status
+      url: https://api.jikken.io/api/v1/examples/status
       headers:
         - header: Authorization
           value: ${auth}
     response:
       status: 200
   - request:
-      url: https://api.jikken.io/v2/test_status
+      url: https://api.jikken.io/api/v2/examples/status
       headers:
         - header: Authorization
           value: ${auth}
     compare:
-      url: https://api.jikken.io/v1/test_status
+      url: https://api.jikken.io/api/v1/examples/status
     response:
       status: 200
       ignore:

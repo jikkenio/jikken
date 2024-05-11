@@ -1,7 +1,7 @@
 name: Using Variable to Inject File Json Contents 
 request:
   method: Post
-  url: https://api.jikken.io/v1/test_login
+  url: https://api.jikken.io/api/v1/examples/login
   body: ${body}
 response:
   status: 200
@@ -11,4 +11,3 @@ response:
 variables:
   - name: body
     file: login_data.json
-    
