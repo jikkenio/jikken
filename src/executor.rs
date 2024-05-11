@@ -595,6 +595,7 @@ pub struct ResultDetails {
 pub struct StageResult {
     pub stage: u32,
     pub stage_type: StageType,
+    pub stage_name: Option<String>,
     pub runtime: u32,
     pub status: TestStatus,
     pub details: ResultDetails,
@@ -1013,6 +1014,7 @@ async fn validate_td(
 fn process_response(
     stage: u32,
     stage_type: StageType,
+    stage_name: Option<String>,
     runtime: u32,
     details: ResultDetails,
     ignore_body: &[String],
@@ -1024,6 +1026,7 @@ fn process_response(
     let mut result = StageResult {
         stage,
         stage_type,
+        stage_name,
         runtime,
         details: details.clone(),
         status: TestStatus::Passed,
@@ -1225,6 +1228,7 @@ async fn validate_setup(
         let result = process_response(
             0,
             StageType::Setup,
+            None,
             runtime,
             details,
             &setup.response.clone().map_or(Vec::new(), |r| r.ignore),
@@ -1333,6 +1337,7 @@ async fn run_cleanup(
             let result = process_response(
                 counter,
                 StageType::Cleanup,
+                None,
                 runtime,
                 details,
                 &Vec::new(),
@@ -1390,6 +1395,7 @@ async fn run_cleanup(
         let result = process_response(
             counter,
             StageType::Cleanup,
+            None,
             runtime,
             details,
             &Vec::new(),
@@ -1448,6 +1454,7 @@ async fn run_cleanup(
         let result = process_response(
             counter,
             StageType::Cleanup,
+            None,
             runtime,
             details,
             &Vec::new(),
@@ -1574,6 +1581,7 @@ async fn validate_stage(
     let result = process_response(
         stage_index as u32,
         StageType::Normal,
+        stage.name.clone(),
         runtime,
         details,
         &stage.response.clone().map_or(Vec::new(), |r| r.ignore),
@@ -2065,6 +2073,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
@@ -2117,6 +2126,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
@@ -2158,6 +2168,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
@@ -2200,6 +2211,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
@@ -2246,6 +2258,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
@@ -2284,6 +2297,7 @@ mod tests {
         let actual = process_response(
             0,
             StageType::Normal,
+            None,
             0,
             ResultDetails {
                 request: RequestDetails {
