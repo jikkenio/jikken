@@ -299,7 +299,7 @@ impl StageDescriptor {
                 response: ResponseDescriptor::new_opt(response_opt)?,
                 variables: Vec::new(),
                 // source_path: source_path.to_string(),
-                name: Some("request".to_string()),
+                name: None,
                 delay: None,
             });
             count += 1;
