@@ -287,6 +287,7 @@ pub async fn create_test(
 }
 
 pub async fn complete_stage(
+    td: &test::Definition,
     test: &Test,
     iteration: u32,
     stage: &executor::StageResult,
@@ -318,7 +319,8 @@ pub async fn complete_stage(
 
     let post_body = serde_json::to_value(post_data)?;
 
-    let post_string = serde_json::to_string(&post_body)?;
+    let mut post_string = serde_json::to_string(&post_body)?;
+    post_string = td.redact_secrets(&post_string);
     trace!("telemetry_body: {}", post_string);
 
     let request = Request::builder()

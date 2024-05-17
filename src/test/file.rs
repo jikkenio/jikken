@@ -27,7 +27,6 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
-//add pattern
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Specification<T> {
@@ -874,6 +873,18 @@ impl Hash for BodyOrSchema {
     }
 }
 
+/**
+    We expose variables to the user as things
+    that are either:
+        - Strings
+        - Datums
+        - Files
+    However, our implementation type also treats Secrets as
+    obfuscated variables by leveraging SecretValue's.
+
+    This requires us to use 2 different types for the implementation
+    and the data file (jk::test::File) interface.
+**/
 #[derive(Hash, Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum StringOrDatumOrFile {

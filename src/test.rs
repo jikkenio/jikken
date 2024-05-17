@@ -10,14 +10,96 @@ use crate::test::definition::RequestBody;
 use crate::test::file::DatumSchema;
 use crate::test::file::StringOrDatumOrFile;
 use log::{debug, error, trace};
+use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
+use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use uuid::Uuid;
 
 use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
+
+#[derive(Deserialize, PartialEq)]
+pub struct SecretValue(String);
+
+impl SecretValue {
+    const REDACTED_VALUE: &'static str = "******";
+    fn redacted_value(&self) -> String {
+        let len = self.0.len();
+        match len {
+            0..=20 => Self::REDACTED_VALUE.to_string(),
+            _ => format!(
+                "{}{}{}",
+                &self.0[0..4],
+                Self::REDACTED_VALUE,
+                &self.0[len - 4..len]
+            ),
+        }
+    }
+
+    pub fn new(v: &str) -> Self {
+        Self(v.to_string())
+    }
+
+    fn redact(&self, s: &str) -> String {
+        s.replace(&self.0, &self.redacted_value())
+    }
+}
+
+impl Serialize for SecretValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.redacted_value())
+    }
+}
+
+impl fmt::Display for SecretValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.redacted_value())
+    }
+}
+
+impl fmt::Debug for SecretValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.redacted_value())
+    }
+}
+
+impl Hash for SecretValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
+    }
+}
+
+impl Clone for SecretValue {
+    fn clone(&self) -> Self {
+        SecretValue(self.0.clone())
+    }
+}
+
+#[derive(Hash, Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum StringOrDatumOrFileOrSecret {
+    File { file: String },
+    Schema(DatumSchema),
+    Value { value: String },
+    Secret { secret: SecretValue },
+}
+
+impl From<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
+    fn from(item: StringOrDatumOrFile) -> Self {
+        match item {
+            StringOrDatumOrFile::File { file } => StringOrDatumOrFileOrSecret::File { file },
+            StringOrDatumOrFile::Schema(s) => StringOrDatumOrFileOrSecret::Schema(s),
+            StringOrDatumOrFile::Value { value } => StringOrDatumOrFileOrSecret::Value { value },
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct File {
@@ -93,7 +175,7 @@ impl File {
 pub struct Variable {
     pub name: String,
     #[serde(flatten)]
-    pub value: StringOrDatumOrFile,
+    pub value: StringOrDatumOrFileOrSecret,
 
     #[serde(skip_serializing)]
     pub source_path: String,
@@ -107,7 +189,7 @@ impl Variable {
         // TODO: Add validation errors
         Ok(Variable {
             name: variable.name.clone(),
-            value: variable.value,
+            value: variable.value.into(),
             source_path: source_path.to_string(),
         })
     }
@@ -116,28 +198,31 @@ impl Variable {
         variables: Option<Vec<file::UnvalidatedVariable>>,
         source_path: &str,
     ) -> Result<Vec<Variable>, validation::Error> {
-        match variables {
-            None => Ok(Vec::new()),
-            Some(vars) => {
-                let count = vars.len();
-                let results = vars
-                    .into_iter()
+        let count = variables
+            .as_ref()
+            .map(|vars| vars.len())
+            .unwrap_or_default();
+        let ret = variables
+            .map(|vars| {
+                vars.into_iter()
                     .map(|f| Variable::new(f, source_path))
                     .filter_map(|v| match v {
                         Ok(x) => Some(x),
                         Err(_) => None,
                     })
-                    .collect::<Vec<Variable>>();
-                if results.len() != count {
-                    Err(validation::Error {
-                        reason: "blah".to_string(),
-                    })
-                } else {
-                    Ok(results)
-                }
-            }
+                    .collect::<Vec<Variable>>()
+            })
+            .unwrap_or_default();
+
+        if ret.len() != count {
+            return Err(validation::Error {
+                reason: "blah".to_string(),
+            });
         }
+
+        Ok(ret)
     }
+
     pub fn generate_value(
         &self,
         definition: &Definition,
@@ -145,7 +230,7 @@ impl Variable {
         global_variables: &[Variable],
     ) -> String {
         match &self.value {
-            StringOrDatumOrFile::File { file } => {
+            StringOrDatumOrFileOrSecret::File { file } => {
                 let file_path = if Path::new(file).exists() {
                     file.clone()
                 } else {
@@ -166,10 +251,16 @@ impl Variable {
                     }
                 }
             }
-            StringOrDatumOrFile::Value { value: str_val } => {
+            StringOrDatumOrFileOrSecret::Secret { secret } => definition.resolve_variables(
+                secret.0.as_str(),
+                &HashMap::new(),
+                global_variables,
+                iteration,
+            ),
+            StringOrDatumOrFileOrSecret::Value { value: str_val } => {
                 definition.resolve_variables(str_val, &HashMap::new(), global_variables, iteration)
             }
-            StringOrDatumOrFile::Schema(d) => serde_json::to_string(d)
+            StringOrDatumOrFileOrSecret::Schema(d) => serde_json::to_string(d)
                 .map(|jv| {
                     definition.resolve_variables(
                         jv.as_str(),
@@ -213,6 +304,18 @@ pub struct Definition {
 // TODO: add validation logic to verify the descriptor is valid
 // TODO: Validation should be type driven for compile time correctness
 impl Definition {
+    //Instead of iterating could we create a regex from all secret values
+    //and do it in 1 call. Introduce encapsulation to easily do that in future
+    pub fn redact_secrets(&self, s: &str) -> String {
+        self.global_variables
+            .iter()
+            .filter_map(|v| match &v.value {
+                StringOrDatumOrFileOrSecret::Secret { secret } => Some(secret),
+                _ => None,
+            })
+            .fold(s.to_string(), |acc, secret| secret.redact(acc.as_str()))
+    }
+
     fn update_request_variables(request: &definition::RequestDescriptor, var_pattern: &str) {
         for header in request.headers.iter() {
             if header.matches_variable.get() {
@@ -644,8 +747,12 @@ impl Definition {
             let replacement = variable.generate_value(self, iteration, &self.global_variables);
 
             //Do extra for non string stuff
+
             let do_extra = match &variable.value {
-                StringOrDatumOrFile::Schema(ds) => !matches!(ds, DatumSchema::String { .. }),
+                StringOrDatumOrFileOrSecret::Schema(ds) => match ds {
+                    DatumSchema::String { .. } => false,
+                    _ => true,
+                },
                 _ => false,
             };
 
@@ -738,6 +845,71 @@ mod tests {
     use crate::test::definition::CleanupDescriptor;
 
     #[test]
+    fn secret_value_debug_obsfucated() {
+        assert_eq!(
+            SecretValue::REDACTED_VALUE,
+            format!("{:?}", SecretValue::new("hello"))
+        );
+    }
+
+    #[test]
+    fn secret_value_obsfucated() {
+        assert_eq!(
+            SecretValue::REDACTED_VALUE,
+            format!("{}", SecretValue::new("hello"))
+        );
+    }
+
+    #[test]
+    fn secret_value_obsfucation_of_small_strings() {
+        assert_eq!(
+            SecretValue::REDACTED_VALUE,
+            SecretValue::new("hello").redacted_value()
+        );
+    }
+
+    #[test]
+    fn secret_value_obsfucation_of_large_strings() {
+        assert_eq!(
+            format!("{}{}{}", "myna", SecretValue::REDACTED_VALUE, "hady"),
+            SecretValue::new("mynameisslimshadyyesimtherealshady").redacted_value()
+        );
+    }
+
+    #[test]
+    fn string_datum_file_or_secret_from_impl() {
+        assert_eq!(
+            StringOrDatumOrFileOrSecret::File {
+                file: "file".to_string()
+            },
+            StringOrDatumOrFile::File {
+                file: "file".to_string()
+            }
+            .into()
+        );
+
+        assert_eq!(
+            StringOrDatumOrFileOrSecret::Value {
+                value: "val".to_string()
+            },
+            StringOrDatumOrFile::Value {
+                value: "val".to_string()
+            }
+            .into()
+        );
+
+        assert_eq!(
+            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                specification: None
+            }),
+            StringOrDatumOrFile::Schema(DatumSchema::Int {
+                specification: None
+            })
+            .into()
+        );
+    }
+
+    #[test]
     fn none_body_returns_none() {
         let vars: Vec<Variable> = vec![];
         let td = Definition {
@@ -781,7 +953,7 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFile::Value {
+                value: StringOrDatumOrFileOrSecret::Value {
                     value: "my_val".to_string(),
                 },
                 source_path: "path".to_string(),
@@ -815,7 +987,7 @@ mod tests {
         //to the vars in the TD.
         let vars: Vec<Variable> = vec![Variable {
             name: "my_var".to_string(),
-            value: StringOrDatumOrFile::Value {
+            value: StringOrDatumOrFileOrSecret::Value {
                 value: "my_val2".to_string(),
             },
             //data_type: variable::Type::String,
@@ -836,14 +1008,14 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFile::Value {
+                value: StringOrDatumOrFileOrSecret::Value {
                     value: "my_val".to_string(),
                 },
                 source_path: "path".to_string(),
             }],
             global_variables: vec![Variable {
                 name: "my_var2".to_string(),
-                value: StringOrDatumOrFile::Value {
+                value: StringOrDatumOrFileOrSecret::Value {
                     value: "my_val3".to_string(),
                 },
                 source_path: "path".to_string(),
