@@ -32,7 +32,7 @@ fn create_status_code(status_code_pattern: &str) -> Option<ValueOrSpecification<
         status_code_pattern
             .parse()
             .ok()
-            .map(|val| ValueOrSpecification::Value(val))
+            .map(ValueOrSpecification::Value)
     }
 }
 
