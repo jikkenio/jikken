@@ -346,6 +346,61 @@ pub async fn complete_stage(
     Ok(())
 }
 
+pub async fn complete_stage_skipped(
+    test: &Test,
+    test_definition: &test::Definition,
+    config: &config::Config,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
+    trace!("telemetry complete stage url: {}", uri);
+    if let Err(error) = Url::parse(&uri) {
+        return Err(Box::from(format!("invalid telemetry url: {}", error)));
+    }
+
+    let post_data = TestCompletedPost {
+        session_id: test.session.session_id.to_string(),
+        iteration: 0,
+        stage: 0,
+        stage_type: 2, // Normal
+        stage_name: None,
+        status: 5, // Skipped
+        runtime: 0,
+        details: None,
+        project: test_definition.project.clone(),
+        environment: test_definition.environment.clone(),
+    };
+
+    let post_body = serde_json::to_value(post_data)?;
+    let post_string = serde_json::to_string(&post_body)?;
+    trace!("telemetry body: {}", post_string);
+
+    let request = Request::builder()
+        .uri(&uri)
+        .method("POST")
+        .header("Authorization", test.session.token.to_string())
+        .header("Content-Type", HeaderValue::from_static("application/json"))
+        .body(Body::from(post_string));
+
+    if let Ok(req) = request {
+        let response = client.request(req).await?;
+        let status = response.status();
+
+        if status.as_u16() != 201 {
+            debug!("test stage completion failed: status({})", status);
+            return Err(Box::from(TelemetryError {
+                reason: "test stage completion failed".to_string(),
+            }));
+        }
+    } else {
+        return Err(Box::from(TelemetryError {
+            reason: "invalid test request".to_string(),
+        }));
+    }
+
+    Ok(())
+}
+
 pub async fn complete_session(
     session: &Session,
     runtime: u32,

@@ -232,6 +232,13 @@ trait ExecutionPolicy {
         iteration: u32,
         config: &config::Config,
     ) -> Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>;
+
+    async fn skip(
+        &mut self,
+        telemetry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        config: &config::Config,
+    ) -> Result<(), Box<dyn Error + Send + Sync>>;
 }
 
 struct DryRunExecutionPolicy;
@@ -252,6 +259,15 @@ impl ExecutionPolicy for DryRunExecutionPolicy {
         dry_run(state, test, iteration)
             .await
             .map(|passed| (passed, vec![] as Vec<StageResult>))
+    }
+
+    async fn skip(
+        &mut self,
+        _telemetry: &Option<telemetry::Session>,
+        _test: &test::Definition,
+        _config: &config::Config,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        Ok(())
     }
 }
 
@@ -283,6 +299,37 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
         };
 
         run(state, test, iteration, telemetry_test, config).await
+    }
+
+    async fn skip(
+        &mut self,
+        telemetry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        config: &config::Config,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let session = match &telemetry {
+            Some(session) => session,
+            None => {
+                debug!("missing telemetry session");
+                return Err(Box::from("missing telemetry session"));
+            }
+        };
+
+        match telemetry::create_test(session, test.clone(), config).await {
+            Ok(telemetry_test) => {
+                match telemetry::complete_stage_skipped(&telemetry_test, test, config).await {
+                    Ok(_) => Ok(()),
+                    Err(error) => {
+                        debug!("telemetry test completion failed: {}", error);
+                        Err(error)
+                    }
+                }
+            }
+            Err(error) => {
+                debug!("telemetry test creation failed: {}", error);
+                Err(error)
+            }
+        }
     }
 }
 
@@ -321,6 +368,15 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
         self.failed = !passed;
         ret
     }
+
+    async fn skip(
+        &mut self,
+        telemetry: &Option<telemetry::Session>,
+        test: &test::Definition,
+        config: &config::Config,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.wrapped_policy.skip(telemetry, test, config).await
+    }
 }
 
 async fn run_tests<T: ExecutionPolicy>(
@@ -345,6 +401,7 @@ async fn run_tests<T: ExecutionPolicy>(
     for (i, test) in flattened_tests.into_iter().enumerate() {
         if any_failures && !config.settings.continue_on_failure && !message_displayed {
             warn!("Skipping remaining tests due to continueOnFailure setting.");
+            log::logger().flush();
             message_displayed = true;
         }
 
@@ -356,13 +413,30 @@ async fn run_tests<T: ExecutionPolicy>(
             // TODO: clean this up based on policies
             // I don't see a clean way to access it without refactoring
             if any_failures && !config.settings.continue_on_failure {
-                iteration_results.push(IterationResult::new_skipped(iteration));
+                if iteration == 0 {
+                    info!(
+                        "{} Test ({}/{}) `{}`...\x1b[33mSKIPPED\x1b[0m\n",
+                        exec_policy.name(),
+                        i + 1,
+                        total_count,
+                        &test_name,
+                    );
+                    let _ = exec_policy.skip(&telemetry, &test, config).await;
+                    iteration_results.push(IterationResult::new_skipped(iteration));
+                }
                 break;
             }
 
             if test.disabled {
+                info!(
+                    "{} Test ({}/{}) `{}`...\x1b[33mDISABLED\x1b[0m\n",
+                    exec_policy.name(),
+                    i + 1,
+                    total_count,
+                    &test_name,
+                );
+                let _ = exec_policy.skip(&telemetry, &test, config).await;
                 iteration_results.push(IterationResult::new_skipped(iteration));
-                warn!("Skipping disabled test : {test_name}");
                 break;
             }
 
