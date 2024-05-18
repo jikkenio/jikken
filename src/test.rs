@@ -157,41 +157,34 @@ impl Variable {
                     )
                 };
 
-                return match std::fs::read_to_string(&file_path) {
+                match std::fs::read_to_string(&file_path) {
                     Ok(file_data) => file_data.trim().to_string(),
                     Err(e) => {
                         error!("error loading file ({}) content: {}", file_path, e);
 
                         "".to_string()
                     }
-                };
+                }
             }
             StringOrDatumOrFile::Value { value: str_val } => {
-                return definition.resolve_variables(
-                    str_val,
-                    &HashMap::new(),
-                    &global_variables,
-                    iteration,
-                );
+                definition.resolve_variables(str_val, &HashMap::new(), global_variables, iteration)
             }
-            StringOrDatumOrFile::Schema(d) => {
-                return serde_json::to_string(d)
-                    .map(|jv| {
-                        definition.resolve_variables(
-                            jv.as_str(),
-                            &HashMap::new(),
-                            &global_variables,
-                            iteration,
-                        )
-                    })
-                    .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
-                    .ok()
-                    .and_then(|ds| generate_value_from_schema(&ds, 10))
-                    .and_then(|v| serde_json::to_string(&v).ok())
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-            }
+            StringOrDatumOrFile::Schema(d) => serde_json::to_string(d)
+                .map(|jv| {
+                    definition.resolve_variables(
+                        jv.as_str(),
+                        &HashMap::new(),
+                        global_variables,
+                        iteration,
+                    )
+                })
+                .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
+                .ok()
+                .and_then(|ds| generate_value_from_schema(&ds, 10))
+                .and_then(|v| serde_json::to_string(&v).ok())
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string(),
         }
     }
 }
@@ -568,14 +561,14 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> Option<BodyOrSchema> {
-        return match body {
+        match body {
             BodyOrSchema::Schema(s) => {
                 self.resolve_schema_variables(s, state_variables, variables, iteration)
             }
             BodyOrSchema::Body(v) => {
                 self.resolve_body_value_variables(v, state_variables, variables, iteration)
             }
-        };
+        }
     }
 
     fn resolve_body_value_variables(
@@ -588,15 +581,15 @@ impl Definition {
         serde_json::to_string(&json_val)
             .map(|jv| self.resolve_variables(jv.as_str(), state_variables, variables, iteration))
             .and_then(|rs| {
-                let rsv = rs.replace("\n", "").replace("\r", "");
+                let rsv = rs.replace(['\n', '\r'], "");
                 let ret = serde_json::from_str::<serde_json::Value>(rsv.as_str());
                 if ret.is_err() {
-                    return serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'));
+                    serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'))
                 } else {
-                    return ret;
+                    ret
                 }
             })
-            .map(|val| BodyOrSchema::Body(val))
+            .map(BodyOrSchema::Body)
             .ok()
     }
 
@@ -610,7 +603,7 @@ impl Definition {
         serde_json::to_string(&schema)
             .map(|jv| self.resolve_variables(jv.as_str(), state_variables, variables, iteration))
             .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
-            .map(|schema| BodyOrSchema::Schema(schema))
+            .map(BodyOrSchema::Schema)
             .ok()
     }
 
@@ -652,10 +645,7 @@ impl Definition {
 
             //Do extra for non string stuff
             let do_extra = match &variable.value {
-                StringOrDatumOrFile::Schema(ds) => match ds {
-                    DatumSchema::String { .. } => false,
-                    _ => true,
-                },
+                StringOrDatumOrFile::Schema(ds) => !matches!(ds, DatumSchema::String { .. }),
                 _ => false,
             };
 

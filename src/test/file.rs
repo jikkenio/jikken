@@ -116,10 +116,7 @@ impl Checker for EmailSpecification {
 
         if !matches {
             trace!("failed email regex");
-            vec![Validated::fail(formatter(
-                "email format",
-                format!("{}", val).as_str(),
-            ))]
+            vec![Validated::fail(formatter("email format", val))]
         } else {
             self.specification.check(val, formatter)
         }
@@ -356,11 +353,11 @@ where
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         vec![
-            self.check_val(&val, formatter),
-            self.check_min(&val, formatter),
-            self.check_max(&val, formatter),
-            self.check_none_of(&val, formatter),
-            self.check_one_of(&val, formatter),
+            self.check_val(val, formatter),
+            self.check_min(val, formatter),
+            self.check_max(val, formatter),
+            self.check_none_of(val, formatter),
+            self.check_one_of(val, formatter),
         ]
     }
 }
@@ -373,11 +370,11 @@ impl Checker for FloatSpecification {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         vec![
-            self.check_val(&val, formatter),
-            self.check_min(&val, formatter),
-            self.check_max(&val, formatter),
-            self.check_none_of(&val, formatter),
-            self.check_one_of(&val, formatter),
+            self.check_val(val, formatter),
+            self.check_min(val, formatter),
+            self.check_max(val, formatter),
+            self.check_none_of(val, formatter),
+            self.check_one_of(val, formatter),
         ]
     }
 }
@@ -540,11 +537,11 @@ impl Checker for DateSpecification {
         let time = maybe_time.unwrap();
 
         vec![
-            self.check_val(&val, formatter),
+            self.check_val(val, formatter),
             self.check_min(&time, formatter),
             self.check_max(&time, formatter),
-            self.check_none_of(&val, formatter),
-            self.check_one_of(&val, formatter),
+            self.check_none_of(val, formatter),
+            self.check_one_of(val, formatter),
         ]
     }
 }
@@ -718,8 +715,7 @@ impl DatumSchema {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .map(|v| s.check(v, formatter))
-                    .flatten()
+                    .flat_map(|v| s.check(v, formatter))
                     .collect()
             })
             .unwrap_or(vec![Good(())])
@@ -739,7 +735,7 @@ impl DatumSchema {
             .as_ref()
             .map(|bt| {
                 bt.iter()
-                    .map(|(k, datum)| {
+                    .flat_map(|(k, datum)| {
                         vals.get(k)
                             .map(|v| datum.check(v, formatter))
                             .unwrap_or(vec![Validated::fail(formatter(
@@ -747,7 +743,6 @@ impl DatumSchema {
                                 format!(r#"object with "{k}" missing"#).as_str(),
                             ))])
                     })
-                    .flatten()
                     .collect()
             })
             .unwrap_or(vec![Good(())])
@@ -936,13 +931,13 @@ impl<'a> BodyOrSchemaChecker<'a> {
             &modified_expected,
             assert_json_diff::Config::new(compare_mode),
         );
-        return match result {
+        match result {
             Ok(_) => Ok(vec![Good(())]),
             Err(msg) => Ok(vec![Validated::fail(formatter(
                 format!("body {modified_expected}").as_str(),
                 format!("body {modified_actual} ; {msg}").as_str(),
             ))]),
-        };
+        }
     }
 }
 
@@ -964,7 +959,7 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
             Ok(v) => v,
             Err(e) => vec![Validated::fail(format!(
                 "Error encountered when comparing : {}",
-                e.to_string()
+                e
             ))],
         }
     }
@@ -1066,60 +1061,56 @@ where
     Specification<T>: Checker<Item = T>,
 {
     if spec.value.is_some() {
-        return spec.value.clone();
+        return spec.value;
     }
 
     let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
             return match spec.one_of.as_ref() {
-                Some(vals) => vals
+                Some(vals) => *vals
                     .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&T::default())
-                    .clone(),
+                    .unwrap_or(&T::default()),
                 None => generate_number_in_range(
-                    spec.min.clone().unwrap_or(T::min_value()),
-                    spec.max.clone().unwrap_or(T::max_value()),
+                    spec.min.unwrap_or(T::min_value()),
+                    spec.max.unwrap_or(T::max_value()),
                     &mut rng,
                 ),
             };
         })
-        .filter(|v| {
+        .find(|v| {
             spec.check(v, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_good()
         })
-        .nth(0)
 }
 
 pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
     if spec.value.is_some() {
-        return spec.value.clone();
+        return spec.value;
     }
 
     let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
             return match spec.one_of.as_ref() {
-                Some(vals) => vals
+                Some(vals) => *vals
                     .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&f64::default())
-                    .clone(),
+                    .unwrap_or(&f64::default()),
                 None => generate_number_in_range(
-                    spec.min.clone().unwrap_or(f64::MIN),
-                    spec.max.clone().unwrap_or(f64::MAX),
+                    spec.min.unwrap_or(f64::MIN),
+                    spec.max.unwrap_or(f64::MAX),
                     &mut rng,
                 ),
             };
         })
-        .filter(|v| {
+        .find(|v| {
             spec.check(v, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_good()
         })
-        .nth(0)
 }
 
 pub fn generate_string(spec: &Specification<String>, max_attempts: u16) -> Option<String> {
@@ -1235,17 +1226,16 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 }
             };
         })
-        .filter(|date_str| {
+        .find(|date_str| {
             spec.check(date_str, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_good()
         })
-        .nth(0)
 }
 
 pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
-    let rng = RNG::try_from(&Language::Fantasy).unwrap();
+    let rng = RNG::from(&Language::Fantasy);
     (0..max_attempts)
         .map(|_| {
             return match spec.specification.one_of.as_ref() {
@@ -1253,14 +1243,13 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
                 None => rng.generate_name(),
             };
         })
-        .filter(|v| {
+        .find(|v| {
             spec.specification
                 .check(v, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_good()
         })
-        .nth(0)
 }
 
 pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<String> {
@@ -1276,76 +1265,70 @@ pub fn generate_value_from_schema(
         DatumSchema::Float { specification } => generate_float(
             specification
                 .as_ref()
-                .unwrap_or(&&FloatSpecification::default()),
+                .unwrap_or(&FloatSpecification::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
+        .map(serde_json::Value::from),
         DatumSchema::Int { specification } => generate_number(
             specification
                 .as_ref()
                 .unwrap_or(&Specification::<i64>::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
+        .map(serde_json::Value::from),
         DatumSchema::String { specification } => generate_string(
             specification
                 .as_ref()
                 .unwrap_or(&Specification::<String>::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
+        .map(serde_json::Value::from),
         DatumSchema::Date {
             specification: date,
         } => generate_date(
             date.as_ref().unwrap_or(&DateSpecification::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
+        .map(serde_json::Value::from),
         DatumSchema::Name {
             specification: name,
         } => generate_name(
             name.as_ref().unwrap_or(&NameSpecification::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
+        .map(serde_json::Value::from),
         DatumSchema::EmailSpecification {
             specification: email,
         } => generate_email(
             email.as_ref().unwrap_or(&EmailSpecification::default()),
             max_attempts,
         )
-        .map(|v| serde_json::Value::from(v)),
-        DatumSchema::List { schema } => Some(serde_json::Value::Array {
-            0: schema
+        .map(serde_json::Value::from),
+        DatumSchema::List { schema } => Some(serde_json::Value::Array(
+            schema
                 .as_ref()
                 .map(|s| {
                     (0..3)
-                        .map(|_| generate_value_from_schema(&*s, max_attempts))
-                        .filter(|o| o.is_some())
-                        .map(|o| o.unwrap())
+                        .filter_map(|_| generate_value_from_schema(s, max_attempts))
                         .collect::<Vec<Value>>()
                 })
                 .unwrap_or_default(),
-        }),
+        )),
         DatumSchema::Object { schema } => {
             let f = schema
                 .as_ref()
                 .map(|s| {
                     s.iter()
-                        .map(|(k, v)| {
+                        .filter_map(|(k, v)| {
                             let ret = generate_value_from_schema(v, max_attempts);
-                            if ret.is_none() {
-                                return None;
-                            }
+                            ret.as_ref()?;
 
-                            return Some((k.clone(), ret.unwrap()));
+                            Some((k.clone(), ret.unwrap()))
                         })
-                        .filter(|tup| tup.is_some())
-                        .map(|tup| tup.unwrap())
                         .collect::<Map<String, serde_json::Value>>()
                 })
                 .unwrap_or_default();
-            Some(serde_json::Value::Object { 0: f })
+            Some(serde_json::Value::Object(f))
         }
     };
 }

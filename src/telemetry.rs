@@ -73,10 +73,12 @@ struct TestCompletedPost {
     pub iteration: u32,
     pub stage: u32,
     pub stage_type: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stage_name: Option<String>,
     pub status: u32,
     pub runtime: u32,
-    pub details: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -309,7 +311,7 @@ pub async fn complete_stage(
         stage_name: stage.stage_name.clone(),
         status: stage.status.clone() as u32,
         runtime: stage.runtime,
-        details: details_json,
+        details: Some(details_json),
         project: stage.project.clone(),
         environment: stage.environment.clone(),
     };

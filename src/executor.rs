@@ -45,9 +45,9 @@ impl From<ExecutionResult> for Report {
             .into_iter()
             .map(|tr| {
                 if tr.iteration_results.is_empty() {
-                    return (0, 0, 1);
+                    (0, 0, 1)
                 } else {
-                    return tr.iteration_results.into_iter().fold(
+                    tr.iteration_results.into_iter().fold(
                         (0, 0, 0),
                         |(passed, failed, skipped), iteration_result| match iteration_result.status
                         {
@@ -55,7 +55,7 @@ impl From<ExecutionResult> for Report {
                             TestStatus::Passed => (passed + 1, failed, skipped),
                             TestStatus::Skipped => (passed, failed, skipped + 1),
                         },
-                    );
+                    )
                 }
             })
             .fold(
@@ -507,7 +507,7 @@ impl StateCookie {
         let cookie_value: Vec<&str> = segments
             .first()
             .expect("cookie should have segments")
-            .split("=")
+            .split('=')
             .collect();
 
         let key: String = cookie_value.first().unwrap_or(&"").trim().to_string();
@@ -1124,9 +1124,9 @@ fn process_response(
                                 expected: &Option<ValueOrSpecification<u16>>,
                                 actual: u16|
      -> Vec<Validated<(), String>> {
-        match &expected {
-            &None => vec![Good(())].into_iter().collect(),
-            &Some(t) => {
+        match expected {
+            None => vec![Good(())].into_iter().collect(),
+            Some(t) => {
                 trace!("validating {}status codes", validation_type);
 
                 t.check(&actual, &|expected, actual| -> String {
@@ -1723,7 +1723,7 @@ fn http_request_from_test_spec(
         .iter()
         .filter(|(k, _)| tld_prefix.starts_with(&k.to_lowercase()))
         .flat_map(|(_, v)| {
-            v.into_iter()
+            v.iter()
                 .map(|(_, cookie)| {
                     if !(cookie.secure ^ is_secure) {
                         (
