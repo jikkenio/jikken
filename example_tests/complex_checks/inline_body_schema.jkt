@@ -1,12 +1,20 @@
 name: Inline Body Schema
-requires: auth
 tags: regression flaky triaged
+requires: auth
 request:
-  url: https://animechan.xyz/api/random
+  url: https://api.jikken.io/api/v2/examples/status
+  headers:
+    - header: Authorization
+      value: ${token}
 response:
   status: 200
   bodySchema:
     type: object
     schema:
-      anime: {"type" : "string"}
-      character: {"type" : "string"}  
+      status: {"type" : "string"}
+      user:
+        type: object
+        schema: 
+          username: {"type" : "string"}
+          lastActivity: {"type": "date", "format": "%Y-%m-%d %H:%M:%S%.f %Z"}
+      
