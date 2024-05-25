@@ -995,9 +995,14 @@ async fn run(
 
     if let Some(test_telemetry) = &test {
         if !setup_result.1.is_empty() {
-            let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, &setup_result.1[0], config)
-                    .await;
+            let telemetry_result = telemetry::complete_stage(
+                td,
+                test_telemetry,
+                iteration,
+                &setup_result.1[0],
+                config,
+            )
+            .await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
@@ -1025,9 +1030,14 @@ async fn run(
             Ok(mut r) => {
                 if let Some(test_telemetry) = &test {
                     for result in r.1.iter() {
-                        let telemetry_result =
-                            telemetry::complete_stage(test_telemetry, iteration, result, config)
-                                .await;
+                        let telemetry_result = telemetry::complete_stage(
+                            td,
+                            test_telemetry,
+                            iteration,
+                            result,
+                            config,
+                        )
+                        .await;
                         if let Err(e) = telemetry_result {
                             debug!("telemetry stage completion failed: {}", e);
                         }
@@ -1068,7 +1078,8 @@ async fn validate_td(
 
         if let Some(test_telemetry) = &test {
             let telemetry_result =
-                telemetry::complete_stage(test_telemetry, iteration, &stage_result, config).await;
+                telemetry::complete_stage(td, test_telemetry, iteration, &stage_result, config)
+                    .await;
             if let Err(e) = telemetry_result {
                 debug!("telemetry stage completion failed: {}", e);
             }
