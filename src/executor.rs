@@ -6,7 +6,7 @@ use crate::test::definition::ResponseDescriptor;
 use crate::test::file::BodyOrSchema;
 use crate::test::file::BodyOrSchemaChecker;
 use crate::test::file::Checker;
-use crate::test::file::ValueOrSpecification;
+use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::http::Header;
 use crate::test::Definition;
@@ -615,7 +615,7 @@ impl ResponseResultData {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
-    pub status: Option<ValueOrSpecification<u16>>,
+    pub status: Option<ValueOrNumericSpecification<u16>>,
     pub body: Option<BodyOrSchema>,
     pub strict: bool,
 }
@@ -1132,7 +1132,7 @@ fn process_response(
     };
 
     let validate_status_code = |validation_type: &str,
-                                expected: &Option<ValueOrSpecification<u16>>,
+                                expected: &Option<ValueOrNumericSpecification<u16>>,
                                 actual: u16|
      -> Vec<Validated<(), String>> {
         match expected {
@@ -1201,7 +1201,7 @@ fn process_response(
                     ret.append(
                         validate_status_code(
                             "compare ",
-                            &Some(ValueOrSpecification::<u16>::Value(
+                            &Some(ValueOrNumericSpecification::<u16>::Value(
                                 compare_request_result.status,
                             )),
                             resp.status,
@@ -2131,6 +2131,7 @@ fn validate_dry_run(
 
 #[cfg(test)]
 mod tests {
+    use crate::test::file::NumericSpecification;
     use crate::test::file::Specification;
 
     use self::test::definition::ResolvedRequest;
@@ -2146,7 +2147,7 @@ mod tests {
     #[test]
     fn process_response_multiple_failures() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Value(200)),
+            status: Some(ValueOrNumericSpecification::Value(200)),
             body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
             }))),
@@ -2201,7 +2202,7 @@ mod tests {
     #[test]
     fn process_response_no_result() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Value(1)), //bc we coalesce status to 0 in ResultData::from_request
+            status: Some(ValueOrNumericSpecification::Value(1)), //bc we coalesce status to 0 in ResultData::from_request
             body: None,
             headers: Vec::default(),
             ..ExpectedResultData::new()
@@ -2241,7 +2242,7 @@ mod tests {
     #[test]
     fn process_response_body_mismatch() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Value(200)),
+            status: Some(ValueOrNumericSpecification::Value(200)),
             body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
             }))),
@@ -2284,7 +2285,7 @@ mod tests {
     #[test]
     fn process_response_body_match() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Value(200)),
+            status: Some(ValueOrNumericSpecification::Value(200)),
             body: Some(BodyOrSchema::Body(json!({
                 "Name" : "Bob"
             }))),
@@ -2327,12 +2328,13 @@ mod tests {
     #[test]
     fn process_response_status_match() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Schema(Specification::<u16> {
-                one_of: Some(vec![200, 201, 202]),
-                value: None,
+            status: Some(ValueOrNumericSpecification::Schema(NumericSpecification {
+                specification: Specification {
+                    one_of: Some(vec![200, 201, 202]),
+                    ..Specification::default()
+                },
                 min: None,
                 max: None,
-                none_of: None,
             })),
             body: None,
             headers: Vec::default(),
@@ -2372,7 +2374,7 @@ mod tests {
     #[test]
     fn process_response_status_mismatch() {
         let expected = ExpectedResultData {
-            status: Some(ValueOrSpecification::Value(200)),
+            status: Some(ValueOrNumericSpecification::Value(200)),
             body: None,
             headers: Vec::default(),
             ..ExpectedResultData::new()

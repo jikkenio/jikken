@@ -27,15 +27,11 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
-#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Specification<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub min: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub one_of: Option<Vec<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,24 +40,37 @@ pub struct Specification<T> {
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct FloatSpecification {
+pub struct NumericSpecification<T: std::fmt::Display> {
+    #[serde(flatten)]
+    pub specification: Specification<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<f64>,
+    pub min: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub min: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub one_of: Option<Vec<f64>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub none_of: Option<Vec<f64>>,
+    pub max: Option<T>,
 }
 
-//How can I lift the default format into the type?
+type FloatSpecification = NumericSpecification<f64>;
+type IntegerSpecification = NumericSpecification<i64>;
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StringSpecification {
+    #[serde(flatten)]
+    pub specification: Specification<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+}
+
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
     #[serde(flatten)]
     pub specification: Specification<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<String>,
     pub format: Option<String>,
     pub modifier: Option<variable::Modifier>,
 }
@@ -69,13 +78,13 @@ pub struct DateSpecification {
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct NameSpecification {
     #[serde(flatten)]
-    pub specification: Specification<String>,
+    pub specification: StringSpecification,
 }
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct EmailSpecification {
     #[serde(flatten)]
-    pub specification: Specification<String>,
+    pub specification: StringSpecification,
 }
 
 pub trait Checker {
@@ -149,46 +158,6 @@ where
         }
     }
 
-    fn check_min(
-        &self,
-        actual: &T,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.min {
-            Some(t) => {
-                if t <= actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("minimum of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
-    fn check_max(
-        &self,
-        actual: &T,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.max {
-            Some(t) => {
-                if t >= actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("maximum of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
     fn check_one_of(
         &self,
         actual: &T,
@@ -230,111 +199,78 @@ where
     }
 }
 
-impl FloatSpecification {
-    fn check_val(
-        &self,
-        actual: &f64,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.value {
-            Some(t) => {
-                if t == actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("{}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
-    fn check_min(
-        &self,
-        actual: &f64,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.min {
-            Some(t) => {
-                if t <= actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("minimum of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
-    fn check_max(
-        &self,
-        actual: &f64,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.max {
-            Some(t) => {
-                if t >= actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("maximum of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
-    fn check_one_of(
-        &self,
-        actual: &f64,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.one_of {
-            Some(t) => {
-                if t.contains(actual) {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("one of {:?}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-
-    fn check_none_of(
-        &self,
-        actual: &f64,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        match &self.none_of {
-            Some(t) => {
-                if !t.contains(actual) {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("none of {:?}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
-        }
-    }
-}
-
-impl Hash for FloatSpecification {
+impl<T> Hash for Specification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Display,
+    T: Serialize,
+{
     fn hash<H: Hasher>(&self, state: &mut H) {
         serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+impl<T> Hash for NumericSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Serialize,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+impl<T> NumericSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+{
+    fn check_min(
+        &self,
+        actual: &T,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.min {
+            Some(t) => {
+                if t <= actual {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("minimum of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+
+    fn check_max(
+        &self,
+        actual: &T,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.max {
+            Some(t) => {
+                if t >= actual {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("maximum of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
     }
 }
 
@@ -353,32 +289,94 @@ where
     ) -> Vec<Validated<(), String>> {
         vec![
             self.check_val(val, formatter),
-            self.check_min(val, formatter),
-            self.check_max(val, formatter),
             self.check_none_of(val, formatter),
             self.check_one_of(val, formatter),
         ]
     }
 }
 
-impl Checker for FloatSpecification {
-    type Item = f64;
+impl<T> Checker for NumericSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+{
+    type Item = T;
     fn check(
         &self,
-        val: &f64,
+        val: &T,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        vec![
-            self.check_val(val, formatter),
+        let mut ret = vec![
             self.check_min(val, formatter),
             self.check_max(val, formatter),
-            self.check_none_of(val, formatter),
-            self.check_one_of(val, formatter),
-        ]
+        ];
+        ret.append(self.specification.check(val, formatter).as_mut());
+        ret
+    }
+}
+
+impl StringSpecification {
+    fn check_min_length(
+        &self,
+        actual: &str,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.min_length {
+            Some(t) => {
+                if *t <= actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("minimum length of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+
+    fn check_max_length(
+        &self,
+        actual: &str,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.max_length {
+            Some(t) => {
+                if *t >= actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("maximum length of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+}
+
+impl Checker for StringSpecification {
+    type Item = String;
+    fn check(
+        &self,
+        val: &String,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let mut ret = vec![
+            self.check_min_length(val, formatter),
+            self.check_max_length(val, formatter),
+        ];
+        ret.append(self.specification.check(val, formatter).as_mut());
+        ret
     }
 }
 
 impl DateSpecification {
+    const DEFAULT_FORMAT: &'static str = "%Y-%m-%d";
     fn check_val(
         &self,
         actual: &String,
@@ -392,7 +390,7 @@ impl DateSpecification {
         actual: &DateTime<Local>,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
-        match &self.specification.min {
+        match &self.min {
             Some(t) => {
                 if self
                     .str_to_time(t)
@@ -416,7 +414,7 @@ impl DateSpecification {
         actual: &DateTime<Local>,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
-        match &self.specification.max {
+        match &self.max {
             Some(t) => {
                 if self
                     .str_to_time(t)
@@ -452,7 +450,9 @@ impl DateSpecification {
     }
 
     fn get_format(&self) -> String {
-        self.format.clone().unwrap_or("%Y-%m-%d".to_string())
+        self.format
+            .clone()
+            .unwrap_or(Self::DEFAULT_FORMAT.to_string())
     }
 
     fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
@@ -555,11 +555,11 @@ pub enum DatumSchema {
     },
     Int {
         #[serde(flatten)]
-        specification: Option<Specification<i64>>,
+        specification: Option<IntegerSpecification>,
     },
     String {
         #[serde(flatten)]
-        specification: Option<Specification<String>>,
+        specification: Option<StringSpecification>,
     },
     Date {
         #[serde(flatten)]
@@ -657,7 +657,7 @@ impl DatumSchema {
     }
 
     fn check_float(
-        spec: &Option<FloatSpecification>,
+        spec: &Option<NumericSpecification<f64>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -671,7 +671,7 @@ impl DatumSchema {
     }
 
     fn check_int(
-        spec: &Option<Specification<i64>>,
+        spec: &Option<NumericSpecification<i64>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -685,7 +685,7 @@ impl DatumSchema {
     }
 
     fn check_string(
-        spec: &Option<Specification<String>>,
+        spec: &Option<StringSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -822,17 +822,20 @@ impl Hash for UnvalidatedCompareRequest {
 
 #[derive(Hash, Debug, Serialize, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
-pub enum ValueOrSpecification<T> {
+pub enum ValueOrNumericSpecification<
+    T: std::fmt::Display + std::fmt::Debug + std::cmp::PartialOrd + Serialize,
+> {
     Value(T),
-    Schema(Specification<T>),
+    Schema(NumericSpecification<T>),
 }
 
-impl<T> Checker for ValueOrSpecification<T>
+impl<T> Checker for ValueOrNumericSpecification<T>
 where
     T: PartialEq,
     T: Display,
     T: PartialOrd,
     T: fmt::Debug,
+    T: Serialize,
 {
     type Item = T;
     fn check(
@@ -841,7 +844,7 @@ where
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match &self {
-            ValueOrSpecification::Value(t) => {
+            ValueOrNumericSpecification::Value(t) => {
                 if t == val {
                     vec![Good(())]
                 } else {
@@ -851,7 +854,7 @@ where
                     ))]
                 }
             }
-            ValueOrSpecification::Schema(s) => s.check(val, formatter),
+            ValueOrNumericSpecification::Schema(s) => s.check(val, formatter),
         }
     }
 }
@@ -979,7 +982,7 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
 pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<ValueOrSpecification<u16>>,
+    pub status: Option<ValueOrNumericSpecification<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
@@ -994,7 +997,7 @@ pub struct UnvalidatedResponse {
 impl Default for UnvalidatedResponse {
     fn default() -> Self {
         Self {
-            status: Some(ValueOrSpecification::Value(200)),
+            status: Some(ValueOrNumericSpecification::Value(200)),
             headers: None,
             body: None,
             ignore: None,
@@ -1056,7 +1059,7 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
     }
 }
 
-pub fn generate_number<T>(spec: &Specification<T>, max_attempts: u16) -> Option<T>
+pub fn generate_number<T>(spec: &NumericSpecification<T>, max_attempts: u16) -> Option<T>
 where
     T: num::Num
         + num::Bounded
@@ -1071,14 +1074,14 @@ where
         + fmt::Debug,
     Specification<T>: Checker<Item = T>,
 {
-    if spec.value.is_some() {
-        return spec.value;
+    if spec.specification.value.is_some() {
+        return spec.specification.value;
     }
 
     let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
-            return match spec.one_of.as_ref() {
+            return match spec.specification.one_of.as_ref() {
                 Some(vals) => *vals
                     .get(rng.gen_range(0..vals.len()))
                     .unwrap_or(&T::default()),
@@ -1098,46 +1101,23 @@ where
 }
 
 pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
-    if spec.value.is_some() {
-        return spec.value;
-    }
-
-    let mut rng = rand::thread_rng();
-    (0..max_attempts)
-        .map(|_| {
-            return match spec.one_of.as_ref() {
-                Some(vals) => *vals
-                    .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&f64::default()),
-                None => generate_number_in_range(
-                    spec.min.unwrap_or(f64::MIN),
-                    spec.max.unwrap_or(f64::MAX),
-                    &mut rng,
-                ),
-            };
-        })
-        .find(|v| {
-            spec.check(v, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_good()
-        })
+    generate_number::<f64>(spec, max_attempts)
 }
 
-pub fn generate_string(spec: &Specification<String>, max_attempts: u16) -> Option<String> {
+pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<String> {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
 
-    if spec.value.is_some() {
-        return spec.value.clone();
+    if spec.specification.value.is_some() {
+        return spec.specification.value.clone();
     }
 
     let mut rng = rand::thread_rng();
     let string_length: usize = rng.gen_range(1..50);
 
     for _ in 0..max_attempts {
-        let ret: String = match spec.one_of.as_ref() {
+        let ret: String = match spec.specification.one_of.as_ref() {
             Some(vals) => vals
                 .get(rng.gen_range(0..vals.len()))
                 .unwrap_or(&String::default())
@@ -1180,7 +1160,6 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
     }
 
     let min = spec
-        .specification
         .min
         .as_ref()
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
@@ -1193,7 +1172,6 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         );
 
     let max = spec
-        .specification
         .max
         .as_ref()
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
@@ -1249,7 +1227,7 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
     let rng = RNG::from(&Language::Fantasy);
     (0..max_attempts)
         .map(|_| {
-            return match spec.specification.one_of.as_ref() {
+            return match spec.specification.specification.one_of.as_ref() {
                 Some(_) => generate_string(&spec.specification, max_attempts).unwrap_or_default(),
                 None => rng.generate_name(),
             };
@@ -1283,14 +1261,14 @@ pub fn generate_value_from_schema(
         DatumSchema::Int { specification } => generate_number(
             specification
                 .as_ref()
-                .unwrap_or(&Specification::<i64>::default()),
+                .unwrap_or(&NumericSpecification::<i64>::default()),
             max_attempts,
         )
         .map(serde_json::Value::from),
         DatumSchema::String { specification } => generate_string(
             specification
                 .as_ref()
-                .unwrap_or(&Specification::<String>::default()),
+                .unwrap_or(&&StringSpecification::default()),
             max_attempts,
         )
         .map(serde_json::Value::from),
@@ -1347,136 +1325,11 @@ pub fn generate_value_from_schema(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn specification_val_checker() {
-        let spec = Specification::<u16> {
-            value: Some(12),
-            min: None,
-            max: None,
-            one_of: None,
-            none_of: None,
-        };
-
-        let f = spec
-            .check(&12, &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>();
-        assert_eq!(true, f.is_good());
-
-        assert_eq!(
-            true,
-            spec.check(&22, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail()
-        );
-    }
-
-    #[test]
-    fn specification_min_checker() {
-        let spec = Specification::<u16> {
-            value: None,
-            min: Some(50),
-            max: None,
-            one_of: None,
-            none_of: None,
-        };
-
-        assert_eq!(
-            true,
-            spec.check(&22, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail()
-        );
-
-        assert_eq!(
-            true,
-            spec.check(&50, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_good()
-        );
-
-        assert_eq!(
-            true,
-            spec.check(&100, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_good()
-        );
-    }
-
-    #[test]
-    fn specification_max_checker() {
-        let spec = Specification::<u16> {
-            value: None,
-            min: None,
-            max: Some(50),
-            one_of: None,
-            none_of: None,
-        };
-
-        assert_eq!(
-            true,
-            spec.check(&22, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_good()
-        );
-
-        assert_eq!(
-            true,
-            spec.check(&50, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_good()
-        );
-
-        assert_eq!(
-            true,
-            spec.check(&100, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail()
-        );
-    }
-
-    #[test]
-    fn specification_one_of_checker() {
-        let spec = Specification::<u16> {
-            value: None,
-            min: None,
-            max: None,
-            one_of: Some(vec![1, 2, 3, 4, 5]),
-            none_of: None,
-        };
-
-        assert_eq!(
-            true,
-            spec.check(&22, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail()
-        );
-
-        for i in 1..5 {
-            assert_eq!(
-                true,
-                spec.check(&i, &|_e, _a| "".to_string())
-                    .into_iter()
-                    .collect::<Validated<Vec<()>, String>>()
-                    .is_good()
-            );
-        }
-    }
 
     #[test]
     fn specification_none_of_checker() {
         let spec = Specification::<u16> {
             value: None,
-            min: None,
-            max: None,
             one_of: None,
             none_of: Some(vec![1, 2, 3, 4, 5]),
         };
@@ -1501,13 +1354,197 @@ mod tests {
     }
 
     #[test]
-    fn specification_errors_accumulate() {
+    fn specification_val_checker() {
         let spec = Specification::<u16> {
-            value: Some(1),
+            value: Some(12),
+            one_of: None,
+            none_of: None,
+        };
+
+        let f = spec
+            .check(&12, &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>();
+        assert_eq!(true, f.is_good());
+
+        assert_eq!(
+            true,
+            spec.check(&22, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+    }
+
+    #[test]
+    fn specification_one_of_checker() {
+        let spec = Specification::<u16> {
+            value: None,
+            one_of: Some(vec![1, 2, 3, 4, 5]),
+            none_of: None,
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&22, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+
+        for i in 1..5 {
+            assert_eq!(
+                true,
+                spec.check(&i, &|_e, _a| "".to_string())
+                    .into_iter()
+                    .collect::<Validated<Vec<()>, String>>()
+                    .is_good()
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_specification_min_checker() {
+        let spec = NumericSpecification::<u16> {
+            specification: Specification::default(),
+            min: Some(50),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&22, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&50, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&100, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+    }
+
+    #[test]
+    fn numeric_specification_max_checker() {
+        let spec = NumericSpecification::<u16> {
+            specification: Specification::default(),
+            max: Some(50),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&22, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&50, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&100, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+    }
+
+    #[test]
+    fn string_specification_max_length_checker() {
+        let spec = StringSpecification {
+            specification: Specification::default(),
+            max_length: Some(5),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&"hello".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"hell".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"nooooooo".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+    }
+
+    #[test]
+    fn string_specification_min_length_checker() {
+        let spec = StringSpecification {
+            specification: Specification::default(),
+            min_length: Some(5),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&"hello".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"hellooooo".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"no".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+    }
+
+    #[test]
+    fn specification_errors_accumulate() {
+        let spec = NumericSpecification::<u16> {
+            specification: Specification {
+                value: Some(1),
+                one_of: Some(vec![1, 2, 4]),
+                none_of: Some(vec![101]),
+            },
             min: Some(200),
             max: Some(100),
-            one_of: Some(vec![1, 2, 4]),
-            none_of: Some(vec![101]),
         };
 
         assert_eq!(
@@ -1671,12 +1708,14 @@ mod tests {
                 (
                     "name".to_string(),
                     DatumSchema::String {
-                        specification: Some(Specification {
-                            value: None,
-                            min: None,
-                            max: None,
-                            one_of: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            none_of: None,
+                        specification: Some(StringSpecification {
+                            specification: Specification {
+                                value: None,
+                                one_of: Some(vec!["foo".to_string(), "bar".to_string()]),
+                                none_of: None,
+                            },
+                            min_length: None,
+                            max_length: None,
                         }),
                     },
                 ),
@@ -1789,12 +1828,10 @@ mod tests {
 
     #[test]
     fn number_generation() {
-        let spec = Specification::<u16> {
+        let spec = NumericSpecification::<u16> {
             min: Some(1),
             max: Some(9),
-            none_of: None,
-            one_of: None,
-            value: None,
+            ..Default::default()
         };
 
         let num = generate_number(&spec, 10);
@@ -1809,12 +1846,12 @@ mod tests {
 
     #[test]
     fn string_generation() {
-        let spec = Specification::<String> {
-            min: None,
-            max: None,
-            none_of: Some(vec!["foo".to_string(), "bar".to_string()]),
-            one_of: None,
-            value: None,
+        let spec = StringSpecification {
+            specification: Specification {
+                none_of: Some(vec!["foo".to_string(), "bar".to_string()]),
+                ..Default::default()
+            },
+            ..Default::default()
         };
 
         let val = generate_string(&spec, 10);

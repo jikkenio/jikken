@@ -2,8 +2,9 @@ use super::errors::GenericError;
 use super::test::template;
 use log::{error, info};
 
+use crate::test::file::NumericSpecification;
 use crate::test::file::Specification;
-use crate::test::file::ValueOrSpecification;
+use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::File;
 use std::error::Error;
@@ -19,20 +20,22 @@ fn create_tags(tags: &[String]) -> Option<String> {
     }
 }
 
-fn create_status_code(status_code_pattern: &str) -> Option<ValueOrSpecification<u16>> {
+fn create_status_code(status_code_pattern: &str) -> Option<ValueOrNumericSpecification<u16>> {
     if status_code_pattern == "2XX" {
-        Some(ValueOrSpecification::Schema(Specification {
-            value: None,
+        Some(ValueOrNumericSpecification::Schema(NumericSpecification {
+            specification: Specification {
+                value: None,
+                one_of: None,
+                none_of: None,
+            },
             min: Some(200),
             max: Some(299),
-            one_of: None,
-            none_of: None,
         }))
     } else {
         status_code_pattern
             .parse()
             .ok()
-            .map(ValueOrSpecification::Value)
+            .map(ValueOrNumericSpecification::Value)
     }
 }
 
@@ -453,12 +456,6 @@ mod openapi_v31 {
                 ObjectOrReference::Ref { .. } => None,
                 ObjectOrReference::Object(t) => Some(test::file::UnvalidatedVariable {
                     name: t.name.clone(),
-
-                    //t.
-                    //data_type: None,
-                    //file: None,
-                    //format: None,
-                    //modifier: None,
                     value: test::file::StringOrDatumOrFile::Value {
                         value: "".to_string(),
                     },
@@ -708,12 +705,13 @@ pub async fn create_test_template(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::file::ValueOrSpecification;
+    use crate::test::file::Specification;
+    use crate::test::file::ValueOrNumericSpecification;
 
     #[test]
     fn create_status_code_number_ok() {
         assert_eq!(
-            Some(ValueOrSpecification::Value(204)),
+            Some(ValueOrNumericSpecification::Value(204)),
             create_status_code("204")
         );
     }
@@ -721,12 +719,10 @@ mod test {
     #[test]
     fn create_status_code_pattern_ok() {
         assert_eq!(
-            Some(ValueOrSpecification::Schema(Specification::<u16> {
-                value: None,
+            Some(ValueOrNumericSpecification::Schema(NumericSpecification {
+                specification: Specification::<u16>::default(),
                 min: Some(200),
                 max: Some(299),
-                none_of: None,
-                one_of: None
             })),
             create_status_code("2XX")
         );
