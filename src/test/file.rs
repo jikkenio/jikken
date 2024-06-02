@@ -3,6 +3,7 @@ use crate::test;
 use crate::test::file::Validated::Good;
 use crate::test::{definition, http, variable};
 use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use chrono::TimeZone;
 use chrono::{DateTime, ParseError};
 use chrono::{Datelike, Local};
@@ -65,6 +66,18 @@ pub struct StringSpecification {
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
+    #[serde(flatten)]
+    pub specification: Specification<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<String>,
+    pub format: Option<String>,
+    pub modifier: Option<variable::Modifier>,
+}
+
+#[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
+pub struct DateTimeSpecification {
     #[serde(flatten)]
     pub specification: Specification<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -545,6 +558,173 @@ impl Checker for DateSpecification {
     }
 }
 
+impl DateTimeSpecification {
+    const DEFAULT_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S%.f";
+    fn check_val(
+        &self,
+        actual: &String,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        self.specification.check_val(actual, formatter)
+    }
+
+    fn check_min(
+        &self,
+        actual: &DateTime<Local>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.min {
+            Some(t) => {
+                if self
+                    .str_to_time(t)
+                    .map(|min| min <= *actual)
+                    .unwrap_or_default()
+                {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("minimum of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+
+    fn check_max(
+        &self,
+        actual: &DateTime<Local>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.max {
+            Some(t) => {
+                if self
+                    .str_to_time(t)
+                    .map(|max| max >= *actual)
+                    .unwrap_or_default()
+                {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("maximum of {}", t).as_str(),
+                        format!("{}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+
+    fn check_one_of(
+        &self,
+        actual: &String,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        self.specification.check_one_of(actual, formatter)
+    }
+
+    fn check_none_of(
+        &self,
+        actual: &String,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        self.specification.check_none_of(actual, formatter)
+    }
+
+    fn get_format(&self) -> String {
+        self.format
+            .clone()
+            .unwrap_or(Self::DEFAULT_FORMAT.to_string())
+    }
+
+    fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
+        let format = self.get_format();
+
+        NaiveDateTime::parse_from_str(string_val, format.as_str())
+            .map(|d| Local.from_local_datetime(&d).unwrap())
+    }
+
+    fn time_to_str(&self, time: &DateTime<Local>) -> String {
+        let format = self.get_format();
+        format!("{}", time.format(&format))
+    }
+    //validates format stuff and applies the modifier
+    //this can be used to generate or validate
+    //But its not a "random" generator like our other specifications
+    fn get(&self, string_val: &str) -> Result<String, ParseError> {
+        //debug!("string expression: {:?}", v);
+        //let mut result_date;
+        self.str_to_time(string_val)
+            .map(|mut dt| {
+                if let Some(m) = &self.modifier {
+                    let mod_value_result = m.value.parse::<u64>();
+                    if let Ok(mod_value) = mod_value_result {
+                        match m.operation.to_lowercase().as_str() {
+                            "add" => {
+                                let modified_date = match m.unit.to_lowercase().as_str() {
+                                    "days" => dt.checked_add_days(Days::new(mod_value)),
+                                    "weeks" => dt.checked_add_days(Days::new(mod_value * 7)),
+                                    "months" => {
+                                        dt.checked_add_months(Months::new(mod_value as u32))
+                                    }
+                                    // TODO: add support for years
+                                    _ => None,
+                                };
+
+                                if let Some(md) = modified_date {
+                                    dt = md;
+                                }
+                            }
+                            "subtract" => {
+                                let modified_date = match m.unit.to_lowercase().as_str() {
+                                    "days" => dt.checked_sub_days(Days::new(mod_value)),
+                                    "weeks" => dt.checked_sub_days(Days::new(mod_value * 7)),
+                                    "months" => {
+                                        dt.checked_sub_months(Months::new(mod_value as u32))
+                                    }
+                                    // TODO: add support for years
+                                    _ => None,
+                                };
+
+                                if let Some(md) = modified_date {
+                                    dt = md;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                dt
+            })
+            .map(|d| self.time_to_str(&d))
+    }
+}
+
+impl Checker for DateTimeSpecification {
+    type Item = String;
+    fn check(
+        &self,
+        val: &Self::Item,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let maybe_time = self.str_to_time(val);
+        if maybe_time.is_err() {
+            return vec![Validated::fail(formatter("date type", "type"))];
+        }
+
+        let time = maybe_time.unwrap();
+
+        vec![
+            self.check_val(val, formatter),
+            self.check_min(&time, formatter),
+            self.check_max(&time, formatter),
+            self.check_none_of(val, formatter),
+            self.check_one_of(val, formatter),
+        ]
+    }
+}
+
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
@@ -564,6 +744,10 @@ pub enum DatumSchema {
     Date {
         #[serde(flatten)]
         specification: Option<DateSpecification>,
+    },
+    DateTime {
+        #[serde(flatten)]
+        specification: Option<DateTimeSpecification>,
     },
     Name {
         #[serde(flatten)]
@@ -593,6 +777,9 @@ impl DatumSchema {
         match self {
             DatumSchema::Date { specification } => {
                 Self::check_date(specification, actual, formatter)
+            }
+            DatumSchema::DateTime { specification } => {
+                Self::check_datetime(specification, actual, formatter)
             }
             DatumSchema::EmailSpecification { specification } => {
                 Self::check_email(specification, actual, formatter)
@@ -644,6 +831,20 @@ impl DatumSchema {
 
     fn check_date(
         spec: &Option<DateSpecification>,
+        actual: &serde_json::Value,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        if !actual.is_string() {
+            return vec![Validated::fail(formatter("string type", "type"))];
+        }
+
+        spec.as_ref()
+            .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+            .unwrap_or(vec![Good(())])
+    }
+
+    fn check_datetime(
+        spec: &Option<DateTimeSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -1223,6 +1424,75 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         })
 }
 
+pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Option<String> {
+    if let Some(val) = &spec.specification.value {
+        return spec.get(val).ok();
+    }
+
+    let min = spec
+        .min
+        .as_ref()
+        .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
+        .unwrap_or(
+            DateTime::<Local>::default()
+                .with_day(1)
+                .unwrap()
+                .with_month(1)
+                .unwrap(),
+        );
+
+    let max = spec
+        .max
+        .as_ref()
+        .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
+        .unwrap_or(Local::now());
+
+    let year_range = (min.year(), max.year());
+    let month_range = (max.month(), min.month());
+    let day_range = (max.day(), min.day());
+
+    let mut rng = rand::thread_rng();
+
+    (0..max_attempts)
+        .map(|_| {
+            return match spec.specification.one_of.as_ref() {
+                Some(vals) => vals
+                    .get(rng.gen_range(0..vals.len()))
+                    .unwrap_or(&String::default())
+                    .clone(),
+                None => {
+                    let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
+
+                    let month = if year == year_range.1 {
+                        generate_number_in_range(month_range.0, month_range.1, &mut rng)
+                    } else {
+                        generate_number_in_range(1, 12, &mut rng)
+                    };
+
+                    let day = if month == month_range.1 && year == year_range.1 {
+                        generate_number_in_range(day_range.0, day_range.1, &mut rng)
+                    } else {
+                        generate_number_in_range(day_range.0, 28, &mut rng)
+                    };
+
+                    return chrono::NaiveDateTime::default()
+                        .with_year(year)
+                        .and_then(|d| d.with_month(month))
+                        .and_then(|d| d.with_day(day))
+                        .map(|d| Local.from_local_datetime(&d))
+                        .map(|d| spec.time_to_str(&d.unwrap()))
+                        .unwrap_or_default();
+                }
+            };
+        })
+        .find(|date_str| {
+            spec.check(date_str, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        })
+}
+
 pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
     let rng = RNG::from(&Language::Fantasy);
     (0..max_attempts)
@@ -1276,6 +1546,13 @@ pub fn generate_value_from_schema(
             specification: date,
         } => generate_date(
             date.as_ref().unwrap_or(&DateSpecification::default()),
+            max_attempts,
+        )
+        .map(serde_json::Value::from),
+        DatumSchema::DateTime {
+            specification: date,
+        } => generate_datetime(
+            date.as_ref().unwrap_or(&DateTimeSpecification::default()),
             max_attempts,
         )
         .map(serde_json::Value::from),
@@ -1894,6 +2171,18 @@ mod tests {
     fn date_generation() {
         let spec = DateSpecification::default();
         let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn datetime_generation() {
+        let spec = DateTimeSpecification::default();
+        let val = generate_datetime(&spec, 10);
         assert!(val.is_some());
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
