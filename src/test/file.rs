@@ -50,6 +50,7 @@ pub struct NumericSpecification<T: std::fmt::Display> {
     pub max: Option<T>,
 }
 
+type BooleanSpecification = Specification<bool>;
 type FloatSpecification = NumericSpecification<f64>;
 type IntegerSpecification = NumericSpecification<i64>;
 
@@ -729,6 +730,10 @@ impl Checker for DateTimeSpecification {
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum DatumSchema {
+    Boolean {
+        #[serde(flatten)]
+        specification: Option<BooleanSpecification>,
+    },
     Float {
         #[serde(flatten)]
         specification: Option<FloatSpecification>,
@@ -786,6 +791,9 @@ impl DatumSchema {
             }
             DatumSchema::Float { specification } => {
                 Self::check_float(specification, actual, formatter)
+            }
+            DatumSchema::Boolean { specification } => {
+                Self::check_bool(specification, actual, formatter)
             }
             DatumSchema::Int { specification } => Self::check_int(specification, actual, formatter),
             DatumSchema::List { schema } => Self::check_list(schema, actual, formatter),
@@ -854,6 +862,20 @@ impl DatumSchema {
 
         spec.as_ref()
             .map(|s| s.check(&String::from(actual.as_str().unwrap()), formatter))
+            .unwrap_or(vec![Good(())])
+    }
+
+    fn check_bool(
+        spec: &Option<BooleanSpecification>,
+        actual: &serde_json::Value,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        if !actual.is_boolean() {
+            return vec![Validated::fail(formatter("bool type", "type"))];
+        }
+
+        spec.as_ref()
+            .map(|s| s.check(&actual.as_bool().unwrap(), formatter))
             .unwrap_or(vec![Good(())])
     }
 
@@ -1301,6 +1323,34 @@ where
         })
 }
 
+pub fn generate_bool(spec: &BooleanSpecification, max_attempts: u16) -> Option<bool> {
+    if spec.value.is_some() {
+        return spec.value.clone();
+    }
+
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..max_attempts {
+        let ret: bool = match spec.one_of.as_ref() {
+            Some(vals) => vals
+                .get(rng.gen_range(0..vals.len()))
+                .unwrap_or(&bool::default())
+                .clone(),
+            None => generate_number_in_range(0, 100, &mut rng) % 2 == 0,
+        };
+
+        let r = spec.check(&ret, &|_e, _a| "".to_string());
+        if r.into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good()
+        {
+            return Some(ret);
+        }
+    }
+
+    None
+}
+
 pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
     generate_number::<f64>(spec, max_attempts)
 }
@@ -1521,6 +1571,13 @@ pub fn generate_value_from_schema(
     max_attempts: u16,
 ) -> Option<serde_json::Value> {
     return match schema {
+        DatumSchema::Boolean { specification } => generate_bool(
+            specification
+                .as_ref()
+                .unwrap_or(&BooleanSpecification::default()),
+            max_attempts,
+        )
+        .map(serde_json::Value::from),
         DatumSchema::Float { specification } => generate_float(
             specification
                 .as_ref()
@@ -2171,6 +2228,18 @@ mod tests {
     fn date_generation() {
         let spec = DateSpecification::default();
         let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn bool_generation() {
+        let spec = BooleanSpecification::default();
+        let val = generate_bool(&spec, 10);
         assert!(val.is_some());
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
