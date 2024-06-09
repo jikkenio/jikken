@@ -54,9 +54,9 @@ pub struct NumericSpecification<T: std::fmt::Display + Clone> {
     pub max: Option<T>,
 }
 
-type BooleanSpecification = Specification<bool>;
-type FloatSpecification = NumericSpecification<f64>;
-type IntegerSpecification = NumericSpecification<i64>;
+pub type BooleanSpecification = Specification<bool>;
+pub type FloatSpecification = NumericSpecification<f64>;
+pub type IntegerSpecification = NumericSpecification<i64>;
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
 #[serde(rename_all = "camelCase")]
@@ -245,6 +245,13 @@ where
     }
 }
 
+fn min_less_than_equal_max<T: PartialOrd>(min: &Option<T>, max: &Option<T>) -> bool {
+    min.as_ref()
+        .zip(max.as_ref())
+        .map(|(min, max)| min <= max)
+        .unwrap_or(true)
+}
+
 impl<T> NumericSpecification<T>
 where
     T: PartialEq,
@@ -253,6 +260,22 @@ where
     T: fmt::Debug,
     T: Clone,
 {
+    pub fn new(
+        specification: Option<Specification<T>>,
+        min: Option<T>,
+        max: Option<T>,
+    ) -> Result<Self, String> {
+        if min_less_than_equal_max(&min, &max) {
+            Ok(Self {
+                specification,
+                min,
+                max,
+            })
+        } else {
+            Err("min must be less than or equal to max".to_string())
+        }
+    }
+
     fn check_min(
         &self,
         actual: &T,
@@ -348,6 +371,47 @@ where
 }
 
 impl StringSpecification {
+    pub fn new(
+        specification: Option<Specification<String>>,
+        min_length: Option<i64>,
+        max_length: Option<i64>,
+    ) -> Result<Self, String> {
+        let negative_validator = |number: &Option<i64>, var_name: &str| {
+            number
+                .as_ref()
+                .map(|s| {
+                    if s.is_negative() {
+                        Validated::fail(format!("negative value provided for {var_name}"))
+                    } else {
+                        Good(number.clone())
+                    }
+                })
+                .unwrap_or(Validated::Good(None))
+        };
+
+        let negative_validation_max = negative_validator(&max_length, "max");
+        let negative_validation_min = negative_validator(&min_length, "min");
+        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
+            Good(())
+        } else {
+            Validated::fail("min_length must be less than or equal to max_length".to_string())
+        };
+
+        negative_validation_max
+            .map3(negative_validation_min, relation_validation, |_, _, _| {
+                Self {
+                    max_length,
+                    min_length,
+                    specification,
+                }
+            })
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{}", acc, e))
+            })
+    }
+
     fn check_min_length(
         &self,
         actual: &str,
@@ -411,6 +475,28 @@ impl Checker for StringSpecification {
     }
 }
 
+impl NameSpecification {
+    pub fn new(string_specification: StringSpecification) -> Result<Self, String> {
+        StringSpecification::new(
+            string_specification.specification,
+            string_specification.min_length,
+            string_specification.max_length,
+        )
+        .map(|s| Self { specification: s })
+    }
+}
+
+impl EmailSpecification {
+    pub fn new(string_specification: StringSpecification) -> Result<Self, String> {
+        StringSpecification::new(
+            string_specification.specification,
+            string_specification.min_length,
+            string_specification.max_length,
+        )
+        .map(|s| Self { specification: s })
+    }
+}
+
 impl DateSpecification {
     const DEFAULT_FORMAT: &'static str = "%Y-%m-%d";
 
@@ -441,17 +527,17 @@ impl DateSpecification {
                 .unwrap_or(Validated::Good(None))
         };
         date_validator(&min, "min")
-            .map2(date_validator(&max, "max"), |minV, maxV| Self {
+            .map2(date_validator(&max, "max"), |min_v, max_v| Self {
                 format,
-                min: minV,
-                max: maxV,
+                min: min_v,
+                max: max_v,
                 modifier,
                 specification,
             })
             .ok()
             .map_err(|nev| {
                 nev.into_nonempty_iter()
-                    .reduce(|acc, e| format!("{},{},", acc, e))
+                    .reduce(|acc, e| format!("{},{}", acc, e))
             })
     }
 
@@ -641,10 +727,10 @@ impl DateTimeSpecification {
                 .unwrap_or(Validated::Good(None))
         };
         date_validator(&min, "min")
-            .map2(date_validator(&max, "max"), |minV, maxV| Self {
+            .map2(date_validator(&max, "max"), |min_v, max_v| Self {
                 format,
-                min: minV,
-                max: maxV,
+                min: min_v,
+                max: max_v,
                 modifier,
                 specification,
             })
@@ -841,7 +927,7 @@ pub enum DatumSchema {
         #[serde(flatten)]
         specification: Option<NameSpecification>,
     },
-    EmailSpecification {
+    Email {
         #[serde(flatten)]
         specification: Option<EmailSpecification>,
     },
@@ -869,7 +955,7 @@ impl DatumSchema {
             DatumSchema::DateTime { specification } => {
                 Self::check_datetime(specification, actual, formatter)
             }
-            DatumSchema::EmailSpecification { specification } => {
+            DatumSchema::Email { specification } => {
                 Self::check_email(specification, actual, formatter)
             }
             DatumSchema::Float { specification } => {
@@ -1688,7 +1774,7 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(serde_json::Value::from),
-        DatumSchema::EmailSpecification {
+        DatumSchema::Email {
             specification: email,
         } => generate_email(
             email.as_ref().unwrap_or(&EmailSpecification::default()),
@@ -1922,6 +2008,53 @@ mod tests {
     }
 
     #[test]
+    fn numericspecification_no_inputs() {
+        assert!(IntegerSpecification::new(None, None, None).is_ok());
+    }
+
+    #[test]
+    fn numericspecification_min_max_agreemnt() {
+        assert!(IntegerSpecification::new(None, Some(12), Some(12)).is_ok());
+        assert!(IntegerSpecification::new(None, Some(12), Some(24)).is_ok());
+        assert_eq!(
+            IntegerSpecification::new(None, Some(24), Some(12)).unwrap_err(),
+            "min must be less than or equal to max".to_string()
+        );
+    }
+
+    #[test]
+    fn stringspecification_no_inputs() {
+        assert!(StringSpecification::new(None, None, None).is_ok());
+    }
+
+    #[test]
+    fn stringspecification_negative_input() {
+        assert_eq!(
+            StringSpecification::new(None, Some(-12), None).unwrap_err(),
+            "negative value provided for min".to_string()
+        );
+        assert_eq!(
+            StringSpecification::new(None, Some(-12), Some(-12)).unwrap_err(),
+            "negative value provided for max,negative value provided for min".to_string()
+        );
+        assert_eq!(
+            StringSpecification::new(None, None, Some(-24)).unwrap_err(),
+            "negative value provided for max".to_string()
+        );
+        assert!(StringSpecification::new(None, Some(12), None).is_ok());
+    }
+
+    #[test]
+    fn stringspecification_min_max_agreement() {
+        assert_eq!(
+            StringSpecification::new(None, Some(24), Some(12)).unwrap_err(),
+            "min_length must be less than or equal to max_length".to_string()
+        );
+        assert!(StringSpecification::new(None, Some(1), Some(1)).is_ok());
+        assert!(StringSpecification::new(None, Some(12), Some(24)).is_ok());
+    }
+
+    #[test]
     fn datespecification_valid_inputs() {
         assert!(DateSpecification::new(None, None, None, None, None).is_ok());
     }
@@ -1954,32 +2087,7 @@ mod tests {
         assert!(res.as_ref().err().unwrap().as_str().contains("max"));
         assert!(res.as_ref().err().unwrap().as_str().contains("min"));
     }
-    /* *
-        #[test]
-        fn specification_errors_accumulate() {
-            let spec = NumericSpecification::<u16> {
-                specification: Specification {
-                    value: Some(1),
-                    one_of: Some(vec![1, 2, 4]),
-                    none_of: Some(vec![101]),
-                },
-                min: Some(200),
-                max: Some(100),
-            };
 
-            assert_eq!(
-                5,
-                spec.check(&101, &|_e, _a| "".to_string())
-                    .into_iter()
-                    .collect::<Validated<Vec<()>, String>>()
-                    .ok()
-                    .err()
-                    .unwrap()
-                    .len()
-                    .get()
-            );
-        }
-    */
     #[test]
     fn datum_float_type_validation() {
         assert_eq!(

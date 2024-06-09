@@ -9,9 +9,14 @@ use crate::test::file::BodyOrSchema;
 use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 use crate::test::definition::RequestBody;
 use crate::test::file::DatumSchema;
+use crate::test::file::FloatSpecification;
+use crate::test::file::IntegerSpecification;
+use crate::test::file::NameSpecification;
 use crate::test::file::StringOrDatumOrFile;
 use file::DateSpecification;
 use file::DateTimeSpecification;
+use file::EmailSpecification;
+use file::StringSpecification;
 use log::{debug, error, trace};
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
@@ -98,46 +103,135 @@ impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
     type Error = String;
 
     fn try_from(value: StringOrDatumOrFile) -> Result<Self, Self::Error> {
-        let validation: Result<(), String> = match &value {
-            // \todo : check if file is valid?
-            StringOrDatumOrFile::Schema(schema) => match schema {
-                DatumSchema::Date { specification } => specification
-                    .as_ref()
-                    .map(|ds| {
-                        DateSpecification::new(
-                            ds.specification.clone(),
-                            ds.min.clone(),
-                            ds.max.clone(),
-                            ds.format.clone(),
-                            ds.modifier.clone(),
-                        )
-                        .map(|_| ())
-                    })
-                    .unwrap_or(Ok(())),
-                DatumSchema::DateTime { specification } => specification
-                    .as_ref()
-                    .map(|ds| {
-                        DateTimeSpecification::new(
-                            ds.specification.clone(),
-                            ds.min.clone(),
-                            ds.max.clone(),
-                            ds.format.clone(),
-                            ds.modifier.clone(),
-                        )
-                        .map(|_| ())
-                    })
-                    .unwrap_or(Ok(())),
-                _ => Ok(()),
-            },
-            _ => Ok(()),
-        };
-        validation.and_then(|_| match value {
-            StringOrDatumOrFile::File { file } => Ok(StringOrDatumOrFileOrSecret::File { file }),
-            StringOrDatumOrFile::Schema(s) => Ok(StringOrDatumOrFileOrSecret::Schema(s)),
+        match value {
             StringOrDatumOrFile::Value { value } => {
                 Ok(StringOrDatumOrFileOrSecret::Value { value })
             }
-        })
+            // \todo : check if file is valid?
+            //         we could, but will we ever store responses to file?
+            //         basically a TOCTOU question
+            StringOrDatumOrFile::File { file } => Ok(StringOrDatumOrFileOrSecret::File { file }),
+            StringOrDatumOrFile::Schema(schema) => match schema {
+                DatumSchema::Name { specification } => specification
+                    .map(|s| {
+                        NameSpecification::new(s.specification).map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Name {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
+                        DatumSchema::Email {
+                            specification: None,
+                        },
+                    ))),
+                // \todo: Should recursively validate
+                DatumSchema::Object { schema } => {
+                    Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Object {
+                        schema,
+                    }))
+                }
+                // \todo: Should recursively validate
+                DatumSchema::List { schema } => {
+                    Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::List {
+                        schema,
+                    }))
+                }
+                DatumSchema::Email { specification } => specification
+                    .map(|s| {
+                        EmailSpecification::new(s.specification).map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Email {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
+                        DatumSchema::Email {
+                            specification: None,
+                        },
+                    ))),
+                DatumSchema::Boolean { specification } => {
+                    Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Boolean {
+                        specification,
+                    }))
+                }
+                DatumSchema::Float { specification } => specification
+                    .map(|s| {
+                        FloatSpecification::new(s.specification, s.min, s.max).map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Float {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
+                        DatumSchema::Float {
+                            specification: None,
+                        },
+                    ))),
+                DatumSchema::Int { specification } => specification
+                    .map(|s| {
+                        IntegerSpecification::new(s.specification, s.min, s.max).map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                        specification: None,
+                    }))),
+                DatumSchema::String { specification } => specification
+                    .map(|s| {
+                        StringSpecification::new(s.specification, s.min_length, s.max_length).map(
+                            |s| {
+                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::String {
+                                    specification: Some(s),
+                                })
+                            },
+                        )
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
+                        DatumSchema::String {
+                            specification: None,
+                        },
+                    ))),
+                DatumSchema::Date { specification } => specification
+                    .map(|ds| {
+                        DateSpecification::new(
+                            ds.specification,
+                            ds.min,
+                            ds.max,
+                            ds.format,
+                            ds.modifier,
+                        )
+                        .map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
+                        specification: None,
+                    }))),
+                DatumSchema::DateTime { specification } => specification
+                    .map(|ds| {
+                        DateTimeSpecification::new(
+                            ds.specification,
+                            ds.min,
+                            ds.max,
+                            ds.format,
+                            ds.modifier,
+                        )
+                        .map(|s| {
+                            StringOrDatumOrFileOrSecret::Schema(DatumSchema::DateTime {
+                                specification: Some(s),
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                        specification: None,
+                    }))),
+            },
+        }
     }
 }
 
