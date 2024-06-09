@@ -10,6 +10,7 @@ use chrono::{Datelike, Local};
 use chrono::{Days, Months};
 use log::error;
 use log::trace;
+use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
 use num::Num;
 use rand::distributions::uniform::SampleUniform;
 use rand::rngs::ThreadRng;
@@ -28,22 +29,25 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
-pub struct Specification<T> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub one_of: Option<Vec<T>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub none_of: Option<Vec<T>>,
+pub enum Specification<T> {
+    Value(T),
+    OneOf(Vec<T>),
+    NoneOf(Vec<T>),
 }
 
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
+impl<T> Default for Specification<T> {
+    fn default() -> Self {
+        Specification::NoneOf(vec![])
+    }
+}
+
+#[derive(Serialize, Debug, Clone, Default, Deserialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
-pub struct NumericSpecification<T: std::fmt::Display> {
-    #[serde(flatten)]
-    pub specification: Specification<T>,
+pub struct NumericSpecification<T: std::fmt::Display + Clone> {
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub specification: Option<Specification<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,8 +61,8 @@ type IntegerSpecification = NumericSpecification<i64>;
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StringSpecification {
-    #[serde(flatten)]
-    pub specification: Specification<String>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub specification: Option<Specification<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,8 +71,8 @@ pub struct StringSpecification {
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
-    #[serde(flatten)]
-    pub specification: Specification<String>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub specification: Option<Specification<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,7 +84,7 @@ pub struct DateSpecification {
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateTimeSpecification {
     #[serde(flatten)]
-    pub specification: Specification<String>,
+    pub specification: Option<Specification<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -151,64 +155,63 @@ where
     T: Display,
     T: PartialOrd,
     T: fmt::Debug,
+    T: Clone,
 {
+    fn generate_if_constrained(&self, rng: &mut ThreadRng) -> Option<T> {
+        match &self {
+            Specification::Value(v) => Some(v.clone()),
+            Specification::OneOf(oneofs) => oneofs
+                .get(rng.gen_range(0..oneofs.len()))
+                .map(|s| s.clone()),
+            _ => None,
+        }
+    }
+
     fn check_val(
         &self,
         actual: &T,
+        specified_value: &T,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
-        match &self.value {
-            Some(t) => {
-                if t == actual {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("{}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
+        if specified_value == actual {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("{}", specified_value).as_str(),
+                format!("{}", actual).as_str(),
+            ))
         }
     }
 
     fn check_one_of(
         &self,
         actual: &T,
+        specified_values: &[T],
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
-        match &self.one_of {
-            Some(t) => {
-                if t.contains(actual) {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("one of {:?}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
+        if specified_values.contains(actual) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{}", actual).as_str(),
+            ))
         }
     }
 
     fn check_none_of(
         &self,
         actual: &T,
+        specified_values: &[T],
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
-        match &self.none_of {
-            Some(t) => {
-                if !t.contains(actual) {
-                    Good(())
-                } else {
-                    Validated::fail(formatter(
-                        format!("none of {:?}", t).as_str(),
-                        format!("{}", actual).as_str(),
-                    ))
-                }
-            }
-            None => Good(()),
+        if !specified_values.contains(actual) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("none of {:?}", specified_values).as_str(),
+                format!("{}", actual).as_str(),
+            ))
         }
     }
 }
@@ -221,6 +224,7 @@ where
     T: fmt::Debug,
     T: Display,
     T: Serialize,
+    T: Clone,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         serde_json::to_string(self).unwrap().hash(state)
@@ -234,6 +238,7 @@ where
     T: PartialOrd,
     T: fmt::Debug,
     T: Serialize,
+    T: Clone,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         serde_json::to_string(self).unwrap().hash(state)
@@ -246,6 +251,7 @@ where
     T: Display,
     T: PartialOrd,
     T: fmt::Debug,
+    T: Clone,
 {
     fn check_min(
         &self,
@@ -294,6 +300,7 @@ where
     T: Display,
     T: PartialOrd,
     T: fmt::Debug,
+    T: Clone,
 {
     type Item = T;
     fn check(
@@ -301,11 +308,13 @@ where
         val: &T,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        vec![
-            self.check_val(val, formatter),
-            self.check_none_of(val, formatter),
-            self.check_one_of(val, formatter),
-        ]
+        vec![match self {
+            Specification::NoneOf(nones) => self.check_none_of(val, &nones, formatter),
+            Specification::OneOf(oneofs) => self.check_one_of(val, &oneofs, formatter),
+            Specification::Value(specified_value) => {
+                self.check_val(val, &specified_value, formatter)
+            }
+        }]
     }
 }
 
@@ -315,6 +324,7 @@ where
     T: Display,
     T: PartialOrd,
     T: fmt::Debug,
+    T: Clone,
 {
     type Item = T;
     fn check(
@@ -326,7 +336,13 @@ where
             self.check_min(val, formatter),
             self.check_max(val, formatter),
         ];
-        ret.append(self.specification.check(val, formatter).as_mut());
+        ret.append(
+            self.specification
+                .as_ref()
+                .map(|s| s.check(val, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
         ret
     }
 }
@@ -384,19 +400,59 @@ impl Checker for StringSpecification {
             self.check_min_length(val, formatter),
             self.check_max_length(val, formatter),
         ];
-        ret.append(self.specification.check(val, formatter).as_mut());
+        ret.append(
+            self.specification
+                .as_ref()
+                .map(|s| s.check(val, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
         ret
     }
 }
 
 impl DateSpecification {
     const DEFAULT_FORMAT: &'static str = "%Y-%m-%d";
-    fn check_val(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_val(actual, formatter)
+
+    // \todo validate modifier,
+    pub fn new(
+        specification: Option<Specification<String>>,
+        min: Option<String>,
+        max: Option<String>,
+        format: Option<String>,
+        modifier: Option<variable::Modifier>,
+    ) -> Result<Self, String> {
+        let date_validator = |date_string: &Option<String>, var_name: &str| {
+            date_string
+                .as_ref()
+                .and_then(|s| {
+                    let res = Self::str_to_time_with_format(
+                        &s,
+                        format.as_ref().unwrap_or(&Self::DEFAULT_FORMAT.to_string()),
+                    );
+                    if res.is_err() {
+                        Some(Validated::fail(format!(
+                            "invalid date provided for {var_name} "
+                        )))
+                    } else {
+                        Some(Good(date_string.clone()))
+                    }
+                })
+                .unwrap_or(Validated::Good(None))
+        };
+        date_validator(&min, "min")
+            .map2(date_validator(&max, "max"), |minV, maxV| Self {
+                format,
+                min: minV,
+                max: maxV,
+                modifier,
+                specification,
+            })
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{},", acc, e))
+            })
     }
 
     fn check_min(
@@ -447,42 +503,32 @@ impl DateSpecification {
         }
     }
 
-    fn check_one_of(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_one_of(actual, formatter)
-    }
-
-    fn check_none_of(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_none_of(actual, formatter)
-    }
-
     fn get_format(&self) -> String {
         self.format
             .clone()
             .unwrap_or(Self::DEFAULT_FORMAT.to_string())
     }
 
-    fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
-        let format = self.get_format();
-
-        NaiveDate::parse_from_str(string_val, format.as_str()).map(|d| {
+    fn str_to_time_with_format(
+        string_val: &str,
+        format: &str,
+    ) -> Result<DateTime<Local>, ParseError> {
+        NaiveDate::parse_from_str(string_val, format).map(|d| {
             Local
                 .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
                 .unwrap()
         })
     }
 
+    pub fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
+        Self::str_to_time_with_format(string_val, &self.get_format())
+    }
+
     fn time_to_str(&self, time: &DateTime<Local>) -> String {
         let format = self.get_format();
         format!("{}", time.format(&format))
     }
+
     //validates format stuff and applies the modifier
     //this can be used to generate or validate
     //But its not a "random" generator like our other specifications
@@ -549,24 +595,64 @@ impl Checker for DateSpecification {
 
         let time = maybe_time.unwrap();
 
-        vec![
-            self.check_val(val, formatter),
+        let mut ret = vec![
             self.check_min(&time, formatter),
             self.check_max(&time, formatter),
-            self.check_none_of(val, formatter),
-            self.check_one_of(val, formatter),
-        ]
+        ];
+
+        ret.append(
+            self.specification
+                .as_ref()
+                .map(|s| s.check(val, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
+
+        return ret;
     }
 }
 
 impl DateTimeSpecification {
     const DEFAULT_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S%.f";
-    fn check_val(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_val(actual, formatter)
+
+    pub fn new(
+        specification: Option<Specification<String>>,
+        min: Option<String>,
+        max: Option<String>,
+        format: Option<String>,
+        modifier: Option<variable::Modifier>,
+    ) -> Result<Self, String> {
+        let date_validator = |date_string: &Option<String>, var_name: &str| {
+            date_string
+                .as_ref()
+                .and_then(|s| {
+                    let res = Self::str_to_time_with_format(
+                        &s,
+                        format.as_ref().unwrap_or(&Self::DEFAULT_FORMAT.to_string()),
+                    );
+                    if res.is_err() {
+                        Some(Validated::fail(format!(
+                            "invalid date provided for {var_name} "
+                        )))
+                    } else {
+                        Some(Good(date_string.clone()))
+                    }
+                })
+                .unwrap_or(Validated::Good(None))
+        };
+        date_validator(&min, "min")
+            .map2(date_validator(&max, "max"), |minV, maxV| Self {
+                format,
+                min: minV,
+                max: maxV,
+                modifier,
+                specification,
+            })
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{}", acc, e))
+            })
     }
 
     fn check_min(
@@ -617,39 +703,29 @@ impl DateTimeSpecification {
         }
     }
 
-    fn check_one_of(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_one_of(actual, formatter)
-    }
-
-    fn check_none_of(
-        &self,
-        actual: &String,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Validated<(), String> {
-        self.specification.check_none_of(actual, formatter)
-    }
-
     fn get_format(&self) -> String {
         self.format
             .clone()
             .unwrap_or(Self::DEFAULT_FORMAT.to_string())
     }
 
-    fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
-        let format = self.get_format();
-
-        NaiveDateTime::parse_from_str(string_val, format.as_str())
+    pub fn str_to_time_with_format(
+        string_val: &str,
+        format: &str,
+    ) -> Result<DateTime<Local>, ParseError> {
+        NaiveDateTime::parse_from_str(string_val, format)
             .map(|d| Local.from_local_datetime(&d).unwrap())
+    }
+
+    pub fn str_to_time(&self, string_val: &str) -> Result<DateTime<Local>, ParseError> {
+        Self::str_to_time_with_format(string_val, &self.get_format())
     }
 
     fn time_to_str(&self, time: &DateTime<Local>) -> String {
         let format = self.get_format();
         format!("{}", time.format(&format))
     }
+
     //validates format stuff and applies the modifier
     //this can be used to generate or validate
     //But its not a "random" generator like our other specifications
@@ -716,13 +792,20 @@ impl Checker for DateTimeSpecification {
 
         let time = maybe_time.unwrap();
 
-        vec![
-            self.check_val(val, formatter),
+        let mut ret = vec![
             self.check_min(&time, formatter),
             self.check_max(&time, formatter),
-            self.check_none_of(val, formatter),
-            self.check_one_of(val, formatter),
-        ]
+        ];
+
+        ret.append(
+            self.specification
+                .as_ref()
+                .map(|s| s.check(val, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
+
+        return ret;
     }
 }
 
@@ -1046,7 +1129,7 @@ impl Hash for UnvalidatedCompareRequest {
 #[derive(Hash, Debug, Serialize, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum ValueOrNumericSpecification<
-    T: std::fmt::Display + std::fmt::Debug + std::cmp::PartialOrd + Serialize,
+    T: std::fmt::Display + std::fmt::Debug + std::cmp::PartialOrd + Serialize + Clone,
 > {
     Value(T),
     Schema(NumericSpecification<T>),
@@ -1059,6 +1142,7 @@ where
     T: PartialOrd,
     T: fmt::Debug,
     T: Serialize,
+    T: Clone,
 {
     type Item = T;
     fn check(
@@ -1297,23 +1381,17 @@ where
         + fmt::Debug,
     Specification<T>: Checker<Item = T>,
 {
-    if spec.specification.value.is_some() {
-        return spec.specification.value;
-    }
-
     let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
-            return match spec.specification.one_of.as_ref() {
-                Some(vals) => *vals
-                    .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&T::default()),
-                None => generate_number_in_range(
+            spec.specification
+                .as_ref()
+                .and_then(|s| s.generate_if_constrained(&mut rng))
+                .unwrap_or(generate_number_in_range(
                     spec.min.unwrap_or(T::min_value()),
                     spec.max.unwrap_or(T::max_value()),
                     &mut rng,
-                ),
-            };
+                ))
         })
         .find(|v| {
             spec.check(v, &|_e, _a| "".to_string())
@@ -1324,20 +1402,12 @@ where
 }
 
 pub fn generate_bool(spec: &BooleanSpecification, max_attempts: u16) -> Option<bool> {
-    if spec.value.is_some() {
-        return spec.value.clone();
-    }
-
     let mut rng = rand::thread_rng();
 
     for _ in 0..max_attempts {
-        let ret: bool = match spec.one_of.as_ref() {
-            Some(vals) => vals
-                .get(rng.gen_range(0..vals.len()))
-                .unwrap_or(&bool::default())
-                .clone(),
-            None => generate_number_in_range(0, 100, &mut rng) % 2 == 0,
-        };
+        let ret = spec
+            .generate_if_constrained(&mut rng)
+            .unwrap_or(generate_number_in_range(0, 100, &mut rng) % 2 == 0);
 
         let r = spec.check(&ret, &|_e, _a| "".to_string());
         if r.into_iter()
@@ -1359,27 +1429,27 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
-
-    if spec.specification.value.is_some() {
-        return spec.specification.value.clone();
-    }
+                               /*
+                               if spec.specification.value.is_some() {
+                                   return spec.specification.value.clone();
+                               }*/
 
     let mut rng = rand::thread_rng();
     let string_length: usize = rng.gen_range(1..50);
 
     for _ in 0..max_attempts {
-        let ret: String = match spec.specification.one_of.as_ref() {
-            Some(vals) => vals
-                .get(rng.gen_range(0..vals.len()))
-                .unwrap_or(&String::default())
-                .clone(),
-            None => (0..string_length)
-                .map(|_| {
-                    let idx = rng.gen_range(0..CHARSET.len());
-                    CHARSET[idx] as char
-                })
-                .collect::<String>(),
-        };
+        let ret = spec
+            .specification
+            .as_ref()
+            .and_then(|s| s.generate_if_constrained(&mut rng))
+            .unwrap_or(
+                (0..string_length)
+                    .map(|_| {
+                        let idx = rng.gen_range(0..CHARSET.len());
+                        CHARSET[idx] as char
+                    })
+                    .collect::<String>(),
+            );
 
         let r = spec.check(&ret, &|_e, _a| "".to_string());
         if r.into_iter()
@@ -1406,10 +1476,6 @@ fn generate_number_in_range<T: Num + SampleUniform + PartialOrd + Copy + Debug>(
 }
 
 pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<String> {
-    if let Some(val) = &spec.specification.value {
-        return spec.get(val).ok();
-    }
-
     let min = spec
         .min
         .as_ref()
@@ -1436,12 +1502,15 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
 
     (0..max_attempts)
         .map(|_| {
-            return match spec.specification.one_of.as_ref() {
-                Some(vals) => vals
-                    .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&String::default())
-                    .clone(),
-                None => {
+            spec.specification
+                .as_ref()
+                //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
+                //parse time. Would require Unvalidated version of type. So we have to match
+                .and_then(|s| match s {
+                    Specification::Value(v) => spec.get(&v).ok(),
+                    _ => s.generate_if_constrained(&mut rng),
+                })
+                .unwrap_or_else(|| {
                     let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
 
                     let month = if year == year_range.1 {
@@ -1463,8 +1532,7 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                         .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
                         .map(|d| spec.time_to_str(&d.unwrap()))
                         .unwrap_or_default();
-                }
-            };
+                })
         })
         .find(|date_str| {
             spec.check(date_str, &|_e, _a| "".to_string())
@@ -1475,10 +1543,6 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
 }
 
 pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Option<String> {
-    if let Some(val) = &spec.specification.value {
-        return spec.get(val).ok();
-    }
-
     let min = spec
         .min
         .as_ref()
@@ -1505,12 +1569,15 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
 
     (0..max_attempts)
         .map(|_| {
-            return match spec.specification.one_of.as_ref() {
-                Some(vals) => vals
-                    .get(rng.gen_range(0..vals.len()))
-                    .unwrap_or(&String::default())
-                    .clone(),
-                None => {
+            spec.specification
+                .as_ref()
+                //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
+                //parse time. Would require Unvalidated version of type. So we have to match
+                .and_then(|s| match s {
+                    Specification::Value(v) => spec.get(&v).ok(),
+                    _ => s.generate_if_constrained(&mut rng),
+                })
+                .unwrap_or_else(|| {
                     let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
 
                     let month = if year == year_range.1 {
@@ -1532,8 +1599,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                         .map(|d| Local.from_local_datetime(&d))
                         .map(|d| spec.time_to_str(&d.unwrap()))
                         .unwrap_or_default();
-                }
-            };
+                })
         })
         .find(|date_str| {
             spec.check(date_str, &|_e, _a| "".to_string())
@@ -1544,13 +1610,15 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
 }
 
 pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
-    let rng = RNG::from(&Language::Fantasy);
+    let name_rng = RNG::from(&Language::Fantasy);
+    let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
-            return match spec.specification.specification.one_of.as_ref() {
-                Some(_) => generate_string(&spec.specification, max_attempts).unwrap_or_default(),
-                None => rng.generate_name(),
-            };
+            spec.specification
+                .specification
+                .as_ref()
+                .and_then(|s| s.generate_if_constrained(&mut rng))
+                .unwrap_or_else(|| name_rng.generate_name())
         })
         .find(|v| {
             spec.specification
@@ -1662,11 +1730,7 @@ mod tests {
 
     #[test]
     fn specification_none_of_checker() {
-        let spec = Specification::<u16> {
-            value: None,
-            one_of: None,
-            none_of: Some(vec![1, 2, 3, 4, 5]),
-        };
+        let spec = Specification::NoneOf(vec![1, 2, 3, 4, 5]);
 
         assert_eq!(
             true,
@@ -1689,11 +1753,7 @@ mod tests {
 
     #[test]
     fn specification_val_checker() {
-        let spec = Specification::<u16> {
-            value: Some(12),
-            one_of: None,
-            none_of: None,
-        };
+        let spec = Specification::Value(12);
 
         let f = spec
             .check(&12, &|_e, _a| "".to_string())
@@ -1712,11 +1772,7 @@ mod tests {
 
     #[test]
     fn specification_one_of_checker() {
-        let spec = Specification::<u16> {
-            value: None,
-            one_of: Some(vec![1, 2, 3, 4, 5]),
-            none_of: None,
-        };
+        let spec = Specification::OneOf(vec![1, 2, 3, 4, 5]);
 
         assert_eq!(
             true,
@@ -1740,7 +1796,6 @@ mod tests {
     #[test]
     fn numeric_specification_min_checker() {
         let spec = NumericSpecification::<u16> {
-            specification: Specification::default(),
             min: Some(50),
             ..Default::default()
         };
@@ -1773,7 +1828,6 @@ mod tests {
     #[test]
     fn numeric_specification_max_checker() {
         let spec = NumericSpecification::<u16> {
-            specification: Specification::default(),
             max: Some(50),
             ..Default::default()
         };
@@ -1806,7 +1860,6 @@ mod tests {
     #[test]
     fn string_specification_max_length_checker() {
         let spec = StringSpecification {
-            specification: Specification::default(),
             max_length: Some(5),
             ..Default::default()
         };
@@ -1839,7 +1892,6 @@ mod tests {
     #[test]
     fn string_specification_min_length_checker() {
         let spec = StringSpecification {
-            specification: Specification::default(),
             min_length: Some(5),
             ..Default::default()
         };
@@ -1870,30 +1922,64 @@ mod tests {
     }
 
     #[test]
-    fn specification_errors_accumulate() {
-        let spec = NumericSpecification::<u16> {
-            specification: Specification {
-                value: Some(1),
-                one_of: Some(vec![1, 2, 4]),
-                none_of: Some(vec![101]),
-            },
-            min: Some(200),
-            max: Some(100),
-        };
-
-        assert_eq!(
-            5,
-            spec.check(&101, &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .ok()
-                .err()
-                .unwrap()
-                .len()
-                .get()
-        );
+    fn datespecification_valid_inputs() {
+        assert!(DateSpecification::new(None, None, None, None, None).is_ok());
     }
 
+    #[test]
+    fn datespecification_invalid_input() {
+        let res = DateSpecification::new(
+            None,
+            Some("Hello!".to_string()),
+            Some("2020-09-12".to_string()),
+            None,
+            None,
+        );
+
+        assert!(res.is_err());
+        assert!(res.err().unwrap().as_str().contains("min"));
+    }
+
+    #[test]
+    fn datespecification_invalid_inputs() {
+        let res = DateSpecification::new(
+            None,
+            Some("Hello!".to_string()),
+            Some("Hello".to_string()),
+            None,
+            None,
+        );
+
+        assert!(res.is_err());
+        assert!(res.as_ref().err().unwrap().as_str().contains("max"));
+        assert!(res.as_ref().err().unwrap().as_str().contains("min"));
+    }
+    /* *
+        #[test]
+        fn specification_errors_accumulate() {
+            let spec = NumericSpecification::<u16> {
+                specification: Specification {
+                    value: Some(1),
+                    one_of: Some(vec![1, 2, 4]),
+                    none_of: Some(vec![101]),
+                },
+                min: Some(200),
+                max: Some(100),
+            };
+
+            assert_eq!(
+                5,
+                spec.check(&101, &|_e, _a| "".to_string())
+                    .into_iter()
+                    .collect::<Validated<Vec<()>, String>>()
+                    .ok()
+                    .err()
+                    .unwrap()
+                    .len()
+                    .get()
+            );
+        }
+    */
     #[test]
     fn datum_float_type_validation() {
         assert_eq!(
@@ -2043,13 +2129,11 @@ mod tests {
                     "name".to_string(),
                     DatumSchema::String {
                         specification: Some(StringSpecification {
-                            specification: Specification {
-                                value: None,
-                                one_of: Some(vec!["foo".to_string(), "bar".to_string()]),
-                                none_of: None,
-                            },
-                            min_length: None,
-                            max_length: None,
+                            specification: Some(Specification::OneOf(vec![
+                                "foo".to_string(),
+                                "bar".to_string(),
+                            ])),
+                            ..Default::default()
                         }),
                     },
                 ),
@@ -2181,10 +2265,10 @@ mod tests {
     #[test]
     fn string_generation() {
         let spec = StringSpecification {
-            specification: Specification {
-                none_of: Some(vec!["foo".to_string(), "bar".to_string()]),
-                ..Default::default()
-            },
+            specification: Some(Specification::NoneOf(vec![
+                "foo".to_string(),
+                "bar".to_string(),
+            ])),
             ..Default::default()
         };
 

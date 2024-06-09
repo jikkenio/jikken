@@ -3,7 +3,7 @@ use super::test::template;
 use log::{error, info};
 
 use crate::test::file::NumericSpecification;
-use crate::test::file::Specification;
+//use crate::test::file::Specification;
 use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::File;
@@ -23,11 +23,7 @@ fn create_tags(tags: &[String]) -> Option<String> {
 fn create_status_code(status_code_pattern: &str) -> Option<ValueOrNumericSpecification<u16>> {
     if status_code_pattern == "2XX" {
         Some(ValueOrNumericSpecification::Schema(NumericSpecification {
-            specification: Specification {
-                value: None,
-                one_of: None,
-                none_of: None,
-            },
+            specification: None,
             min: Some(200),
             max: Some(299),
         }))
@@ -705,7 +701,7 @@ pub async fn create_test_template(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::file::Specification;
+    //use crate::test::file::Specification;
     use crate::test::file::ValueOrNumericSpecification;
 
     #[test]
@@ -720,7 +716,7 @@ mod test {
     fn create_status_code_pattern_ok() {
         assert_eq!(
             Some(ValueOrNumericSpecification::Schema(NumericSpecification {
-                specification: Specification::<u16>::default(),
+                specification: None,
                 min: Some(200),
                 max: Some(299),
             })),
