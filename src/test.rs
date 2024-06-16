@@ -6,9 +6,12 @@ pub mod validation;
 pub mod variable;
 use crate::test::file::BodyOrSchema;
 
+use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 use crate::test::definition::RequestBody;
 use crate::test::file::DatumSchema;
 use crate::test::file::StringOrDatumOrFile;
+use file::DateSpecification;
+use file::DateTimeSpecification;
 use log::{debug, error, trace};
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
@@ -19,8 +22,6 @@ use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use uuid::Uuid;
-
-use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 
 #[derive(Deserialize, PartialEq)]
 pub struct SecretValue(String);
@@ -90,14 +91,53 @@ pub enum StringOrDatumOrFileOrSecret {
     Value { value: String },
     Secret { secret: SecretValue },
 }
+/*
+    \todo : Address min/max specified AND value
+*/
+impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
+    type Error = String;
 
-impl From<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
-    fn from(item: StringOrDatumOrFile) -> Self {
-        match item {
-            StringOrDatumOrFile::File { file } => StringOrDatumOrFileOrSecret::File { file },
-            StringOrDatumOrFile::Schema(s) => StringOrDatumOrFileOrSecret::Schema(s),
-            StringOrDatumOrFile::Value { value } => StringOrDatumOrFileOrSecret::Value { value },
-        }
+    fn try_from(value: StringOrDatumOrFile) -> Result<Self, Self::Error> {
+        let validation: Result<(), String> = match &value {
+            // \todo : check if file is valid?
+            StringOrDatumOrFile::Schema(schema) => match schema {
+                DatumSchema::Date { specification } => specification
+                    .as_ref()
+                    .map(|ds| {
+                        DateSpecification::new(
+                            ds.specification.clone(),
+                            ds.min.clone(),
+                            ds.max.clone(),
+                            ds.format.clone(),
+                            ds.modifier.clone(),
+                        )
+                        .map(|_| ())
+                    })
+                    .unwrap_or(Ok(())),
+                DatumSchema::DateTime { specification } => specification
+                    .as_ref()
+                    .map(|ds| {
+                        DateTimeSpecification::new(
+                            ds.specification.clone(),
+                            ds.min.clone(),
+                            ds.max.clone(),
+                            ds.format.clone(),
+                            ds.modifier.clone(),
+                        )
+                        .map(|_| ())
+                    })
+                    .unwrap_or(Ok(())),
+                _ => Ok(()),
+            },
+            _ => Ok(()),
+        };
+        validation.and_then(|_| match value {
+            StringOrDatumOrFile::File { file } => Ok(StringOrDatumOrFileOrSecret::File { file }),
+            StringOrDatumOrFile::Schema(s) => Ok(StringOrDatumOrFileOrSecret::Schema(s)),
+            StringOrDatumOrFile::Value { value } => {
+                Ok(StringOrDatumOrFileOrSecret::Value { value })
+            }
+        })
     }
 }
 
@@ -186,37 +226,41 @@ impl Variable {
         variable: file::UnvalidatedVariable,
         source_path: &str,
     ) -> Result<Variable, validation::Error> {
-        // TODO: Add validation errors
-        Ok(Variable {
-            name: variable.name.clone(),
-            value: variable.value.into(),
-            source_path: source_path.to_string(),
-        })
+        variable
+            .value
+            .try_into()
+            .map(|v| Variable {
+                name: variable.name,
+                value: v,
+                source_path: source_path.to_string(),
+            })
+            .map_err(|e| validation::Error { reason: e })
     }
 
     pub fn validate_variables_opt(
         variables: Option<Vec<file::UnvalidatedVariable>>,
         source_path: &str,
     ) -> Result<Vec<Variable>, validation::Error> {
-        let count = variables
-            .as_ref()
-            .map(|vars| vars.len())
-            .unwrap_or_default();
+        let mut errors: Vec<String> = vec![];
+
         let ret = variables
             .map(|vars| {
                 vars.into_iter()
-                    .map(|f| Variable::new(f, source_path))
-                    .filter_map(|v| match v {
+                    .map(|f| (f.name.clone(), Variable::new(f, source_path)))
+                    .filter_map(|(name, v)| match v {
                         Ok(x) => Some(x),
-                        Err(_) => None,
+                        Err(e) => {
+                            errors.push(format!("variable \"{}\" {}", name, e));
+                            None
+                        }
                     })
                     .collect::<Vec<Variable>>()
             })
             .unwrap_or_default();
 
-        if ret.len() != count {
+        if errors.len() != 0 {
             return Err(validation::Error {
-                reason: "blah".to_string(),
+                reason: errors.join(","),
             });
         }
 
@@ -883,7 +927,8 @@ mod tests {
             StringOrDatumOrFile::File {
                 file: "file".to_string()
             }
-            .into()
+            .try_into()
+            .unwrap()
         );
 
         assert_eq!(
@@ -893,7 +938,8 @@ mod tests {
             StringOrDatumOrFile::Value {
                 value: "val".to_string()
             }
-            .into()
+            .try_into()
+            .unwrap()
         );
 
         assert_eq!(
@@ -903,7 +949,8 @@ mod tests {
             StringOrDatumOrFile::Schema(DatumSchema::Int {
                 specification: None
             })
-            .into()
+            .try_into()
+            .unwrap()
         );
     }
 

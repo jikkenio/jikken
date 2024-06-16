@@ -703,7 +703,7 @@ fn validate_test_file(
     match res {
         Ok(file) => Some(file),
         Err(e) => {
-            error!("test ({}) failed validation: {}", name, e);
+            error!("Test \"{}\" failed validation: {}.", name, e);
             None
         }
     }
@@ -2325,10 +2325,7 @@ mod tests {
     fn process_response_status_match() {
         let expected = ExpectedResultData {
             status: Some(ValueOrNumericSpecification::Schema(NumericSpecification {
-                specification: Specification {
-                    one_of: Some(vec![200, 201, 202]),
-                    ..Specification::default()
-                },
+                specification: Some(Specification::OneOf(vec![200, 201, 202])),
                 min: None,
                 max: None,
             })),
