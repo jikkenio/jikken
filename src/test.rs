@@ -747,12 +747,10 @@ impl Definition {
             let replacement = variable.generate_value(self, iteration, &self.global_variables);
 
             //Do extra for non string stuff
-
             let do_extra = match &variable.value {
-                StringOrDatumOrFileOrSecret::Schema(ds) => match ds {
-                    DatumSchema::String { .. } => false,
-                    _ => true,
-                },
+                StringOrDatumOrFileOrSecret::Schema(ds) => {
+                    !matches!(ds, DatumSchema::String { .. })
+                }
                 _ => false,
             };
 
