@@ -6,11 +6,13 @@ use crate::machine;
 use crate::test;
 use crate::test::definition::RequestDescriptor;
 use crate::test::http::Header;
+use crate::test::Definition;
 use hyper::header::HeaderValue;
 use hyper::{body, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use url::Url;
@@ -28,7 +30,7 @@ pub struct Session {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SessionPost {
+struct SessionPost<'a> {
     pub version: String,
     pub os: String,
     pub machine_id: String,
@@ -36,6 +38,8 @@ struct SessionPost {
     pub args: serde_json::Value,
     pub validation: serde_json::Value,
     pub config: serde_json::Value,
+    pub environments: Vec<&'a str>,
+    pub projects: Vec<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -152,7 +156,7 @@ fn get_url(url: &str, config: &config::Config) -> String {
 
 pub async fn create_session(
     token: Uuid,
-    test_count: u32,
+    tests: Vec<&Definition>,
     args_json: Box<serde_json::Value>,
     config: &config::Config,
 ) -> Result<Session, Box<dyn Error + Send + Sync>> {
@@ -172,6 +176,20 @@ pub async fn create_session(
     let m = machine::new();
     let machine_id = m.generate_machine_id();
 
+    let mut test_count: u32 = 0;
+    let mut environments: HashSet<&str> = HashSet::new();
+    let mut projects: HashSet<&str> = HashSet::new();
+
+    tests.iter().for_each(|t| {
+        test_count += t.iterate;
+        if let Some(env) = &t.environment {
+            environments.insert(env);
+        }
+        if let Some(project) = &t.project {
+            projects.insert(project);
+        }
+    });
+
     let post_body = SessionPost {
         version: crate::VERSION.to_string(),
         os: env::consts::OS.to_string(),
@@ -180,6 +198,8 @@ pub async fn create_session(
         args: *args_json,
         validation: validation_json,
         config: config_json,
+        environments: Vec::from_iter(environments),
+        projects: Vec::from_iter(projects),
     };
 
     let post_string = serde_json::to_string(&post_body)?;
