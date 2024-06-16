@@ -928,18 +928,14 @@ pub async fn execute_tests(
 
     let tests_to_run_with_dependencies =
         construct_test_execution_graph_v2(tests_to_run.clone(), tests_to_ignore.clone());
-
-    let total_tests = tests_to_run_with_dependencies
-        .iter()
-        .flatten()
-        .fold(0, |acc, x| acc + x.iterate);
+    let all_tests: Vec<&Definition> = tests_to_run_with_dependencies.iter().flatten().collect();
 
     let mut session: Option<telemetry::Session> = None;
 
     if !mode_dryrun {
         if let Some(token) = &config.settings.api_key {
             if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(t, total_tests as u32, cli_args, &config).await {
+                match telemetry::create_session(t, all_tests, cli_args, &config).await {
                     Ok(sess) => {
                         session = Some(sess);
                     }
