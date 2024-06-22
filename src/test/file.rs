@@ -29,12 +29,14 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd)]
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum Specification<T> {
-    Value(T),
+    AnyOf(Vec<T>),
     OneOf(Vec<T>),
     NoneOf(Vec<T>),
+    #[serde(untagged)]
+    Value(T),
 }
 
 impl<T> Default for Specification<T> {
@@ -43,9 +45,9 @@ impl<T> Default for Specification<T> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, Default, Deserialize, PartialEq, PartialOrd)]
+#[derive(Serialize, Debug, Clone, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct NumericSpecification<T: std::fmt::Display + Clone> {
+pub struct NumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub specification: Option<Specification<T>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,11 +60,68 @@ pub type BooleanSpecification = Specification<bool>;
 pub type FloatSpecification = NumericSpecification<f64>;
 pub type IntegerSpecification = NumericSpecification<i64>;
 
-#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, PartialOrd, Default)]
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StringSpecification {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub specification: Option<Specification<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum ValueOrDatumSchema {
+    Datum(DatumSchema),
+    Values(Value),
+}
+
+impl Hash for ValueOrDatumSchema {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum ValuesOrSchema {
+    Schemas(Specification<Box<DatumSchema>>),
+    Values(Specification<Vec<Value>>),
+}
+
+impl ValuesOrSchema {
+    pub fn generate_if_constrained(&self, rng: &mut ThreadRng) -> Option<Value> {
+        trace!("generate_if_constrained()");
+        match self {
+            ValuesOrSchema::Schemas(schema) => schema.schema_generate_if_constrained(rng),
+            ValuesOrSchema::Values(vals) => vals
+                .generate_if_constrained(rng)
+                .map(serde_json::Value::from),
+        }
+    }
+}
+
+impl Checker for ValuesOrSchema {
+    type Item = Vec<Value>;
+    fn check(
+        &self,
+        val: &Self::Item,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        match &self {
+            &ValuesOrSchema::Schemas(schema) => schema.schema_check(val, formatter),
+            &ValuesOrSchema::Values(vals) => vals.check(val, formatter),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<ValuesOrSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -149,21 +208,144 @@ impl Checker for EmailSpecification {
     }
 }
 
+impl Specification<Box<DatumSchema>> {
+    fn schema_check(
+        &self,
+        vals: &Vec<Value>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let findings = match self {
+            Specification::NoneOf(none_ofs) => {
+                self.schema_check_none_of(vals, &none_ofs, formatter)
+            }
+            Specification::AnyOf(any_ofs) => self.schema_any_one_of(vals, &any_ofs, formatter),
+            Specification::OneOf(one_ofs) => self.schema_check_one_of(vals, &one_ofs, formatter),
+            Specification::Value(val) => self.schema_check_val(vals, &val, formatter),
+        };
+
+        vec![findings]
+    }
+    fn schema_generate_if_constrained(&self, rng: &mut ThreadRng) -> Option<Value> {
+        trace!("schema_generate_if_constrained()");
+        match &self {
+            Specification::Value(v) => generate_value_from_schema(v, 1),
+            Specification::OneOf(oneofs) => oneofs
+                .get(rng.gen_range(0..oneofs.len()))
+                .and_then(|s| generate_value_from_schema(s, 1)),
+            Specification::AnyOf(oneofs) => oneofs
+                .get(rng.gen_range(0..oneofs.len()))
+                .and_then(|s| generate_value_from_schema(s, 1)),
+            _ => None,
+        }
+    }
+
+    fn schema_check_val(
+        &self,
+        actuals: &Vec<Value>,
+        specified_value: &Box<DatumSchema>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if actuals.iter().all(|actual| {
+            specified_value
+                .check(actual, formatter)
+                .iter()
+                .all(|v| v.is_good())
+        }) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("{:?}", specified_value).as_str(),
+                format!("{:?}", actuals).as_str(),
+            ))
+        }
+    }
+
+    fn schema_check_one_of(
+        &self,
+        actuals: &Vec<Value>,
+        specified_values: &[Box<DatumSchema>],
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        let matchers = specified_values
+            .iter()
+            .filter(|v| {
+                actuals.iter().all(|actual| {
+                    v.check(actual, formatter)
+                        .iter()
+                        .all(|validation| validation.is_good())
+                })
+            })
+            .collect::<Vec<&Box<DatumSchema>>>();
+        if matchers.len() == 1 {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{:?}", actuals).as_str(),
+            ))
+        }
+    }
+
+    fn schema_any_one_of(
+        &self,
+        actuals: &Vec<Value>,
+        specified_values: &[Box<DatumSchema>],
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if actuals.iter().all(|actual| {
+            specified_values
+                .iter()
+                .find(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
+                .is_some()
+        }) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{:?}", actuals).as_str(),
+            ))
+        }
+    }
+
+    fn schema_check_none_of(
+        &self,
+        actuals: &Vec<Value>,
+        specified_values: &[Box<DatumSchema>],
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if actuals.iter().all(|actual| {
+            specified_values
+                .iter()
+                .find(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
+                .is_none()
+        }) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("none of {:?}", specified_values).as_str(),
+                format!("{:?}", actuals).as_str(),
+            ))
+        }
+    }
+}
+
 impl<T> Specification<T>
 where
     T: PartialEq,
-    T: Display,
-    T: PartialOrd,
     T: fmt::Debug,
     T: Clone,
 {
     fn generate_if_constrained(&self, rng: &mut ThreadRng) -> Option<T> {
+        trace!("generate_if_constrained{:?}", &self);
         match &self {
             Specification::Value(v) => Some(v.clone()),
             Specification::OneOf(oneofs) => oneofs
                 .get(rng.gen_range(0..oneofs.len()))
                 .map(|s| s.clone()),
-            _ => None,
+            Specification::AnyOf(anyofs) => anyofs
+                .get(rng.gen_range(0..anyofs.len()))
+                .map(|s| s.clone()),
+            Specification::NoneOf(_) => None,
         }
     }
 
@@ -177,8 +359,8 @@ where
             Good(())
         } else {
             Validated::fail(formatter(
-                format!("{}", specified_value).as_str(),
-                format!("{}", actual).as_str(),
+                format!("{:?}", specified_value).as_str(),
+                format!("{:?}", actual).as_str(),
             ))
         }
     }
@@ -189,12 +371,33 @@ where
         specified_values: &[T],
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
+        let hits = specified_values
+            .iter()
+            .filter(|v| *v == actual)
+            .collect::<Vec<&T>>();
+
+        if hits.len() == 1 {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{:?}", actual).as_str(),
+            ))
+        }
+    }
+
+    fn check_any_of(
+        &self,
+        actual: &T,
+        specified_values: &[T],
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
         if specified_values.contains(actual) {
             Good(())
         } else {
             Validated::fail(formatter(
                 format!("one of {:?}", specified_values).as_str(),
-                format!("{}", actual).as_str(),
+                format!("{:?}", actual).as_str(),
             ))
         }
     }
@@ -210,7 +413,7 @@ where
         } else {
             Validated::fail(formatter(
                 format!("none of {:?}", specified_values).as_str(),
-                format!("{}", actual).as_str(),
+                format!("{:?}", actual).as_str(),
             ))
         }
     }
@@ -226,6 +429,12 @@ where
     T: Serialize,
     T: Clone,
 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+impl Hash for SequenceSpecification {
     fn hash<H: Hasher>(&self, state: &mut H) {
         serde_json::to_string(self).unwrap().hash(state)
     }
@@ -320,8 +529,6 @@ where
 impl<T> Checker for Specification<T>
 where
     T: PartialEq,
-    T: Display,
-    T: PartialOrd,
     T: fmt::Debug,
     T: Clone,
 {
@@ -334,6 +541,7 @@ where
         vec![match self {
             Specification::NoneOf(nones) => self.check_none_of(val, &nones, formatter),
             Specification::OneOf(oneofs) => self.check_one_of(val, &oneofs, formatter),
+            Specification::AnyOf(anyofs) => self.check_any_of(val, &anyofs, formatter),
             Specification::Value(specified_value) => {
                 self.check_val(val, &specified_value, formatter)
             }
@@ -453,6 +661,89 @@ impl StringSpecification {
     }
 }
 
+impl SequenceSpecification {
+    pub fn new(
+        schema: Option<ValuesOrSchema>,
+        min_length: Option<i64>,
+        max_length: Option<i64>,
+    ) -> Result<Self, String> {
+        let negative_validator = |number: &Option<i64>, var_name: &str| {
+            number
+                .as_ref()
+                .map(|s| {
+                    if s.is_negative() {
+                        Validated::fail(format!("negative value provided for {var_name}"))
+                    } else {
+                        Good(number.clone())
+                    }
+                })
+                .unwrap_or(Validated::Good(None))
+        };
+
+        let negative_validation_max = negative_validator(&max_length, "max");
+        let negative_validation_min = negative_validator(&min_length, "min");
+        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
+            Good(())
+        } else {
+            Validated::fail("min_length must be less than or equal to max_length".to_string())
+        };
+
+        negative_validation_max
+            .map3(negative_validation_min, relation_validation, |_, _, _| {
+                Self {
+                    max_length,
+                    min_length,
+                    schema,
+                }
+            })
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{}", acc, e))
+            })
+    }
+
+    fn check_min_length(
+        &self,
+        actual: &Vec<Value>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.min_length {
+            Some(t) => {
+                if *t <= actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("minimum length of {}", t).as_str(),
+                        format!("{:?}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+
+    fn check_max_length(
+        &self,
+        actual: &Vec<Value>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.max_length {
+            Some(t) => {
+                if *t >= actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("maximum length of {}", t).as_str(),
+                        format!("{:?}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
+    }
+}
+
 impl Checker for StringSpecification {
     type Item = String;
     fn check(
@@ -466,6 +757,28 @@ impl Checker for StringSpecification {
         ];
         ret.append(
             self.specification
+                .as_ref()
+                .map(|s| s.check(val, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
+        ret
+    }
+}
+
+impl Checker for SequenceSpecification {
+    type Item = Vec<Value>;
+    fn check(
+        &self,
+        val: &Vec<Value>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let mut ret = vec![
+            self.check_min_length(val, formatter),
+            self.check_max_length(val, formatter),
+        ];
+        ret.append(
+            self.schema
                 .as_ref()
                 .map(|s| s.check(val, formatter))
                 .unwrap_or_default()
@@ -932,12 +1245,12 @@ pub enum DatumSchema {
         specification: Option<EmailSpecification>,
     },
     List {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<Box<DatumSchema>>,
+        #[serde(flatten)]
+        specification: Option<SequenceSpecification>,
     },
     Object {
         #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<BTreeMap<String, DatumSchema>>,
+        schema: Option<BTreeMap<String, ValueOrDatumSchema>>,
     },
 }
 
@@ -965,8 +1278,12 @@ impl DatumSchema {
                 Self::check_bool(specification, actual, formatter)
             }
             DatumSchema::Int { specification } => Self::check_int(specification, actual, formatter),
-            DatumSchema::List { schema } => Self::check_list(schema, actual, formatter),
-            DatumSchema::Object { schema } => Self::check_object(schema, actual, formatter),
+            DatumSchema::List { specification } => {
+                Self::check_list(specification, actual, formatter)
+            }
+            DatumSchema::Object { schema } => {
+                Self::check_value_or_datumschema(schema, actual, formatter)
+            }
             DatumSchema::Name { specification } => {
                 Self::check_name(specification, actual, formatter)
             }
@@ -1091,7 +1408,7 @@ impl DatumSchema {
     }
 
     fn check_list(
-        schema: &Option<Box<DatumSchema>>,
+        specification: &Option<SequenceSpecification>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -1099,21 +1416,14 @@ impl DatumSchema {
             return vec![Validated::fail(formatter("array type", "different type"))];
         }
 
-        schema
+        specification
             .as_ref()
-            .map(|s| {
-                actual
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .flat_map(|v| s.check(v, formatter))
-                    .collect()
-            })
+            .map(|s| s.check(actual.as_array().unwrap(), formatter))
             .unwrap_or(vec![Good(())])
     }
 
-    fn check_object(
-        schema: &Option<BTreeMap<String, DatumSchema>>,
+    fn check_value_or_datumschema(
+        schema: &Option<BTreeMap<String, ValueOrDatumSchema>>,
         actual: &serde_json::Value,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
@@ -1126,17 +1436,40 @@ impl DatumSchema {
             .as_ref()
             .map(|bt| {
                 bt.iter()
-                    .flat_map(|(k, datum)| {
-                        vals.get(k)
+                    .flat_map(|(k, value_or_datum)| match value_or_datum {
+                        ValueOrDatumSchema::Datum(datum) => vals
+                            .get(k)
                             .map(|v| datum.check(v, formatter))
                             .unwrap_or(vec![Validated::fail(formatter(
                                 format!(r#"member "{k}""#).as_str(),
                                 format!(r#"object with "{k}" missing"#).as_str(),
-                            ))])
+                            ))]),
+                        ValueOrDatumSchema::Values(expected) => vals
+                            .get(k)
+                            .map(|v| Self::check_value(expected, v, formatter))
+                            .unwrap_or(vec![Validated::fail(formatter(
+                                format!(r#"member "{k}""#).as_str(),
+                                format!(r#"object with "{k}" missing"#).as_str(),
+                            ))]),
                     })
                     .collect()
             })
             .unwrap_or(vec![Good(())])
+    }
+
+    fn check_value(
+        expected: &serde_json::Value,
+        actual: &serde_json::Value,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        if expected == actual {
+            vec![Good(())]
+        } else {
+            vec![Validated::fail(formatter(
+                format!("{:?}", expected).as_str(),
+                format!("{:?}", actual).as_str(),
+            ))]
+        }
     }
 }
 
@@ -1281,12 +1614,24 @@ impl Hash for BodyOrSchema {
     This requires us to use 2 different types for the implementation
     and the data file (jk::test::File) interface.
 **/
-#[derive(Hash, Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum StringOrDatumOrFile {
     File { file: String },
+    Value { value: Value },
     Schema(DatumSchema),
-    Value { value: String },
+}
+
+impl Hash for StringOrDatumOrFile {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            StringOrDatumOrFile::File { file } => file.hash(state),
+            StringOrDatumOrFile::Schema(s) => s.hash(state),
+            StringOrDatumOrFile::Value { value } => {
+                serde_json::to_string(value).unwrap().hash(state)
+            }
+        }
+    }
 }
 
 pub struct BodyOrSchemaChecker<'a> {
@@ -1512,6 +1857,7 @@ pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f6
 }
 
 pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<String> {
+    trace!("generate_string()");
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
@@ -1536,7 +1882,6 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
                     })
                     .collect::<String>(),
             );
-
         let r = spec.check(&ret, &|_e, _a| "".to_string());
         if r.into_iter()
             .collect::<Validated<Vec<()>, String>>()
@@ -1720,10 +2065,54 @@ pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<St
         .map(|ran_string| format!("{}@gmail.com", ran_string))
 }
 
+pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<Value> {
+    // what ever shall I generate??? -> Went with ints for now
+    // you should instead have a list of generators you random access into
+    trace!("generate_list({:?})", spec);
+    let mut rng = rand::thread_rng();
+    let min_length = spec.min_length.unwrap_or(generate_number_in_range(
+        0,
+        spec.max_length.unwrap_or(100),
+        &mut rng,
+    ));
+    let max_length = spec.max_length.unwrap_or(generate_number_in_range(
+        min_length,
+        min_length * 2,
+        &mut rng,
+    ));
+    (0..max_attempts)
+        .map(|_| {
+            spec.schema
+                .as_ref()
+                .map(|s| match s {
+                    ValuesOrSchema::Schemas(_) => (min_length..max_length)
+                        .map(|_| serde_json::Value::from(s.generate_if_constrained(&mut rng)))
+                        .collect::<Vec<Value>>(),
+                    ValuesOrSchema::Values(v) => {
+                        v.generate_if_constrained(&mut rng).unwrap_or_default()
+                    }
+                })
+                .unwrap_or_else(|| {
+                    (min_length..max_length)
+                        .map(|_| serde_json::Value::from(rng.gen::<i64>()))
+                        .collect()
+                })
+        })
+        .find(|v| {
+            let ret = spec
+                .check(v, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>();
+            ret.is_good()
+        })
+        .map(Value::from)
+}
+
 pub fn generate_value_from_schema(
     schema: &DatumSchema,
     max_attempts: u16,
 ) -> Option<serde_json::Value> {
+    trace!("generate_value_from_schema({:?})", schema);
     return match schema {
         DatumSchema::Boolean { specification } => generate_bool(
             specification
@@ -1781,23 +2170,25 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(serde_json::Value::from),
-        DatumSchema::List { schema } => Some(serde_json::Value::Array(
-            schema
+        DatumSchema::List { specification } => generate_list(
+            specification
                 .as_ref()
-                .map(|s| {
-                    (0..3)
-                        .filter_map(|_| generate_value_from_schema(s, max_attempts))
-                        .collect::<Vec<Value>>()
-                })
-                .unwrap_or_default(),
-        )),
+                .unwrap_or(&SequenceSpecification::default()),
+            max_attempts,
+        )
+        .map(serde_json::Value::from),
         DatumSchema::Object { schema } => {
             let f = schema
                 .as_ref()
                 .map(|s| {
                     s.iter()
-                        .filter_map(|(k, v)| {
-                            let ret = generate_value_from_schema(v, max_attempts);
+                        .filter_map(|(k, value_or_datumschema)| {
+                            let ret = match value_or_datumschema {
+                                ValueOrDatumSchema::Datum(datum) => {
+                                    generate_value_from_schema(datum, max_attempts)
+                                }
+                                ValueOrDatumSchema::Values(v) => Some(v.clone()),
+                            };
                             ret.as_ref()?;
 
                             Some((k.clone(), ret.unwrap()))
@@ -2192,20 +2583,24 @@ mod tests {
     fn datum_list_type_validation() {
         assert_eq!(
             true,
-            DatumSchema::List { schema: None }
-                .check(&serde_json::json!({}), &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail(),
+            DatumSchema::List {
+                specification: None
+            }
+            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_fail(),
         );
 
         assert_eq!(
             false,
-            DatumSchema::List { schema: None }
-                .check(&serde_json::json!([]), &|_e, _a| "".to_string())
-                .into_iter()
-                .collect::<Validated<Vec<()>, String>>()
-                .is_fail(),
+            DatumSchema::List {
+                specification: None
+            }
+            .check(&serde_json::json!([]), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_fail(),
         );
     }
 
@@ -2235,7 +2630,7 @@ mod tests {
             schema: Some(BTreeMap::from([
                 (
                     "name".to_string(),
-                    DatumSchema::String {
+                    ValueOrDatumSchema::Datum(DatumSchema::String {
                         specification: Some(StringSpecification {
                             specification: Some(Specification::OneOf(vec![
                                 "foo".to_string(),
@@ -2243,15 +2638,20 @@ mod tests {
                             ])),
                             ..Default::default()
                         }),
-                    },
+                    }),
                 ),
                 (
                     "cars".to_string(),
-                    DatumSchema::List {
-                        schema: Some(Box::from(DatumSchema::String {
-                            specification: None,
-                        })),
-                    },
+                    ValueOrDatumSchema::Datum(DatumSchema::List {
+                        specification: Some(SequenceSpecification {
+                            schema: Some(ValuesOrSchema::Schemas(Specification::Value(Box::new(
+                                DatumSchema::String {
+                                    specification: None,
+                                },
+                            )))),
+                            ..Default::default()
+                        }),
+                    }),
                 ),
             ])),
         }
