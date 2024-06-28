@@ -359,7 +359,7 @@ impl Variable {
             })
             .unwrap_or_default();
 
-        if errors.len() != 0 {
+        if !errors.is_empty() {
             return Err(validation::Error {
                 reason: errors.join(","),
             });
@@ -972,15 +972,12 @@ impl Definition {
     ) -> Option<serde_json::Value> {
         trace!("get_request_body({:?})", body);
         if let Some(body) = body {
-            let ret = self
+            return self
                 .resolve_body_variables(&body.data, state_variables, variables, iteration)
-                .and_then(|b| {
-                    return match b {
-                        BodyOrSchema::Schema(s) => generate_value_from_schema(&s, 10),
-                        BodyOrSchema::Body(v) => Some(v),
-                    };
+                .and_then(|b| match b {
+                    BodyOrSchema::Schema(s) => generate_value_from_schema(&s, 10),
+                    BodyOrSchema::Body(v) => Some(v),
                 });
-            return ret;
         }
 
         None

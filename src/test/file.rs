@@ -111,8 +111,8 @@ impl Checker for ValuesOrSchema {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match &self {
-            &ValuesOrSchema::Schemas(schema) => schema.schema_check(val, formatter),
-            &ValuesOrSchema::Values(vals) => vals.check(val, formatter),
+            ValuesOrSchema::Schemas(schema) => schema.schema_check(val, formatter),
+            ValuesOrSchema::Values(vals) => vals.check(val, formatter),
         }
     }
 }
@@ -215,12 +215,10 @@ impl Specification<Box<DatumSchema>> {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         let findings = match self {
-            Specification::NoneOf(none_ofs) => {
-                self.schema_check_none_of(vals, &none_ofs, formatter)
-            }
-            Specification::AnyOf(any_ofs) => self.schema_any_one_of(vals, &any_ofs, formatter),
-            Specification::OneOf(one_ofs) => self.schema_check_one_of(vals, &one_ofs, formatter),
-            Specification::Value(val) => self.schema_check_val(vals, &val, formatter),
+            Specification::NoneOf(none_ofs) => self.schema_check_none_of(vals, none_ofs, formatter),
+            Specification::AnyOf(any_ofs) => self.schema_any_one_of(vals, any_ofs, formatter),
+            Specification::OneOf(one_ofs) => self.schema_check_one_of(vals, one_ofs, formatter),
+            Specification::Value(val) => self.schema_check_val(vals, val, formatter),
         };
 
         vec![findings]
@@ -242,7 +240,7 @@ impl Specification<Box<DatumSchema>> {
     fn schema_check_val(
         &self,
         actuals: &Vec<Value>,
-        specified_value: &Box<DatumSchema>,
+        specified_value: &DatumSchema,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         if actuals.iter().all(|actual| {
@@ -295,8 +293,7 @@ impl Specification<Box<DatumSchema>> {
         if actuals.iter().all(|actual| {
             specified_values
                 .iter()
-                .find(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
-                .is_some()
+                .any(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
         }) {
             Good(())
         } else {
@@ -314,10 +311,9 @@ impl Specification<Box<DatumSchema>> {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         if actuals.iter().all(|actual| {
-            specified_values
+            !specified_values
                 .iter()
-                .find(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
-                .is_none()
+                .any(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
         }) {
             Good(())
         } else {
@@ -339,12 +335,8 @@ where
         trace!("generate_if_constrained{:?}", &self);
         match &self {
             Specification::Value(v) => Some(v.clone()),
-            Specification::OneOf(oneofs) => oneofs
-                .get(rng.gen_range(0..oneofs.len()))
-                .map(|s| s.clone()),
-            Specification::AnyOf(anyofs) => anyofs
-                .get(rng.gen_range(0..anyofs.len()))
-                .map(|s| s.clone()),
+            Specification::OneOf(oneofs) => oneofs.get(rng.gen_range(0..oneofs.len())).cloned(),
+            Specification::AnyOf(anyofs) => anyofs.get(rng.gen_range(0..anyofs.len())).cloned(),
             Specification::NoneOf(_) => None,
         }
     }
@@ -539,11 +531,11 @@ where
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         vec![match self {
-            Specification::NoneOf(nones) => self.check_none_of(val, &nones, formatter),
-            Specification::OneOf(oneofs) => self.check_one_of(val, &oneofs, formatter),
-            Specification::AnyOf(anyofs) => self.check_any_of(val, &anyofs, formatter),
+            Specification::NoneOf(nones) => self.check_none_of(val, nones, formatter),
+            Specification::OneOf(oneofs) => self.check_one_of(val, oneofs, formatter),
+            Specification::AnyOf(anyofs) => self.check_any_of(val, anyofs, formatter),
             Specification::Value(specified_value) => {
-                self.check_val(val, &specified_value, formatter)
+                self.check_val(val, specified_value, formatter)
             }
         }]
     }
@@ -591,7 +583,7 @@ impl StringSpecification {
                     if s.is_negative() {
                         Validated::fail(format!("negative value provided for {var_name}"))
                     } else {
-                        Good(number.clone())
+                        Good(*number)
                     }
                 })
                 .unwrap_or(Validated::Good(None))
@@ -632,7 +624,7 @@ impl StringSpecification {
                 } else {
                     Validated::fail(formatter(
                         format!("minimum length of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
+                        actual,
                     ))
                 }
             }
@@ -652,7 +644,7 @@ impl StringSpecification {
                 } else {
                     Validated::fail(formatter(
                         format!("maximum length of {}", t).as_str(),
-                        format!("{}", actual).as_str(),
+                        actual,
                     ))
                 }
             }
@@ -674,7 +666,7 @@ impl SequenceSpecification {
                     if s.is_negative() {
                         Validated::fail(format!("negative value provided for {var_name}"))
                     } else {
-                        Good(number.clone())
+                        Good(*number)
                     }
                 })
                 .unwrap_or(Validated::Good(None))
@@ -824,17 +816,15 @@ impl DateSpecification {
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
-                .and_then(|s| {
+                .map(|s| {
                     let res = Self::str_to_time_with_format(
-                        &s,
+                        s,
                         format.as_ref().unwrap_or(&Self::DEFAULT_FORMAT.to_string()),
                     );
                     if res.is_err() {
-                        Some(Validated::fail(format!(
-                            "invalid date provided for {var_name} "
-                        )))
+                        Validated::fail(format!("invalid date provided for {var_name} "))
                     } else {
-                        Some(Good(date_string.clone()))
+                        Good(date_string.clone())
                     }
                 })
                 .unwrap_or(Validated::Good(None))
@@ -1007,7 +997,7 @@ impl Checker for DateSpecification {
                 .as_mut(),
         );
 
-        return ret;
+        ret
     }
 }
 
@@ -1024,17 +1014,15 @@ impl DateTimeSpecification {
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
-                .and_then(|s| {
+                .map(|s| {
                     let res = Self::str_to_time_with_format(
-                        &s,
+                        s,
                         format.as_ref().unwrap_or(&Self::DEFAULT_FORMAT.to_string()),
                     );
                     if res.is_err() {
-                        Some(Validated::fail(format!(
-                            "invalid date provided for {var_name} "
-                        )))
+                        Validated::fail(format!("invalid date provided for {var_name} "))
                     } else {
-                        Some(Good(date_string.clone()))
+                        Good(date_string.clone())
                     }
                 })
                 .unwrap_or(Validated::Good(None))
@@ -1204,7 +1192,7 @@ impl Checker for DateTimeSpecification {
                 .as_mut(),
         );
 
-        return ret;
+        ret
     }
 }
 
@@ -1938,7 +1926,7 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
-                    Specification::Value(v) => spec.get(&v).ok(),
+                    Specification::Value(v) => spec.get(v).ok(),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
@@ -1956,13 +1944,13 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                         generate_number_in_range(day_range.0, 28, &mut rng)
                     };
 
-                    return chrono::NaiveDate::default()
+                    chrono::NaiveDate::default()
                         .with_year(year)
                         .and_then(|d| d.with_month(month))
                         .and_then(|d| d.with_day(day))
                         .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
                         .map(|d| spec.time_to_str(&d.unwrap()))
-                        .unwrap_or_default();
+                        .unwrap_or_default()
                 })
         })
         .find(|date_str| {
@@ -2005,7 +1993,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                 //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
-                    Specification::Value(v) => spec.get(&v).ok(),
+                    Specification::Value(v) => spec.get(v).ok(),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
@@ -2023,13 +2011,13 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                         generate_number_in_range(day_range.0, 28, &mut rng)
                     };
 
-                    return chrono::NaiveDateTime::default()
+                    chrono::NaiveDateTime::default()
                         .with_year(year)
                         .and_then(|d| d.with_month(month))
                         .and_then(|d| d.with_day(day))
                         .map(|d| Local.from_local_datetime(&d))
                         .map(|d| spec.time_to_str(&d.unwrap()))
-                        .unwrap_or_default();
+                        .unwrap_or_default()
                 })
         })
         .find(|date_str| {
@@ -2138,7 +2126,7 @@ pub fn generate_value_from_schema(
         DatumSchema::String { specification } => generate_string(
             specification
                 .as_ref()
-                .unwrap_or(&&StringSpecification::default()),
+                .unwrap_or(&StringSpecification::default()),
             max_attempts,
         )
         .map(serde_json::Value::from),
