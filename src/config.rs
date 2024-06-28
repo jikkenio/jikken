@@ -61,9 +61,9 @@ impl Config {
             .chain(self.globals.iter())
             .map(|i| test::Variable {
                 name: i.0.to_string(),
-                value: test::StringOrDatumOrFileOrSecret::Value {
-                    value: i.1.to_string(),
-                },
+                value: test::StringOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+                    i.1.to_string(),
+                )),
                 source_path: "./".to_string(),
             })
             .chain(

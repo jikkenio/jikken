@@ -87,7 +87,7 @@ fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Sen
     Ok(file::UnvalidatedVariable {
         name: "".to_string(),
         value: file::StringOrDatumOrFile::Value {
-            value: "".to_string(),
+            value: serde_json::Value::from("".to_string()),
         },
     })
 }
