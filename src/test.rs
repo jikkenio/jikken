@@ -12,7 +12,7 @@ use crate::test::file::DatumSchema;
 use crate::test::file::FloatSpecification;
 use crate::test::file::IntegerSpecification;
 use crate::test::file::NameSpecification;
-use crate::test::file::StringOrDatumOrFile;
+use crate::test::file::ValueOrDatumOrFile;
 use file::DateSpecification;
 use file::DateTimeSpecification;
 use file::EmailSpecification;
@@ -91,7 +91,7 @@ impl Clone for SecretValue {
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
-pub enum StringOrDatumOrFileOrSecret {
+pub enum ValueOrDatumOrFileOrSecret {
     File { file: String },
     Secret { secret: SecretValue },
     Schema(DatumSchema),
@@ -100,34 +100,32 @@ pub enum StringOrDatumOrFileOrSecret {
 /*
     \todo : Address min/max specified AND value
 */
-impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
+impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 
-    fn try_from(value: StringOrDatumOrFile) -> Result<Self, Self::Error> {
+    fn try_from(value: ValueOrDatumOrFile) -> Result<Self, Self::Error> {
         match value {
-            StringOrDatumOrFile::Value { value } => Ok(StringOrDatumOrFileOrSecret::Value(value)),
+            ValueOrDatumOrFile::Value { value } => Ok(ValueOrDatumOrFileOrSecret::Value(value)),
             // \todo : check if file is valid?
             //         we could, but will we ever store responses to file?
             //         basically a TOCTOU question
-            StringOrDatumOrFile::File { file } => Ok(StringOrDatumOrFileOrSecret::File { file }),
-            StringOrDatumOrFile::Schema(schema) => {
+            ValueOrDatumOrFile::File { file } => Ok(ValueOrDatumOrFileOrSecret::File { file }),
+            ValueOrDatumOrFile::Schema(schema) => {
                 match schema {
                     DatumSchema::Name { specification } => specification
                         .map(|s| {
                             NameSpecification::new(s.specification).map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::Name {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Name {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
-                            DatumSchema::Email {
-                                specification: None,
-                            },
-                        ))),
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Email {
+                            specification: None,
+                        }))),
                     // \todo: Should recursively validate
                     DatumSchema::Object { schema } => {
-                        Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Object {
+                        Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Object {
                             schema,
                         }))
                     }
@@ -135,67 +133,63 @@ impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
                         .map(|s| {
                             SequenceSpecification::new(s.schema, s.min_length, s.max_length).map(
                                 |s| {
-                                    StringOrDatumOrFileOrSecret::Schema(DatumSchema::List {
+                                    ValueOrDatumOrFileOrSecret::Schema(DatumSchema::List {
                                         specification: Some(s),
                                     })
                                 },
                             )
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::List {
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::List {
                             specification: None,
                         }))),
                     DatumSchema::Email { specification } => specification
                         .map(|s| {
                             EmailSpecification::new(s.specification).map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::Email {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Email {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
-                            DatumSchema::Email {
-                                specification: None,
-                            },
-                        ))),
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Email {
+                            specification: None,
+                        }))),
                     DatumSchema::Boolean { specification } => {
-                        Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Boolean {
+                        Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Boolean {
                             specification,
                         }))
                     }
                     DatumSchema::Float { specification } => specification
                         .map(|s| {
                             FloatSpecification::new(s.specification, s.min, s.max).map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::Float {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Float {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
-                            DatumSchema::Float {
-                                specification: None,
-                            },
-                        ))),
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Float {
+                            specification: None,
+                        }))),
                     DatumSchema::Int { specification } => specification
                         .map(|s| {
                             IntegerSpecification::new(s.specification, s.min, s.max).map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
                             specification: None,
                         }))),
                     DatumSchema::String { specification } => specification
                         .map(|s| {
                             StringSpecification::new(s.specification, s.min_length, s.max_length)
                                 .map(|s| {
-                                    StringOrDatumOrFileOrSecret::Schema(DatumSchema::String {
+                                    ValueOrDatumOrFileOrSecret::Schema(DatumSchema::String {
                                         specification: Some(s),
                                     })
                                 })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(
                             DatumSchema::String {
                                 specification: None,
                             },
@@ -210,12 +204,12 @@ impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
                                 ds.modifier,
                             )
                             .map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Date {
                             specification: None,
                         }))),
                     DatumSchema::DateTime { specification } => specification
@@ -228,12 +222,12 @@ impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
                                 ds.modifier,
                             )
                             .map(|s| {
-                                StringOrDatumOrFileOrSecret::Schema(DatumSchema::DateTime {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::DateTime {
                                     specification: Some(s),
                                 })
                             })
                         })
-                        .unwrap_or(Ok(StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+                        .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
                             specification: None,
                         }))),
                 }
@@ -243,6 +237,7 @@ impl TryFrom<StringOrDatumOrFile> for StringOrDatumOrFileOrSecret {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct File {
     pub name: Option<String>,
     pub id: Option<String>,
@@ -316,7 +311,7 @@ impl File {
 pub struct Variable {
     pub name: String,
     #[serde(flatten)]
-    pub value: StringOrDatumOrFileOrSecret,
+    pub value: ValueOrDatumOrFileOrSecret,
 
     #[serde(skip_serializing)]
     pub source_path: String,
@@ -375,7 +370,7 @@ impl Variable {
         global_variables: &[Variable],
     ) -> String {
         match &self.value {
-            StringOrDatumOrFileOrSecret::File { file } => {
+            ValueOrDatumOrFileOrSecret::File { file } => {
                 let file_path = if Path::new(file).exists() {
                     file.clone()
                 } else {
@@ -396,13 +391,13 @@ impl Variable {
                     }
                 }
             }
-            StringOrDatumOrFileOrSecret::Secret { secret } => definition.resolve_variables(
+            ValueOrDatumOrFileOrSecret::Secret { secret } => definition.resolve_variables(
                 secret.0.as_str(),
                 &HashMap::new(),
                 global_variables,
                 iteration,
             ),
-            StringOrDatumOrFileOrSecret::Value(v) => serde_json::to_string(v)
+            ValueOrDatumOrFileOrSecret::Value(v) => serde_json::to_string(v)
                 .map(|jv| {
                     let ret = definition.resolve_variables(
                         jv.as_str(),
@@ -415,7 +410,7 @@ impl Variable {
                 .unwrap_or_default()
                 .trim_matches('"')
                 .to_string(),
-            StringOrDatumOrFileOrSecret::Schema(d) => serde_json::to_string(d)
+            ValueOrDatumOrFileOrSecret::Schema(d) => serde_json::to_string(d)
                 .map(|jv| {
                     definition.resolve_variables(
                         jv.as_str(),
@@ -465,7 +460,7 @@ impl Definition {
         self.global_variables
             .iter()
             .filter_map(|v| match &v.value {
-                StringOrDatumOrFileOrSecret::Secret { secret } => Some(secret),
+                ValueOrDatumOrFileOrSecret::Secret { secret } => Some(secret),
                 _ => None,
             })
             .fold(s.to_string(), |acc, secret| secret.redact(acc.as_str()))
@@ -844,10 +839,14 @@ impl Definition {
                 trace!("rs is {}", rs);
                 let rsv = rs.replace(['\n', '\r'], "");
                 trace!("rsv is {}", rsv);
-                let ret = serde_json::from_str::<serde_json::Value>(rsv.as_str());
+                let mut ret = serde_json::from_str::<serde_json::Value>(rsv.as_str());
                 if ret.is_err() {
-                    error!("Error producing json body! {:?}", ret);
-                    serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'))
+                    trace!("Error resolving. Attempting to trim quotes {:?}", ret);
+                    ret = serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'));
+                    if ret.is_err() {
+                        error!("Error producing json body! {:?} : {:?}", ret, rsv);
+                    }
+                    ret
                 } else {
                     trace!("GOOD VAL {:?}", ret);
                     ret
@@ -925,10 +924,8 @@ impl Definition {
 
             //Do extra for non string stuff
             let do_extra = match &variable.value {
-                StringOrDatumOrFileOrSecret::Schema(ds) => {
-                    !matches!(ds, DatumSchema::String { .. })
-                }
-                StringOrDatumOrFileOrSecret::Value(v) => !matches!(v, serde_json::Value::String(_)),
+                ValueOrDatumOrFileOrSecret::Schema(ds) => !matches!(ds, DatumSchema::String { .. }),
+                ValueOrDatumOrFileOrSecret::Value(v) => !matches!(v, serde_json::Value::String(_)),
                 _ => false,
             };
 
@@ -1058,10 +1055,10 @@ mod tests {
     #[test]
     fn string_datum_file_or_secret_from_impl() {
         assert_eq!(
-            StringOrDatumOrFileOrSecret::File {
+            ValueOrDatumOrFileOrSecret::File {
                 file: "file".to_string()
             },
-            StringOrDatumOrFile::File {
+            ValueOrDatumOrFile::File {
                 file: "file".to_string()
             }
             .try_into()
@@ -1069,8 +1066,8 @@ mod tests {
         );
 
         assert_eq!(
-            StringOrDatumOrFileOrSecret::Value(serde_json::Value::from("val".to_string())),
-            StringOrDatumOrFile::Value {
+            ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from("val".to_string())),
+            ValueOrDatumOrFile::Value {
                 value: serde_json::Value::from("val".to_string())
             }
             .try_into()
@@ -1078,10 +1075,10 @@ mod tests {
         );
 
         assert_eq!(
-            StringOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
+            ValueOrDatumOrFileOrSecret::Schema(DatumSchema::Int {
                 specification: None
             }),
-            StringOrDatumOrFile::Schema(DatumSchema::Int {
+            ValueOrDatumOrFile::Schema(DatumSchema::Int {
                 specification: None
             })
             .try_into()
@@ -1133,7 +1130,7 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+                value: ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from(
                     "my_val".to_string(),
                 )),
                 source_path: "path".to_string(),
@@ -1167,7 +1164,7 @@ mod tests {
         //to the vars in the TD.
         let vars: Vec<Variable> = vec![Variable {
             name: "my_var".to_string(),
-            value: StringOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+            value: ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from(
                 "my_val2".to_string(),
             )),
             //data_type: variable::Type::String,
@@ -1188,14 +1185,14 @@ mod tests {
             iterate: 0,
             variables: vec![Variable {
                 name: "my_var".to_string(),
-                value: StringOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+                value: ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from(
                     "my_val".to_string(),
                 )),
                 source_path: "path".to_string(),
             }],
             global_variables: vec![Variable {
                 name: "my_var2".to_string(),
-                value: StringOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+                value: ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from(
                     "my_val3".to_string(),
                 )),
                 source_path: "path".to_string(),
