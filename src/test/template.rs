@@ -86,7 +86,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
 fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedVariable {
         name: "".to_string(),
-        value: file::StringOrDatumOrFile::Value {
+        value: file::ValueOrDatumOrFile::Value {
             value: serde_json::Value::from("".to_string()),
         },
     })

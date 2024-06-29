@@ -1516,6 +1516,7 @@ pub struct UnvalidatedCompareRequest {
     pub headers: Option<Vec<http::Header>>,
     pub add_headers: Option<Vec<http::Header>>,
     pub ignore_headers: Option<Vec<String>>,
+    #[serde(flatten)]
     pub body: Option<BodyOrSchema>,
     pub strict: Option<bool>,
 }
@@ -1593,7 +1594,7 @@ impl Hash for BodyOrSchema {
 /**
     We expose variables to the user as things
     that are either:
-        - Strings
+        - Values
         - Datums
         - Files
     However, our implementation type also treats Secrets as
@@ -1604,18 +1605,18 @@ impl Hash for BodyOrSchema {
 **/
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
-pub enum StringOrDatumOrFile {
+pub enum ValueOrDatumOrFile {
     File { file: String },
     Value { value: Value },
     Schema(DatumSchema),
 }
 
-impl Hash for StringOrDatumOrFile {
+impl Hash for ValueOrDatumOrFile {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            StringOrDatumOrFile::File { file } => file.hash(state),
-            StringOrDatumOrFile::Schema(s) => s.hash(state),
-            StringOrDatumOrFile::Value { value } => {
+            ValueOrDatumOrFile::File { file } => file.hash(state),
+            ValueOrDatumOrFile::Schema(s) => s.hash(state),
+            ValueOrDatumOrFile::Value { value } => {
                 serde_json::to_string(value).unwrap().hash(state)
             }
         }
@@ -1738,10 +1739,11 @@ impl Default for UnvalidatedResponse {
 pub struct UnvalidatedVariable {
     pub name: String,
     #[serde(flatten)]
-    pub value: StringOrDatumOrFile,
+    pub value: ValueOrDatumOrFile,
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedStage {
     pub request: UnvalidatedRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1757,12 +1759,14 @@ pub struct UnvalidatedStage {
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedRequestResponse {
     pub request: UnvalidatedRequest,
     pub response: Option<UnvalidatedResponse>,
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedCleanup {
     pub onsuccess: Option<UnvalidatedRequest>,
     pub onfailure: Option<UnvalidatedRequest>,

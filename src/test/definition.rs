@@ -187,6 +187,7 @@ impl CompareDescriptor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct ResponseExtraction {
     pub name: String,
     pub field: String,
@@ -202,6 +203,7 @@ impl ResponseExtraction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ResponseDescriptor {
     pub status: Option<ValueOrNumericSpecification<u16>>,
     pub headers: Vec<http::Header>,
@@ -372,7 +374,6 @@ impl RequestResponseDescriptor {
 }
 
 pub struct ResolvedRequest {
-    // pub req_resp: RequestResponseDescriptor,
     pub url: String,
     pub method: http::Method,
     pub headers: Vec<(String, String)>,
