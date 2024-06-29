@@ -38,7 +38,7 @@ impl Hash for Header {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Parameter {
     pub param: String,
     pub value: String,

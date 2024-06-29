@@ -15,7 +15,7 @@ pub struct RequestBody {
     pub matches_variable: Cell<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequestDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -75,7 +75,7 @@ impl RequestDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CompareDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -201,7 +201,7 @@ impl ResponseExtraction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResponseDescriptor {
     pub status: Option<ValueOrNumericSpecification<u16>>,
     pub headers: Vec<http::Header>,
@@ -231,7 +231,7 @@ impl ResponseDescriptor {
                 };
 
                 let validated_ignore = res.ignore.unwrap_or_default();
-                let validated_extraction = res.extract.unwrap_or_default();
+                let validated_extraction: Vec<ResponseExtraction> = res.extract.unwrap_or_default();
 
                 let response_body = res.body.map(|b| RequestBody {
                     data: b,
@@ -252,7 +252,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StageDescriptor {
     pub request: RequestDescriptor,
     pub compare: Option<CompareDescriptor>,
@@ -351,7 +351,7 @@ impl StageDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequestResponseDescriptor {
     pub request: RequestDescriptor,
     pub response: Option<ResponseDescriptor>,
@@ -395,7 +395,7 @@ impl ResolvedRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
     pub onfailure: Option<RequestDescriptor>,
