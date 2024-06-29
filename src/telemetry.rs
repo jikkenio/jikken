@@ -115,6 +115,19 @@ fn redact_request(req: &mut RequestDescriptor) {
     redact_headers(req.headers.as_mut())
 }
 
+//temporal values will result in a new hash for test
+//definition which means a new test
+fn remove_temporal_values(td: test::Definition) -> test::Definition {
+    test::Definition {
+        global_variables: vec![],
+        ..td
+    }
+}
+
+fn prune_definition(td: test::Definition) -> test::Definition {
+    remove_temporal_values(td)
+}
+
 fn redact_definition(mut td: test::Definition) -> test::Definition {
     _ = td.setup.as_mut().map(|s| redact_request(&mut s.request));
 
@@ -154,6 +167,16 @@ fn get_url(url: &str, config: &config::Config) -> String {
     )
 }
 
+fn get_config(config: &config::Config) -> serde_json::Value {
+    let global_variables = config.generate_global_variables();
+    let mut config_json = serde_json::to_value(config).unwrap();
+    config_json.as_object_mut().unwrap().insert(
+        "globals".to_string(),
+        serde_json::to_value(&global_variables).unwrap(),
+    );
+    config_json
+}
+
 pub async fn create_session(
     token: Uuid,
     tests: Vec<&Definition>,
@@ -171,7 +194,7 @@ pub async fn create_session(
     }
 
     let validation_json = serde_json::json!({}); // todo: add validation report once validation is implemented
-    let config_json = serde_json::to_value(config)?;
+    let config_json = get_config(config);
 
     let m = machine::new();
     let machine_id = m.generate_machine_id();
@@ -258,11 +281,12 @@ pub async fn create_test(
     }
 
     let redacted_definition = redact_definition(definition);
-    let definition_json = serde_json::to_value(&redacted_definition)?;
+    let pruned_definition = prune_definition(redacted_definition);
+    let definition_json = serde_json::to_value(&pruned_definition)?;
 
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: redacted_definition.id.clone(),
+        identifier: pruned_definition.id.clone(),
         definition: definition_json,
     };
 
@@ -475,6 +499,8 @@ pub async fn complete_session(
 #[cfg(test)]
 mod tests {
 
+    use test::Variable;
+
     use crate::{
         executor::ExpectedResultData,
         test::definition::{CompareDescriptor, RequestResponseDescriptor, StageDescriptor},
@@ -629,5 +655,137 @@ mod tests {
             .iter()
             .chain(redacted.compare_request.unwrap().headers.iter())
             .any(|h| h.value == "super_secret_key"));
+    }
+
+    #[test]
+    fn remove_temporal_values_has_globals() {
+        let request = RequestDescriptor {
+            method: test::http::Verb::Get,
+            body: None,
+            headers: headers_factory(),
+            params: vec![],
+            url: "foo".to_string(),
+        };
+
+        let td = test::Definition {
+            name: None,
+            description: None,
+            id: String::from("id"),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: Vec::new(),
+            iterate: 0,
+            variables: Vec::new(),
+            global_variables: vec![Variable {
+                name: "my_global".to_string(),
+                source_path: "".to_string(),
+                value: test::StringOrDatumOrFileOrSecret::Value(serde_json::Value::from("hello")),
+            }],
+            stages: vec![StageDescriptor {
+                name: None,
+                response: None,
+                // source_path: "".to_string(),
+                variables: vec![],
+                request: request.clone(),
+                compare: Some(CompareDescriptor {
+                    add_headers: vec![],
+                    method: test::http::Verb::Get,
+                    add_params: vec![],
+                    body: None,
+                    headers: headers_factory(),
+                    url: "foo2".to_string(),
+                    ignore_headers: vec![],
+                    ignore_params: vec![],
+                    params: vec![],
+                    strict: true,
+                }),
+                delay: None,
+            }],
+            setup: Some(RequestResponseDescriptor {
+                response: None,
+                request: request.clone(),
+            }),
+            cleanup: test::definition::CleanupDescriptor {
+                onsuccess: Some(request.clone()),
+                onfailure: Some(request.clone()),
+                always: Some(request.clone()),
+            },
+            disabled: false,
+            filename: "/a/path.jkt".to_string(),
+        };
+        let before = td.clone();
+        let pruned = remove_temporal_values(td);
+        assert_eq!(
+            Definition {
+                global_variables: vec![],
+                ..before
+            },
+            pruned
+        )
+    }
+
+    #[test]
+    fn remove_temporal_values_has_no_globals() {
+        let request = RequestDescriptor {
+            method: test::http::Verb::Get,
+            body: None,
+            headers: headers_factory(),
+            params: vec![],
+            url: "foo".to_string(),
+        };
+
+        let td = test::Definition {
+            name: None,
+            description: None,
+            id: String::from("id"),
+            project: None,
+            environment: None,
+            requires: None,
+            tags: Vec::new(),
+            iterate: 0,
+            variables: Vec::new(),
+            global_variables: Vec::new(),
+            stages: vec![StageDescriptor {
+                name: None,
+                response: None,
+                // source_path: "".to_string(),
+                variables: vec![],
+                request: request.clone(),
+                compare: Some(CompareDescriptor {
+                    add_headers: vec![],
+                    method: test::http::Verb::Get,
+                    add_params: vec![],
+                    body: None,
+                    headers: headers_factory(),
+                    url: "foo2".to_string(),
+                    ignore_headers: vec![],
+                    ignore_params: vec![],
+                    params: vec![],
+                    strict: true,
+                }),
+                delay: None,
+            }],
+            setup: Some(RequestResponseDescriptor {
+                response: None,
+                request: request.clone(),
+            }),
+            cleanup: test::definition::CleanupDescriptor {
+                onsuccess: Some(request.clone()),
+                onfailure: Some(request.clone()),
+                always: Some(request.clone()),
+            },
+            disabled: false,
+            filename: "/a/path.jkt".to_string(),
+        };
+        let before = td.clone();
+        let pruned = remove_temporal_values(td);
+        assert_eq!(
+            Definition {
+                global_variables: vec![],
+                ..before
+            },
+            pruned
+        )
     }
 }

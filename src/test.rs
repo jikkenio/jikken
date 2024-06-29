@@ -435,7 +435,7 @@ impl Variable {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Definition {
     pub name: Option<String>,
     pub description: Option<String>,
