@@ -846,7 +846,7 @@ impl Definition {
                 trace!("rsv is {}", rsv);
                 let ret = serde_json::from_str::<serde_json::Value>(rsv.as_str());
                 if ret.is_err() {
-                    trace!("ERROR! {:?}", ret);
+                    error!("Error producing json body! {:?}", ret);
                     serde_json::from_str::<serde_json::Value>(rsv.trim_matches('\"'))
                 } else {
                     trace!("GOOD VAL {:?}", ret);
@@ -870,6 +870,7 @@ impl Definition {
             .and_then(|rs| serde_json::from_str::<DatumSchema>(rs.as_str()))
             .map_err(|e| {
                 trace!("resolve_schema_variables(): Error is {e}");
+                error!("Error producing json body from schema! {e}");
                 e
             })
             .map(BodyOrSchema::Schema)
