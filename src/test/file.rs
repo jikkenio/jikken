@@ -1729,6 +1729,7 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<ValueOrNumericSpecification<u16>>,
@@ -1743,8 +1744,6 @@ pub struct UnvalidatedResponse {
     pub body: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_schema: Option<DatumSchema>,
-    //#[serde(flatten, skip_serializing_if = "Option::is_none")]
-    //pub body: Option<BodyOrSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
