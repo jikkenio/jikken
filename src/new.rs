@@ -96,6 +96,7 @@ mod openapi_legacy {
                     extract: None,
                     ignore: None,
                     strict: None,
+                    body_schema: None,
                 }),
                 _ => None,
             })
@@ -134,6 +135,7 @@ mod openapi_legacy {
 
         UnvalidatedRequest {
             body: None,
+            body_schema: None,
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -391,6 +393,7 @@ mod openapi_v31 {
                     extract: None,
                     ignore: None,
                     strict: None,
+                    body_schema: None,
                 }),
                 _ => None,
             })
@@ -429,6 +432,7 @@ mod openapi_v31 {
 
         UnvalidatedRequest {
             body: None,
+            body_schema: None,
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {

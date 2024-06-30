@@ -40,6 +40,7 @@ impl Hash for Header {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Parameter {
     pub param: String,
     pub value: String,

@@ -24,7 +24,6 @@ pub struct RequestDescriptor {
     pub body: Option<RequestBody>,
 }
 
-// TODO: add validation logic to verify the descriptor is valid
 impl RequestDescriptor {
     pub fn new(request: file::UnvalidatedRequest) -> Result<RequestDescriptor, validation::Error> {
         let validated_params = match request.params {
@@ -51,7 +50,18 @@ impl RequestDescriptor {
             None => Vec::new(),
         };
 
-        let request_body = request.body.map(|b| RequestBody {
+        if request.body.is_some() && request.body_schema.is_some() {
+            return Err(validation::Error {
+                reason: "Requests can contain a body OR a bodySchema. Not both".to_string(),
+            });
+        }
+
+        let maybe_body_or_schema = request
+            .body
+            .map(|value| BodyOrSchema::Body(value))
+            .or(request.body_schema.map(|s| BodyOrSchema::Schema(s)));
+
+        let request_body = maybe_body_or_schema.map(|b| RequestBody {
             data: b,
             matches_variable: Cell::from(false),
         });
@@ -163,7 +173,18 @@ impl CompareDescriptor {
                     };
                 }
 
-                let compare_body = request.body.map(|b| RequestBody {
+                if request.body.is_some() && request.body_schema.is_some() {
+                    return Err(validation::Error {
+                        reason: "Requests can contain a body OR a bodySchema. Not both".to_string(),
+                    });
+                }
+
+                let maybe_body_or_schema = request
+                    .body
+                    .map(|value| BodyOrSchema::Body(value))
+                    .or(request.body_schema.map(|s| BodyOrSchema::Schema(s)));
+
+                let compare_body = maybe_body_or_schema.map(|b| RequestBody {
                     data: b,
                     matches_variable: Cell::from(false),
                 });
@@ -235,7 +256,19 @@ impl ResponseDescriptor {
                 let validated_ignore = res.ignore.unwrap_or_default();
                 let validated_extraction: Vec<ResponseExtraction> = res.extract.unwrap_or_default();
 
-                let response_body = res.body.map(|b| RequestBody {
+                if res.body.is_some() && res.body_schema.is_some() {
+                    return Err(validation::Error {
+                        reason: "Responses can contain a body OR a bodySchema. Not both"
+                            .to_string(),
+                    });
+                }
+
+                let maybe_body_or_schema = res
+                    .body
+                    .map(|value| BodyOrSchema::Body(value))
+                    .or(res.body_schema.map(|s| BodyOrSchema::Schema(s)));
+
+                let response_body = maybe_body_or_schema.map(|b| RequestBody {
                     data: b,
                     matches_variable: Cell::from(false),
                 });
