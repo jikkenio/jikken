@@ -86,7 +86,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
 fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedVariable {
         name: "".to_string(),
-        value: file::StringOrDatumOrFile::Value {
+        value: file::ValueOrDatumOrFile::Value {
             value: serde_json::Value::from("".to_string()),
         },
     })
@@ -104,6 +104,7 @@ fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send
         ignore: Some(vec!["".to_string()]),
         extract: Some(vec![definition::ResponseExtraction::new()]),
         strict: Some(true),
+        body_schema: None,
     })
 }
 
@@ -118,6 +119,7 @@ fn new_full_compare() -> Result<file::UnvalidatedCompareRequest, Box<dyn Error +
         add_headers: Some(vec![new_header()]),
         ignore_headers: Some(vec!["".to_string()]),
         body: Some(serde_json::from_str("{}")?),
+        body_schema: None,
         strict: Some(true),
     })
 }
@@ -133,6 +135,7 @@ fn new_full_request() -> Result<file::UnvalidatedRequest, Box<dyn Error + Send +
         params: Some(vec![new_parameter()]),
         headers: Some(vec![new_header()]),
         body: Some(serde_json::from_str("{}")?),
+        body_schema: None,
     })
 }
 

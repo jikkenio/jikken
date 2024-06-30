@@ -1473,6 +1473,7 @@ impl Checker for DatumSchema {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedRequest {
     pub method: Option<http::Verb>,
     pub url: String,
@@ -1480,8 +1481,15 @@ pub struct UnvalidatedRequest {
     pub params: Option<Vec<http::Parameter>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    pub body: Option<BodyOrSchema>,
+    //Requests can only contain a body OR a body_schema
+    //We used to signify this using (serde-flattened)enums, but its
+    //easier to manage validation errors if we flatten the
+    //structure manually in this manner and leave the enums only
+    //in the (Validated)RequestDescriptor struct
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_schema: Option<DatumSchema>,
 }
 
 impl Default for UnvalidatedRequest {
@@ -1492,6 +1500,7 @@ impl Default for UnvalidatedRequest {
             params: None,
             headers: None,
             body: None,
+            body_schema: None,
         }
     }
 }
@@ -1502,11 +1511,13 @@ impl Hash for UnvalidatedRequest {
         self.url.hash(state);
         self.params.hash(state);
         self.headers.hash(state);
+        self.body_schema.hash(state);
+        serde_json::to_string(&self.body).unwrap().hash(state);
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedCompareRequest {
     pub method: Option<http::Verb>,
     pub url: String,
@@ -1516,7 +1527,17 @@ pub struct UnvalidatedCompareRequest {
     pub headers: Option<Vec<http::Header>>,
     pub add_headers: Option<Vec<http::Header>>,
     pub ignore_headers: Option<Vec<String>>,
-    pub body: Option<BodyOrSchema>,
+    //Requests can only contain a body OR a body_schema
+    //We used to signify this using (serde-flattened)enums, but its
+    //easier to manage validation errors if we flatten the
+    //structure manually in this manner and leave the enums only
+    //in the (Validated)CompareDescriptor struct
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_schema: Option<DatumSchema>,
+    //#[serde(flatten)]
+    //pub body: Option<BodyOrSchema>,
     pub strict: Option<bool>,
 }
 
@@ -1525,6 +1546,8 @@ impl Hash for UnvalidatedCompareRequest {
         self.method.hash(state);
         self.url.hash(state);
         self.params.hash(state);
+        serde_json::to_string(&self.body).unwrap().hash(state);
+        self.body_schema.hash(state);
         self.add_params.hash(state);
         self.ignore_params.hash(state);
         self.headers.hash(state);
@@ -1593,7 +1616,7 @@ impl Hash for BodyOrSchema {
 /**
     We expose variables to the user as things
     that are either:
-        - Strings
+        - Values
         - Datums
         - Files
     However, our implementation type also treats Secrets as
@@ -1604,18 +1627,18 @@ impl Hash for BodyOrSchema {
 **/
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
-pub enum StringOrDatumOrFile {
+pub enum ValueOrDatumOrFile {
     File { file: String },
     Value { value: Value },
     Schema(DatumSchema),
 }
 
-impl Hash for StringOrDatumOrFile {
+impl Hash for ValueOrDatumOrFile {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            StringOrDatumOrFile::File { file } => file.hash(state),
-            StringOrDatumOrFile::Schema(s) => s.hash(state),
-            StringOrDatumOrFile::Value { value } => {
+            ValueOrDatumOrFile::File { file } => file.hash(state),
+            ValueOrDatumOrFile::Schema(s) => s.hash(state),
+            ValueOrDatumOrFile::Value { value } => {
                 serde_json::to_string(value).unwrap().hash(state)
             }
         }
@@ -1705,19 +1728,39 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
     }
 }
 
-#[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<ValueOrNumericSpecification<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    pub body: Option<BodyOrSchema>,
+    //Responses can only contain a body OR a body_schema
+    //We used to signify this using (serde-flattened)enums, but its
+    //easier to manage validation errors if we flatten the
+    //structure manually in this manner and leave the enums only
+    //in the (Validated)ResponseDescriptor struct
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_schema: Option<DatumSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
     pub strict: Option<bool>,
+}
+
+impl Hash for UnvalidatedResponse {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(&self.body).unwrap().hash(state);
+        self.status.hash(state);
+        self.headers.hash(state);
+        self.body_schema.hash(state);
+        self.ignore.hash(state);
+        self.extract.hash(state);
+        self.strict.hash(state);
+    }
 }
 
 impl Default for UnvalidatedResponse {
@@ -1729,6 +1772,7 @@ impl Default for UnvalidatedResponse {
             ignore: None,
             extract: None,
             strict: None,
+            body_schema: None,
         }
     }
 }
@@ -1738,10 +1782,11 @@ impl Default for UnvalidatedResponse {
 pub struct UnvalidatedVariable {
     pub name: String,
     #[serde(flatten)]
-    pub value: StringOrDatumOrFile,
+    pub value: ValueOrDatumOrFile,
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedStage {
     pub request: UnvalidatedRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1757,12 +1802,14 @@ pub struct UnvalidatedStage {
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedRequestResponse {
     pub request: UnvalidatedRequest,
     pub response: Option<UnvalidatedResponse>,
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnvalidatedCleanup {
     pub onsuccess: Option<UnvalidatedRequest>,
     pub onfailure: Option<UnvalidatedRequest>,
@@ -2701,42 +2748,6 @@ mod tests {
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_fail(),
-        );
-    }
-
-    #[test]
-    fn unvalidated_response_schema_has_desired_serde_behavior() {
-        let foo = serde_json::json!({ "bodySchema" : {
-            "type" : "object"
-        }});
-
-        let again: UnvalidatedResponse = serde_json::from_value(foo).unwrap();
-
-        assert_eq!(
-            true,
-            match again.body.unwrap() {
-                BodyOrSchema::Schema(..) => true,
-                BodyOrSchema::Body(..) => false,
-            }
-        );
-    }
-
-    #[test]
-    fn unvalidated_response_value_has_desired_serde_behavior() {
-        let foo = serde_json::json!({ "body" : {
-            "my_api_dto`": {
-                "foo" : "bar"
-            }
-        }});
-
-        let again: UnvalidatedResponse = serde_json::from_value(foo).unwrap();
-
-        assert_eq!(
-            true,
-            match again.body.unwrap() {
-                BodyOrSchema::Schema(..) => false,
-                BodyOrSchema::Body(..) => true,
-            }
         );
     }
 
