@@ -1558,6 +1558,8 @@ async fn validate_stage(
     let stage_name = stage.name.clone().unwrap_or((stage_index + 1).to_string());
     debug!("execute stage {stage_name}");
 
+    //Darius here? Or could be in caller
+
     let req_method = stage.request.method.as_method();
     let req_url = &td.get_url(
         iteration,

@@ -888,6 +888,7 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> String {
+        debug!("resolve_variables({})", json_val);
         let mut mut_string = json_val.to_string();
 
         let state_vars: Vec<(String, &String)> = state_variables
