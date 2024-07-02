@@ -6,6 +6,7 @@ use std::cell::Cell;
 use std::collections::HashSet;
 
 use super::file::BodyOrSchema;
+use crate::test::Variable;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestBody {
@@ -238,6 +239,7 @@ pub struct ResponseDescriptor {
 impl ResponseDescriptor {
     pub fn new_opt(
         response: Option<file::UnvalidatedResponse>,
+        variables: &[Variable],
     ) -> Result<Option<ResponseDescriptor>, validation::Error> {
         match response {
             Some(res) => {
@@ -263,10 +265,37 @@ impl ResponseDescriptor {
                     });
                 }
 
+                //\todo : Need a way to tell you that variable name exist!
                 let maybe_body_or_schema = res
                     .body
-                    .map(|value| BodyOrSchema::Body(value))
-                    .or(res.body_schema.map(|s| BodyOrSchema::Schema(s)));
+                    .and_then(|variable_name_or_value| match variable_name_or_value {
+                        file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                            Some(BodyOrSchema::Body(v))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| format!("${{{}}}", v.name) == name)
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Value(v) => {
+                                    Some(BodyOrSchema::Body(v.clone()))
+                                }
+                                _ => None,
+                            }),
+                    })
+                    .or(res.body_schema.and_then(|s| match s {
+                        file::UnvalidatedVariableNameOrComponent::Component(ds) => {
+                            Some(BodyOrSchema::Schema(ds))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| format!("${{{}}}", v.name) == name)
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Schema(ds) => {
+                                    Some(BodyOrSchema::Schema(ds.clone()))
+                                }
+                                _ => None,
+                            }),
+                    }));
 
                 let response_body = maybe_body_or_schema.map(|b| RequestBody {
                     data: b,
@@ -305,11 +334,12 @@ impl StageDescriptor {
     pub fn new(
         stage: file::UnvalidatedStage,
         source_path: &str,
+        variables: &[Variable],
     ) -> Result<StageDescriptor, validation::Error> {
         Ok(StageDescriptor {
             request: RequestDescriptor::new(stage.request)?,
             compare: CompareDescriptor::new_opt(stage.compare)?,
-            response: ResponseDescriptor::new_opt(stage.response)?,
+            response: ResponseDescriptor::new_opt(stage.response, variables)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             // source_path: source_path.to_string(),
             name: stage.name,
@@ -323,6 +353,7 @@ impl StageDescriptor {
         response_opt: Option<file::UnvalidatedResponse>,
         stages_opt: Option<Vec<file::UnvalidatedStage>>,
         source_path: &str,
+        variables: &[Variable],
     ) -> Result<Vec<StageDescriptor>, validation::Error> {
         let mut results = Vec::new();
         let mut count = 0;
@@ -331,7 +362,7 @@ impl StageDescriptor {
             results.push(StageDescriptor {
                 request: RequestDescriptor::new(request)?,
                 compare: CompareDescriptor::new_opt(compare_opt)?,
-                response: ResponseDescriptor::new_opt(response_opt)?,
+                response: ResponseDescriptor::new_opt(response_opt, variables)?,
                 variables: Vec::new(),
                 // source_path: source_path.to_string(),
                 name: None,
@@ -347,7 +378,7 @@ impl StageDescriptor {
                 results.append(
                     &mut stages
                         .into_iter()
-                        .map(|s| StageDescriptor::new(s, source_path))
+                        .map(|s| StageDescriptor::new(s, source_path, variables))
                         .filter_map(|v| match v {
                             Ok(x) => Some(x),
                             Err(_) => None,
@@ -395,11 +426,12 @@ pub struct RequestResponseDescriptor {
 impl RequestResponseDescriptor {
     pub fn new_opt(
         reqresp_opt: Option<file::UnvalidatedRequestResponse>,
+        variables: &[Variable],
     ) -> Result<Option<RequestResponseDescriptor>, validation::Error> {
         match reqresp_opt {
             Some(reqresp) => Ok(Some(RequestResponseDescriptor {
                 request: RequestDescriptor::new(reqresp.request)?,
-                response: ResponseDescriptor::new_opt(reqresp.response)?,
+                response: ResponseDescriptor::new_opt(reqresp.response, variables)?,
             })),
             None => Ok(None),
         }

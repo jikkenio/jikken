@@ -29,6 +29,14 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
+//aka RefOrT , where Ref should refer to a variable
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UnvalidatedVariableNameOrComponent<T> {
+    VariableName(String),
+    Component(T),
+}
+
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum Specification<T> {
@@ -1613,6 +1621,10 @@ impl Hash for BodyOrSchema {
     }
 }
 
+pub type UnvalidatedVariableNameOrValue = UnvalidatedVariableNameOrComponent<serde_json::Value>;
+
+pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrComponent<DatumSchema>;
+
 /**
     We expose variables to the user as things
     that are either:
@@ -1741,9 +1753,9 @@ pub struct UnvalidatedResponse {
     //structure manually in this manner and leave the enums only
     //in the (Validated)ResponseDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
+    pub body: Option<UnvalidatedVariableNameOrValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema: Option<DatumSchema>,
+    pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1756,7 +1768,9 @@ impl Hash for UnvalidatedResponse {
         serde_json::to_string(&self.body).unwrap().hash(state);
         self.status.hash(state);
         self.headers.hash(state);
-        self.body_schema.hash(state);
+        serde_json::to_string(&self.body_schema)
+            .unwrap()
+            .hash(state);
         self.ignore.hash(state);
         self.extract.hash(state);
         self.strict.hash(state);

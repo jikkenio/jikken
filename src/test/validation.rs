@@ -47,6 +47,14 @@ pub fn validate_file(
 
     let generated_id = file.generate_id();
 
+    let variables = test::Variable::validate_variables_opt(
+        file.variables,
+        PathBuf::from(&file.filename)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(&file.filename),
+    )?;
+
     let td = test::Definition {
         name: file.name,
         description: file.description,
@@ -56,13 +64,7 @@ pub fn validate_file(
         requires: file.requires,
         tags: new_tags,
         iterate: file.iterate.unwrap_or(1),
-        variables: test::Variable::validate_variables_opt(
-            file.variables,
-            PathBuf::from(&file.filename)
-                .parent()
-                .and_then(|p| p.to_str())
-                .unwrap_or(&file.filename),
-        )?,
+        variables: variables.clone(),
         global_variables: global_variables.to_vec(),
         stages: definition::StageDescriptor::validate_stages_opt(
             file.request,
@@ -70,8 +72,9 @@ pub fn validate_file(
             file.response,
             file.stages,
             &variable::parse_source_path(&file.filename),
+            &variables,
         )?,
-        setup: definition::RequestResponseDescriptor::new_opt(file.setup)?,
+        setup: definition::RequestResponseDescriptor::new_opt(file.setup, &variables)?,
         cleanup: definition::CleanupDescriptor::new(file.cleanup)?,
         disabled: file.disabled.unwrap_or_default(),
         filename: file.filename,

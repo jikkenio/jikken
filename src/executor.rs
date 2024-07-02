@@ -410,6 +410,7 @@ async fn run_tests<T: ExecutionPolicy>(
         let mut iteration_results: Vec<IterationResult> = Vec::new();
         let test_name = test.name.clone().unwrap_or(format!("Test{}", i + 1));
         for iteration in 0..test.iterate {
+            //darius create vars here...right?
             // TODO: clean this up based on policies
             // I don't see a clean way to access it without refactoring
             if any_failures && !config.settings.continue_on_failure {
