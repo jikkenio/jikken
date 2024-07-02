@@ -89,6 +89,42 @@ impl Clone for SecretValue {
     }
 }
 
+pub struct VariableName(String);
+
+struct ResolvedVariable {
+    pub name: String,
+    pub value: String,
+}
+
+struct StateVariable {
+    pub name: String,
+    pub value: String,
+}
+
+impl From<StateVariable> for ResolvedVariable {
+    fn from(value: StateVariable) -> Self {
+        Self {
+            name: value.name,
+            value: value.value,
+        }
+    }
+}
+
+impl ResolvedVariable {
+    //generate_value returns string value or default
+    fn from_variable(
+        variable: &Variable,
+        definition: &Definition,
+        iteration: u32,
+        scope: &[Variable],
+    ) -> Self {
+        Self {
+            name: variable.name.clone(),
+            value: variable.generate_value(definition, iteration, scope),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ValueOrDatumOrFileOrSecret {
@@ -906,6 +942,10 @@ impl Definition {
                 .replace(var_pattern.as_str(), value.as_str())
                 .trim()
                 .to_string();
+            //play with recurision here, these could be complex variables
+            //ALSO you can generate values from complex variables prior to running
+            //a stage? That way they're consistent and can just be replaced here without
+            //issue?
         }
 
         for variable in variables.iter().chain(self.global_variables.iter()) {
@@ -914,14 +954,18 @@ impl Definition {
                 continue;
             }
 
-            debug!("variable match: {}", var_pattern);
+            debug!("variable match: {} =====> {:?}", var_pattern, variable);
 
             let replacement = variable.generate_value(self, iteration, &self.global_variables);
 
             debug!("replacement is {}", replacement);
 
             debug!("replacement is {:?}", replacement);
-            trace!("Variable value {:?}", &variable.value);
+            trace!(
+                "Variable name=>value {:?}===>{:?}",
+                var_pattern,
+                &variable.value
+            );
 
             //Do extra for non string stuff
             let do_extra = match &variable.value {
@@ -930,6 +974,7 @@ impl Definition {
                 _ => false,
             };
 
+            //if not a string, we want to even replace the quotes
             if do_extra {
                 mut_string = mut_string.trim_matches('"').to_string();
                 let expected_lead_pattern = "\"";
@@ -945,6 +990,7 @@ impl Definition {
                         replacement.as_str(),
                     )
                     .trim()
+                    .replace(var_pattern.as_str(), replacement.as_str())
                     .to_string();
             } else {
                 mut_string = mut_string
