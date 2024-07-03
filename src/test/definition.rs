@@ -62,7 +62,6 @@ impl RequestDescriptor {
             });
         }
 
-        //\todo : Need a way to tell you that variable name exist!
         let maybe_body_or_schema = request
             .body
             .and_then(|variable_name_or_value| match variable_name_or_value {
@@ -76,8 +75,9 @@ impl RequestDescriptor {
                         test::ValueOrDatumOrFileOrSecret::Value(v) => {
                             Some(BodyOrSchema::Body(v.clone()))
                         }
-                        _ => Some(BodyOrSchema::Body(serde_json::Value::from(name.val()))),
-                    }),
+                        _ => None,
+                    })
+                    .or_else(|| Some(BodyOrSchema::Body(serde_json::Value::from(name.val())))),
             })
             .or(request.body_schema.and_then(|s| match s {
                 file::UnvalidatedVariableNameOrComponent::Component(ds) => {
@@ -298,7 +298,6 @@ impl ResponseDescriptor {
                     });
                 }
 
-                //\todo : Need a way to tell you that variable name exist!
                 let maybe_body_or_schema = res
                     .body
                     .and_then(|variable_name_or_value| match variable_name_or_value {
@@ -312,6 +311,8 @@ impl ResponseDescriptor {
                                 test::ValueOrDatumOrFileOrSecret::Value(v) => {
                                     Some(BodyOrSchema::Body(v.clone()))
                                 }
+                                //In theory, we could try to read from a file variable and
+                                //inject the contents... \todo
                                 _ => None,
                             }),
                     })

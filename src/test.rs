@@ -89,42 +89,6 @@ impl Clone for SecretValue {
     }
 }
 
-pub struct VariableName(String);
-
-struct ResolvedVariable {
-    pub name: String,
-    pub value: String,
-}
-
-struct StateVariable {
-    pub name: String,
-    pub value: String,
-}
-
-impl From<StateVariable> for ResolvedVariable {
-    fn from(value: StateVariable) -> Self {
-        Self {
-            name: value.name,
-            value: value.value,
-        }
-    }
-}
-
-impl ResolvedVariable {
-    //generate_value returns string value or default
-    fn from_variable(
-        variable: &Variable,
-        definition: &Definition,
-        iteration: u32,
-        scope: &[Variable],
-    ) -> Self {
-        Self {
-            name: variable.name.clone(),
-            value: variable.generate_value(definition, iteration, scope),
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ValueOrDatumOrFileOrSecret {
