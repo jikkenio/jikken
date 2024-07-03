@@ -75,7 +75,7 @@ pub fn validate_file(
             &variables,
         )?,
         setup: definition::RequestResponseDescriptor::new_opt(file.setup, &variables)?,
-        cleanup: definition::CleanupDescriptor::new(file.cleanup)?,
+        cleanup: definition::CleanupDescriptor::new(file.cleanup, &variables)?,
         disabled: file.disabled.unwrap_or_default(),
         filename: file.filename,
     };

@@ -26,7 +26,10 @@ pub struct RequestDescriptor {
 }
 
 impl RequestDescriptor {
-    pub fn new(request: file::UnvalidatedRequest) -> Result<RequestDescriptor, validation::Error> {
+    pub fn new(
+        request: file::UnvalidatedRequest,
+        variables: &[Variable],
+    ) -> Result<RequestDescriptor, validation::Error> {
         let validated_params = match request.params {
             Some(params) => params
                 .iter()
@@ -57,10 +60,37 @@ impl RequestDescriptor {
             });
         }
 
+        //\todo : Need a way to tell you that variable name exist!
         let maybe_body_or_schema = request
             .body
-            .map(|value| BodyOrSchema::Body(value))
-            .or(request.body_schema.map(|s| BodyOrSchema::Schema(s)));
+            .and_then(|variable_name_or_value| match variable_name_or_value {
+                file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                    Some(BodyOrSchema::Body(v))
+                }
+                file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                    .iter()
+                    .find(|v| format!("${{{}}}", v.name) == name)
+                    .and_then(|v| match &v.value {
+                        test::ValueOrDatumOrFileOrSecret::Value(v) => {
+                            Some(BodyOrSchema::Body(v.clone()))
+                        }
+                        _ => Some(BodyOrSchema::Body(serde_json::Value::from(name))),
+                    }),
+            })
+            .or(request.body_schema.and_then(|s| match s {
+                file::UnvalidatedVariableNameOrComponent::Component(ds) => {
+                    Some(BodyOrSchema::Schema(ds))
+                }
+                file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                    .iter()
+                    .find(|v| format!("${{{}}}", v.name) == name)
+                    .and_then(|v| match &v.value {
+                        test::ValueOrDatumOrFileOrSecret::Schema(ds) => {
+                            Some(BodyOrSchema::Schema(ds.clone()))
+                        }
+                        _ => None,
+                    }),
+            }));
 
         let request_body = maybe_body_or_schema.map(|b| RequestBody {
             data: b,
@@ -78,9 +108,10 @@ impl RequestDescriptor {
 
     pub fn new_opt(
         request_opt: Option<file::UnvalidatedRequest>,
+        variables: &[Variable],
     ) -> Result<Option<RequestDescriptor>, validation::Error> {
         match request_opt {
-            Some(request) => Ok(Some(RequestDescriptor::new(request)?)),
+            Some(request) => Ok(Some(RequestDescriptor::new(request, variables)?)),
             None => Ok(None),
         }
     }
@@ -337,7 +368,7 @@ impl StageDescriptor {
         variables: &[Variable],
     ) -> Result<StageDescriptor, validation::Error> {
         Ok(StageDescriptor {
-            request: RequestDescriptor::new(stage.request)?,
+            request: RequestDescriptor::new(stage.request, variables)?,
             compare: CompareDescriptor::new_opt(stage.compare)?,
             response: ResponseDescriptor::new_opt(stage.response, variables)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
@@ -360,7 +391,7 @@ impl StageDescriptor {
 
         if let Some(request) = request_opt {
             results.push(StageDescriptor {
-                request: RequestDescriptor::new(request)?,
+                request: RequestDescriptor::new(request, variables)?,
                 compare: CompareDescriptor::new_opt(compare_opt)?,
                 response: ResponseDescriptor::new_opt(response_opt, variables)?,
                 variables: Vec::new(),
@@ -430,7 +461,7 @@ impl RequestResponseDescriptor {
     ) -> Result<Option<RequestResponseDescriptor>, validation::Error> {
         match reqresp_opt {
             Some(reqresp) => Ok(Some(RequestResponseDescriptor {
-                request: RequestDescriptor::new(reqresp.request)?,
+                request: RequestDescriptor::new(reqresp.request, variables)?,
                 response: ResponseDescriptor::new_opt(reqresp.response, variables)?,
             })),
             None => Ok(None),
@@ -471,12 +502,13 @@ pub struct CleanupDescriptor {
 impl CleanupDescriptor {
     pub fn new(
         cleanup_opt: Option<file::UnvalidatedCleanup>,
+        variables: &[Variable],
     ) -> Result<CleanupDescriptor, validation::Error> {
         match cleanup_opt {
             Some(cleanup) => Ok(CleanupDescriptor {
-                onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess)?,
-                onfailure: RequestDescriptor::new_opt(cleanup.onfailure)?,
-                always: RequestDescriptor::new_opt(cleanup.always)?,
+                onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess, variables)?,
+                onfailure: RequestDescriptor::new_opt(cleanup.onfailure, variables)?,
+                always: RequestDescriptor::new_opt(cleanup.always, variables)?,
             }),
             None => Ok(CleanupDescriptor {
                 onsuccess: None,

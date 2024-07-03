@@ -1495,9 +1495,9 @@ pub struct UnvalidatedRequest {
     //structure manually in this manner and leave the enums only
     //in the (Validated)RequestDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
+    pub body: Option<UnvalidatedVariableNameOrValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema: Option<DatumSchema>,
+    pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
 }
 
 impl Default for UnvalidatedRequest {
@@ -1519,7 +1519,9 @@ impl Hash for UnvalidatedRequest {
         self.url.hash(state);
         self.params.hash(state);
         self.headers.hash(state);
-        self.body_schema.hash(state);
+        serde_json::to_string(&self.body_schema)
+            .unwrap()
+            .hash(state);
         serde_json::to_string(&self.body).unwrap().hash(state);
     }
 }
