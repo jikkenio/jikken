@@ -1,6 +1,7 @@
 use crate::test;
 use crate::test::file::ValueOrNumericSpecification;
 use crate::test::{file, http, validation};
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -30,6 +31,7 @@ impl RequestDescriptor {
         request: file::UnvalidatedRequest,
         variables: &[Variable],
     ) -> Result<RequestDescriptor, validation::Error> {
+        trace!("RequestDescriptor::new({:?})", request);
         let validated_params = match request.params {
             Some(params) => params
                 .iter()
@@ -69,12 +71,12 @@ impl RequestDescriptor {
                 }
                 file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
                     .iter()
-                    .find(|v| format!("${{{}}}", v.name) == name)
+                    .find(|v| name == format!("${{{}}}", v.name))
                     .and_then(|v| match &v.value {
                         test::ValueOrDatumOrFileOrSecret::Value(v) => {
                             Some(BodyOrSchema::Body(v.clone()))
                         }
-                        _ => Some(BodyOrSchema::Body(serde_json::Value::from(name))),
+                        _ => Some(BodyOrSchema::Body(serde_json::Value::from(name.val()))),
                     }),
             })
             .or(request.body_schema.and_then(|s| match s {
@@ -83,7 +85,7 @@ impl RequestDescriptor {
                 }
                 file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
                     .iter()
-                    .find(|v| format!("${{{}}}", v.name) == name)
+                    .find(|v| name == format!("${{{}}}", v.name))
                     .and_then(|v| match &v.value {
                         test::ValueOrDatumOrFileOrSecret::Schema(ds) => {
                             Some(BodyOrSchema::Schema(ds.clone()))
@@ -305,7 +307,7 @@ impl ResponseDescriptor {
                         }
                         file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
                             .iter()
-                            .find(|v| format!("${{{}}}", v.name) == name)
+                            .find(|v| name == format!("${{{}}}", v.name))
                             .and_then(|v| match &v.value {
                                 test::ValueOrDatumOrFileOrSecret::Value(v) => {
                                     Some(BodyOrSchema::Body(v.clone()))
@@ -319,7 +321,7 @@ impl ResponseDescriptor {
                         }
                         file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
                             .iter()
-                            .find(|v| format!("${{{}}}", v.name) == name)
+                            .find(|v| name == format!("${{{}}}", v.name))
                             .and_then(|v| match &v.value {
                                 test::ValueOrDatumOrFileOrSecret::Schema(ds) => {
                                     Some(BodyOrSchema::Schema(ds.clone()))

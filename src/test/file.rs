@@ -18,6 +18,8 @@ use rand::Rng;
 use regex::Regex;
 use rnglib::Language;
 use rnglib::RNG;
+use serde::de::Visitor;
+use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
@@ -29,11 +31,56 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
 
+impl std::cmp::PartialEq<String> for VariableName {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Clone)]
+pub struct VariableName(String);
+
+impl VariableName {
+    pub fn val(&self) -> String {
+        self.0.clone()
+    }
+}
+
+struct VariableNameVisitor;
+
+impl<'de> Visitor<'de> for VariableNameVisitor {
+    type Value = VariableName;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a string starting with a $")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if !value.starts_with("$") && !value.starts_with("\"$\"") {
+            return Err(E::custom("expecting identifier starting with $"));
+        }
+
+        Ok(VariableName(value.to_string()))
+    }
+}
+
+impl<'de> Deserialize<'de> for VariableName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(VariableNameVisitor)
+    }
+}
+
 //aka RefOrT , where Ref should refer to a variable
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UnvalidatedVariableNameOrComponent<T> {
-    VariableName(String),
+    VariableName(VariableName),
     Component(T),
 }
 
