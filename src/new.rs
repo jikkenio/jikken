@@ -96,6 +96,7 @@ mod openapi_legacy {
                     extract: None,
                     ignore: None,
                     strict: None,
+                    body_schema: None,
                 }),
                 _ => None,
             })
@@ -134,6 +135,7 @@ mod openapi_legacy {
 
         UnvalidatedRequest {
             body: None,
+            body_schema: None,
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -205,7 +207,7 @@ mod openapi_legacy {
                 RefOr::Reference { .. } => None,
                 RefOr::Item(t) => Some(test::file::UnvalidatedVariable {
                     name: t.name.clone(),
-                    value: test::file::StringOrDatumOrFile::Value {
+                    value: test::file::ValueOrDatumOrFile::Value {
                         value: serde_json::Value::from("value".to_string()),
                     },
                 }),
@@ -391,6 +393,7 @@ mod openapi_v31 {
                     extract: None,
                     ignore: None,
                     strict: None,
+                    body_schema: None,
                 }),
                 _ => None,
             })
@@ -429,6 +432,7 @@ mod openapi_v31 {
 
         UnvalidatedRequest {
             body: None,
+            body_schema: None,
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -452,7 +456,7 @@ mod openapi_v31 {
                 ObjectOrReference::Ref { .. } => None,
                 ObjectOrReference::Object(t) => Some(test::file::UnvalidatedVariable {
                     name: t.name.clone(),
-                    value: test::file::StringOrDatumOrFile::Value {
+                    value: test::file::ValueOrDatumOrFile::Value {
                         value: serde_json::Value::from("".to_string()),
                     },
                 }),
