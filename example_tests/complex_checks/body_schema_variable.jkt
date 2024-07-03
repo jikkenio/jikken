@@ -1,10 +1,6 @@
 name: Complex Check Using Body Schema Variable
 tags: regression flaky triaged
-description: |
-  BodySchema as a variable does not work due to some issues
-  in this early version. Will be addressed soon. 
 requires: auth
-disabled: true
 request:
   url: https://api.jikken.io/api/v2/examples/status
   headers:
@@ -12,7 +8,7 @@ request:
       value: ${token}
 response:
   status: 200
-  #bodySchema: ${expected_response_schema}
+  bodySchema: ${expected_response_schema}
 variables:
   - name: expected_response_schema
     type: object
