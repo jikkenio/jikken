@@ -182,12 +182,17 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
                         }))),
                     DatumSchema::String { specification } => specification
                         .map(|s| {
-                            StringSpecification::new(s.specification, s.min_length, s.max_length)
-                                .map(|s| {
-                                    ValueOrDatumOrFileOrSecret::Schema(DatumSchema::String {
-                                        specification: Some(s),
-                                    })
+                            StringSpecification::new(
+                                s.specification,
+                                s.min_length,
+                                s.max_length,
+                                s.pattern,
+                            )
+                            .map(|s| {
+                                ValueOrDatumOrFileOrSecret::Schema(DatumSchema::String {
+                                    specification: Some(s),
                                 })
+                            })
                         })
                         .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema(
                             DatumSchema::String {
