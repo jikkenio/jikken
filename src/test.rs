@@ -888,6 +888,7 @@ impl Definition {
         variables: &[Variable],
         iteration: u32,
     ) -> String {
+        debug!("resolve_variables({})", json_val);
         let mut mut_string = json_val.to_string();
 
         let state_vars: Vec<(String, &String)> = state_variables
@@ -905,6 +906,10 @@ impl Definition {
                 .replace(var_pattern.as_str(), value.as_str())
                 .trim()
                 .to_string();
+            //play with recurision here, these could be complex variables
+            //ALSO you can generate values from complex variables prior to running
+            //a stage? That way they're consistent and can just be replaced here without
+            //issue?
         }
 
         for variable in variables.iter().chain(self.global_variables.iter()) {
@@ -913,14 +918,18 @@ impl Definition {
                 continue;
             }
 
-            debug!("variable match: {}", var_pattern);
+            debug!("variable match: {} =====> {:?}", var_pattern, variable);
 
             let replacement = variable.generate_value(self, iteration, &self.global_variables);
 
             debug!("replacement is {}", replacement);
 
             debug!("replacement is {:?}", replacement);
-            trace!("Variable value {:?}", &variable.value);
+            trace!(
+                "Variable name=>value {:?}===>{:?}",
+                var_pattern,
+                &variable.value
+            );
 
             //Do extra for non string stuff
             let do_extra = match &variable.value {
@@ -929,6 +938,7 @@ impl Definition {
                 _ => false,
             };
 
+            //if not a string, we want to even replace the quotes
             if do_extra {
                 mut_string = mut_string.trim_matches('"').to_string();
                 let expected_lead_pattern = "\"";
@@ -944,6 +954,7 @@ impl Definition {
                         replacement.as_str(),
                     )
                     .trim()
+                    .replace(var_pattern.as_str(), replacement.as_str())
                     .to_string();
             } else {
                 mut_string = mut_string

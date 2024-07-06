@@ -18,6 +18,8 @@ use rand::Rng;
 use regex::Regex;
 use rnglib::Language;
 use rnglib::RNG;
+use serde::de::Visitor;
+use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
@@ -28,6 +30,59 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
+
+impl std::cmp::PartialEq<String> for VariableName {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Clone)]
+pub struct VariableName(String);
+
+impl VariableName {
+    pub fn val(&self) -> String {
+        self.0.clone()
+    }
+}
+
+struct VariableNameVisitor;
+
+impl<'de> Visitor<'de> for VariableNameVisitor {
+    type Value = VariableName;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a string starting with a $")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if !value.starts_with("$") && !value.starts_with("\"$\"") {
+            return Err(E::custom("expecting identifier starting with $"));
+        }
+
+        Ok(VariableName(value.to_string()))
+    }
+}
+
+impl<'de> Deserialize<'de> for VariableName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(VariableNameVisitor)
+    }
+}
+
+//aka RefOrT , where Ref should refer to a variable
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UnvalidatedVariableNameOrComponent<T> {
+    VariableName(VariableName),
+    Component(T),
+}
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -1487,9 +1542,9 @@ pub struct UnvalidatedRequest {
     //structure manually in this manner and leave the enums only
     //in the (Validated)RequestDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
+    pub body: Option<UnvalidatedVariableNameOrValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema: Option<DatumSchema>,
+    pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
 }
 
 impl Default for UnvalidatedRequest {
@@ -1511,7 +1566,9 @@ impl Hash for UnvalidatedRequest {
         self.url.hash(state);
         self.params.hash(state);
         self.headers.hash(state);
-        self.body_schema.hash(state);
+        serde_json::to_string(&self.body_schema)
+            .unwrap()
+            .hash(state);
         serde_json::to_string(&self.body).unwrap().hash(state);
     }
 }
@@ -1536,8 +1593,6 @@ pub struct UnvalidatedCompareRequest {
     pub body: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_schema: Option<DatumSchema>,
-    //#[serde(flatten)]
-    //pub body: Option<BodyOrSchema>,
     pub strict: Option<bool>,
 }
 
@@ -1612,6 +1667,10 @@ impl Hash for BodyOrSchema {
         }
     }
 }
+
+pub type UnvalidatedVariableNameOrValue = UnvalidatedVariableNameOrComponent<serde_json::Value>;
+
+pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrComponent<DatumSchema>;
 
 /**
     We expose variables to the user as things
@@ -1741,9 +1800,9 @@ pub struct UnvalidatedResponse {
     //structure manually in this manner and leave the enums only
     //in the (Validated)ResponseDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
+    pub body: Option<UnvalidatedVariableNameOrValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema: Option<DatumSchema>,
+    pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1756,7 +1815,9 @@ impl Hash for UnvalidatedResponse {
         serde_json::to_string(&self.body).unwrap().hash(state);
         self.status.hash(state);
         self.headers.hash(state);
-        self.body_schema.hash(state);
+        serde_json::to_string(&self.body_schema)
+            .unwrap()
+            .hash(state);
         self.ignore.hash(state);
         self.extract.hash(state);
         self.strict.hash(state);
@@ -2111,7 +2172,7 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
         &mut rng,
     ));
     let max_length = spec.max_length.unwrap_or(generate_number_in_range(
-        min_length,
+        min_length + 1,
         min_length * 2,
         &mut rng,
     ));
@@ -2873,5 +2934,382 @@ mod tests {
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_good());
+    }
+
+    #[test]
+    fn variable_name_deserialization_from_improper_string() {
+        let res = serde_yaml::from_str::<VariableName>("not_a_variable");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn variable_name_deserialization_from_proper_string() {
+        let res = serde_yaml::from_str::<VariableName>("${my_var}");
+        assert!(res.is_ok());
+        assert_eq!("${my_var}", res.unwrap().val());
+    }
+
+    #[test]
+    fn sequence_specification_min_length_more_than_actual() {
+        assert!(SequenceSpecification {
+            min_length: Some(5),
+            ..Default::default()
+        }
+        .check_min_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_fail());
+    }
+
+    #[test]
+    fn sequence_specification_min_length_equal_to_length() {
+        assert!(SequenceSpecification {
+            min_length: Some(5),
+            ..Default::default()
+        }
+        .check_min_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_min_length_less_than_actual() {
+        assert!(SequenceSpecification {
+            min_length: Some(5),
+            ..Default::default()
+        }
+        .check_min_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5),
+                serde_json::Value::from(6)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_min_check_no_bounds() {
+        assert!(SequenceSpecification {
+            ..Default::default()
+        }
+        .check_min_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_max_length_more_than_actual() {
+        assert!(SequenceSpecification {
+            max_length: Some(5),
+            ..Default::default()
+        }
+        .check_max_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_max_length_equal_to_length() {
+        assert!(SequenceSpecification {
+            min_length: Some(5),
+            ..Default::default()
+        }
+        .check_max_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_max_length_less_than_actual() {
+        assert!(SequenceSpecification {
+            max_length: Some(5),
+            ..Default::default()
+        }
+        .check_max_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5),
+                serde_json::Value::from(6)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_fail());
+    }
+
+    #[test]
+    fn sequence_specification_max_check_no_bounds() {
+        assert!(SequenceSpecification {
+            ..Default::default()
+        }
+        .check_max_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn datum_specification_any_of_following_spec() {
+        let spec = Specification::<Box<DatumSchema>>::AnyOf(vec![
+            Box::from(DatumSchema::String {
+                specification: None,
+            }),
+            Box::from(DatumSchema::Int {
+                specification: None,
+            }),
+        ]);
+
+        if let Specification::<Box<DatumSchema>>::AnyOf(v) = &spec {
+            assert!(spec
+                .schema_any_one_of(
+                    &vec![serde_json::Value::from(1), serde_json::Value::from("hello")],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_good());
+        }
+    }
+
+    #[test]
+    fn datum_specification_any_of_not_following_spec() {
+        let spec = Specification::<Box<DatumSchema>>::AnyOf(vec![
+            Box::from(DatumSchema::String {
+                specification: None,
+            }),
+            Box::from(DatumSchema::Int {
+                specification: None,
+            }),
+        ]);
+
+        if let Specification::<Box<DatumSchema>>::AnyOf(v) = &spec {
+            assert!(spec
+                .schema_any_one_of(
+                    &vec![
+                        serde_json::Value::from(1.25),
+                        serde_json::Value::from("hello")
+                    ],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_fail());
+        }
+    }
+
+    #[test]
+    fn datum_specification_one_of_not_following_spec() {
+        let spec = Specification::<Box<DatumSchema>>::OneOf(vec![
+            Box::from(DatumSchema::String {
+                specification: None,
+            }),
+            Box::from(DatumSchema::Int {
+                specification: None,
+            }),
+        ]);
+
+        if let Specification::<Box<DatumSchema>>::OneOf(v) = &spec {
+            assert!(spec
+                .schema_check_one_of(
+                    &vec![
+                        serde_json::Value::from(1.25),
+                        serde_json::Value::from("hello")
+                    ],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_fail());
+        }
+    }
+
+    #[test]
+    fn datum_specification_one_of_following_spec() {
+        let spec = Specification::<Box<DatumSchema>>::OneOf(vec![
+            Box::from(DatumSchema::String {
+                specification: None,
+            }),
+            Box::from(DatumSchema::Int {
+                specification: None,
+            }),
+        ]);
+
+        if let Specification::<Box<DatumSchema>>::OneOf(v) = &spec {
+            assert!(spec
+                .schema_check_one_of(
+                    &vec![
+                        serde_json::Value::from("world"),
+                        serde_json::Value::from("hello")
+                    ],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_good());
+        }
+    }
+
+    #[test]
+    fn datum_specification_none_of_not_following_spec() {
+        let spec =
+            Specification::<Box<DatumSchema>>::NoneOf(vec![Box::from(DatumSchema::String {
+                specification: None,
+            })]);
+
+        if let Specification::<Box<DatumSchema>>::NoneOf(v) = &spec {
+            assert!(spec
+                .schema_check_none_of(
+                    &vec![
+                        serde_json::Value::from(1.25),
+                        serde_json::Value::from("hello")
+                    ],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_fail());
+        }
+    }
+
+    #[test]
+    fn datum_specification_none_of_following_spec() {
+        let spec = Specification::<Box<DatumSchema>>::NoneOf(vec![Box::from(DatumSchema::Int {
+            specification: None,
+        })]);
+
+        if let Specification::<Box<DatumSchema>>::NoneOf(v) = &spec {
+            assert!(spec
+                .schema_check_none_of(
+                    &vec![
+                        serde_json::Value::from("world"),
+                        serde_json::Value::from("hello")
+                    ],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_good());
+        }
+    }
+
+    #[test]
+    fn value_specification_none_of_not_following_spec() {
+        let spec = Specification::<Vec<Value>>::NoneOf(vec![vec![serde_json::Value::from(1)]]);
+
+        if let Specification::<Vec<Value>>::NoneOf(v) = &spec {
+            assert!(spec
+                .check_none_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
+                .is_fail());
+        }
+    }
+
+    #[test]
+    fn value_specification_none_of_following_spec() {
+        let spec = Specification::<Vec<Value>>::NoneOf(vec![vec![serde_json::Value::from(1)]]);
+
+        if let Specification::<Vec<Value>>::NoneOf(v) = &spec {
+            assert!(spec
+                .check_none_of(
+                    &vec![serde_json::Value::from(2), serde_json::Value::from(3)],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_good());
+        }
+    }
+
+    #[test]
+    fn value_specification_any_of_following_spec() {
+        let spec = Specification::<Vec<Value>>::AnyOf(vec![vec![serde_json::Value::from(1)]]);
+
+        if let Specification::<Vec<Value>>::AnyOf(v) = &spec {
+            assert!(spec
+                .check_any_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
+                .is_good());
+        }
+    }
+
+    #[test]
+    fn value_specification_any_of_not_following_spec() {
+        let spec = Specification::<Vec<Value>>::AnyOf(vec![vec![serde_json::Value::from(1)]]);
+
+        if let Specification::<Vec<Value>>::AnyOf(v) = &spec {
+            assert!(spec
+                .check_any_of(
+                    &vec![serde_json::Value::from(2), serde_json::Value::from(3)],
+                    v,
+                    &|s, _| s.to_string(),
+                )
+                .is_fail());
+        }
+    }
+
+    #[test]
+    fn list_generation_sequence_specification_has_max() {
+        let spec = SequenceSpecification {
+            max_length: Some(5),
+            ..Default::default()
+        };
+        assert!(generate_list(&spec, 1,).is_some());
+    }
+
+    #[test]
+    fn list_generation_sequence_specification_has_min() {
+        let spec = SequenceSpecification {
+            min_length: Some(1),
+            ..Default::default()
+        };
+        assert!(generate_list(&spec, 1,).is_some());
+    }
+
+    #[test]
+    fn list_generation_default_sequence_specification() {
+        let spec = SequenceSpecification::default();
+        assert!(generate_list(&spec, 1,).is_some());
     }
 }
