@@ -124,6 +124,8 @@ pub struct StringSpecification {
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
@@ -630,6 +632,7 @@ impl StringSpecification {
         specification: Option<Specification<String>>,
         min_length: Option<i64>,
         max_length: Option<i64>,
+        pattern: Option<String>,
     ) -> Result<Self, String> {
         let negative_validator = |number: &Option<i64>, var_name: &str| {
             number
@@ -652,19 +655,57 @@ impl StringSpecification {
             Validated::fail("min_length must be less than or equal to max_length".to_string())
         };
 
+        let pattern_validation = pattern
+            //.as_ref()
+            .map(|p| {
+                Regex::new(p.as_str())
+                    .map(|_| Good(Some(p)))
+                    .unwrap_or_else(|e| {
+                        Validated::fail(format!("invalid regex supplied for pattern : {}", e))
+                    })
+            })
+            .unwrap_or(Good(None));
+
         negative_validation_max
-            .map3(negative_validation_min, relation_validation, |_, _, _| {
-                Self {
+            .map4(
+                negative_validation_min,
+                relation_validation,
+                pattern_validation,
+                |_, _, _, p| Self {
                     max_length,
                     min_length,
                     specification,
-                }
-            })
+                    pattern: p,
+                },
+            )
             .ok()
             .map_err(|nev| {
                 nev.into_nonempty_iter()
                     .reduce(|acc, e| format!("{},{}", acc, e))
             })
+    }
+
+    fn check_pattern(
+        &self,
+        actual: &str,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.pattern {
+            Some(p) => {
+                let result = Regex::new(p).map(|re| {
+                    if re.is_match(actual) {
+                        Good(())
+                    } else {
+                        Validated::fail(formatter(format!("pattern of {}", p).as_str(), actual))
+                    }
+                });
+
+                result.unwrap_or_else(|e| {
+                    Validated::fail(formatter("valid regex", format!("{:?}", e).as_str()))
+                })
+            }
+            _ => Good(()),
+        }
     }
 
     fn check_min_length(
@@ -801,6 +842,7 @@ impl Checker for StringSpecification {
         let mut ret = vec![
             self.check_min_length(val, formatter),
             self.check_max_length(val, formatter),
+            self.check_pattern(val, formatter),
         ];
         ret.append(
             self.specification
@@ -841,6 +883,7 @@ impl NameSpecification {
             string_specification.specification,
             string_specification.min_length,
             string_specification.max_length,
+            string_specification.pattern,
         )
         .map(|s| Self { specification: s })
     }
@@ -852,6 +895,7 @@ impl EmailSpecification {
             string_specification.specification,
             string_specification.min_length,
             string_specification.max_length,
+            string_specification.pattern,
         )
         .map(|s| Self { specification: s })
     }
@@ -2495,6 +2539,38 @@ mod tests {
     }
 
     #[test]
+    fn string_pattern_checker() {
+        let spec = StringSpecification {
+            pattern: Some(r"^helloworld(!)+$".to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&"helloworld".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"helloworld!".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"helloworld!!!!!!".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+    }
+
+    #[test]
     fn numericspecification_no_inputs() {
         assert!(IntegerSpecification::new(None, None, None).is_ok());
     }
@@ -2511,34 +2587,49 @@ mod tests {
 
     #[test]
     fn stringspecification_no_inputs() {
-        assert!(StringSpecification::new(None, None, None).is_ok());
+        assert!(StringSpecification::new(None, None, None, None).is_ok());
     }
 
     #[test]
     fn stringspecification_negative_input() {
         assert_eq!(
-            StringSpecification::new(None, Some(-12), None).unwrap_err(),
+            StringSpecification::new(None, Some(-12), None, None).unwrap_err(),
             "negative value provided for min".to_string()
         );
         assert_eq!(
-            StringSpecification::new(None, Some(-12), Some(-12)).unwrap_err(),
+            StringSpecification::new(None, Some(-12), Some(-12), None).unwrap_err(),
             "negative value provided for max,negative value provided for min".to_string()
         );
         assert_eq!(
-            StringSpecification::new(None, None, Some(-24)).unwrap_err(),
+            StringSpecification::new(None, None, Some(-24), None).unwrap_err(),
             "negative value provided for max".to_string()
         );
-        assert!(StringSpecification::new(None, Some(12), None).is_ok());
+        assert!(StringSpecification::new(None, Some(12), None, None).is_ok());
     }
 
     #[test]
     fn stringspecification_min_max_agreement() {
         assert_eq!(
-            StringSpecification::new(None, Some(24), Some(12)).unwrap_err(),
+            StringSpecification::new(None, Some(24), Some(12), None).unwrap_err(),
             "min_length must be less than or equal to max_length".to_string()
         );
-        assert!(StringSpecification::new(None, Some(1), Some(1)).is_ok());
-        assert!(StringSpecification::new(None, Some(12), Some(24)).is_ok());
+        assert!(StringSpecification::new(None, Some(1), Some(1), None).is_ok());
+        assert!(StringSpecification::new(None, Some(12), Some(24), None).is_ok());
+    }
+
+    #[test]
+    fn string_specification_simple_pattern() {
+        assert!(StringSpecification::new(None, None, None, Some("simple".to_string())).is_ok());
+    }
+
+    #[test]
+    fn string_specification_invalid_pattern() {
+        assert!(StringSpecification::new(None, None, None, Some("?simple?".to_string())).is_err());
+    }
+
+    #[test]
+    fn string_specification_complex_pattern() {
+        assert!(StringSpecification::new(None, None, None, Some("^simple?".to_string())).is_ok());
     }
 
     #[test]
