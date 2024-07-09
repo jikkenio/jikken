@@ -56,9 +56,12 @@ fn create_filename(path_string: &str, verb: &http::Verb) -> String {
 mod openapi_legacy {
     use super::*;
     use crate::test;
+    use crate::test::file;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
     use openapiv3::IndexMap;
+    use openapiv3::OpenAPI;
+    use openapiv3::Parameter;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
     use std::io::BufReader;
@@ -82,14 +85,14 @@ mod openapi_legacy {
         }
     }
 
-    fn create_response(responses: &Responses) -> Option<UnvalidatedResponse> {
+    fn create_response(responses: &Responses, spec: &OpenAPI) -> Option<UnvalidatedResponse> {
         responses
             .responses
             .iter()
             .map(|(sc, obj_or_ref)| (sc.to_string(), obj_or_ref))
             .filter(|(status_code_pattern, _)| status_code_pattern.starts_with('2'))
-            .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
-                RefOr::Item(t) => Some(UnvalidatedResponse {
+            .map(|(status_code_pattern, obj_or_ref)| {
+                obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
                     status: create_status_code(status_code_pattern.as_str()),
                     body: None, //would need a way to validate against a provided schema
                     headers: create_headers(&t.headers),
@@ -97,8 +100,7 @@ mod openapi_legacy {
                     ignore: None,
                     strict: None,
                     body_schema: None,
-                }),
-                _ => None,
+                })
             })
             .last()
             .flatten()
@@ -108,22 +110,23 @@ mod openapi_legacy {
         url: &str,
         verb: test::http::Verb,
         op: &openapiv3::Operation,
+        spec: &OpenAPI,
     ) -> UnvalidatedRequest {
         let mut headers: Vec<test::http::Header> = vec![];
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
         op.parameters.iter().for_each(|f| {
-            if let RefOr::Item(t) = f {
-                match &t.kind {
+            if let Ok(Parameter { data, kind }) = f.resolve(spec) {
+                match &kind {
                     openapiv3::ParameterKind::Query { .. } => {
                         parameters.push(test::http::Parameter {
-                            param: t.name.clone(),
+                            param: data.name.clone(),
                             value: String::default(),
                             matches_variable: std::cell::Cell::new(false),
                         })
                     }
                     openapiv3::ParameterKind::Header { .. } => headers.push(test::http::Header {
-                        header: t.name.clone(),
+                        header: data.name.clone(),
                         value: String::default(),
                         matches_variable: std::cell::Cell::new(false),
                     }),
@@ -179,6 +182,7 @@ mod openapi_legacy {
         verb: test::http::Verb,
         full: bool,
         multistage: bool,
+        spec: &OpenAPI,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
@@ -192,6 +196,7 @@ mod openapi_legacy {
                             full,
                             multistage,
                             path_string,
+                            spec,
                         )
                     })
                     .collect::<Vec<File>>()
@@ -199,22 +204,25 @@ mod openapi_legacy {
             .unwrap_or_default()
     }
 
-    fn create_variables(op: &openapiv3::Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
+    fn create_variables(
+        op: &openapiv3::Operation,
+        spec: &OpenAPI,
+    ) -> Option<Vec<test::file::UnvalidatedVariable>> {
         let ret = op
             .parameters
             .iter()
-            .map(|p_or_ref| match p_or_ref {
-                RefOr::Reference { .. } => None,
-                RefOr::Item(t) => Some(test::file::UnvalidatedVariable {
-                    name: t.name.clone(),
-                    value: test::file::ValueOrDatumOrFile::Value {
-                        value: serde_json::Value::from("value".to_string()),
-                    },
-                }),
+            .filter_map(|p_or_ref| {
+                p_or_ref
+                    .resolve(spec)
+                    .map(|t| test::file::UnvalidatedVariable {
+                        name: t.name.clone(),
+                        value: test::file::ValueOrDatumOrFile::Value {
+                            value: serde_json::Value::from("value".to_string()),
+                        },
+                    })
+                    .ok()
             })
-            .filter(Option::is_some)
-            .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
-            .unwrap_or_default();
+            .collect::<Vec<file::UnvalidatedVariable>>();
 
         if ret.is_empty() {
             None
@@ -230,6 +238,7 @@ mod openapi_legacy {
         full: bool,
         multistage: bool,
         path_string: &str,
+        spec: &OpenAPI,
     ) -> Option<File> {
         let default = if full {
             test::template::template_full().unwrap()
@@ -240,9 +249,10 @@ mod openapi_legacy {
         };
 
         let resolved_path = path.replace('{', "${").to_string();
-        let request = create_request(resolved_path.as_str(), verb, op);
-        let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
-        let variables = create_variables(op);
+        let request = create_request(resolved_path.as_str(), verb, op, spec);
+        let response =
+            create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
+        let variables = create_variables(op, spec);
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -282,6 +292,7 @@ mod openapi_legacy {
         path: &PathItem,
         full: bool,
         multistage: bool,
+        spec: &OpenAPI,
     ) -> Vec<File> {
         let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
@@ -294,7 +305,16 @@ mod openapi_legacy {
         stuff
             .into_iter()
             .flat_map(|(op, verb)| {
-                create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
+                create_tests_for_op(
+                    op,
+                    root_servers,
+                    path,
+                    path_string,
+                    verb,
+                    full,
+                    multistage,
+                    spec,
+                )
             })
             .collect()
     }
@@ -313,13 +333,19 @@ mod openapi_legacy {
             Err(e) => Err(Box::from(e)),
             Ok(v) => {
                 let openapi = v.upgrade();
+
                 Ok(openapi
                     .paths
                     .iter()
                     .flat_map(|(path_string, ref_or_path)| match ref_or_path {
-                        RefOr::Item(path) => {
-                            create_tests(&openapi.servers, path_string, path, full, multistage)
-                        }
+                        RefOr::Item(path) => create_tests(
+                            &openapi.servers,
+                            path_string,
+                            path,
+                            full,
+                            multistage,
+                            &openapi,
+                        ),
                         RefOr::Reference { .. } => Vec::default(),
                     })
                     .collect())
@@ -339,6 +365,7 @@ mod openapi_v31 {
     use oas3::spec::PathItem;
     use oas3::spec::Response;
     use oas3::spec::Server;
+    use oas3::spec::Spec;
     use std::collections::BTreeMap;
     pub fn get_test_paths(
         root_servers: &[Server],
@@ -381,12 +408,13 @@ mod openapi_v31 {
 
     fn create_response(
         responses: &BTreeMap<String, ObjectOrReference<Response>>,
+        spec: &Spec,
     ) -> Option<UnvalidatedResponse> {
         responses
             .iter()
             .filter(|(status_code_pattern, _)| status_code_pattern.starts_with('2'))
-            .map(|(status_code_pattern, obj_or_ref)| match obj_or_ref {
-                ObjectOrReference::Object(t) => Some(UnvalidatedResponse {
+            .map(|(status_code_pattern, obj_or_ref)| {
+                obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
                     body: None, //would need a way to validate against a provided schema
                     headers: create_headers(&t.headers),
@@ -394,8 +422,7 @@ mod openapi_v31 {
                     ignore: None,
                     strict: None,
                     body_schema: None,
-                }),
-                _ => None,
+                })
             })
             .last()
             .flatten()
@@ -405,29 +432,27 @@ mod openapi_v31 {
         url: &str,
         verb: test::http::Verb,
         op: &oas3::spec::Operation,
+        spec: &Spec,
     ) -> UnvalidatedRequest {
         let mut headers: Vec<test::http::Header> = vec![];
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
-        op.parameters.iter().for_each(|f| match f {
-            ObjectOrReference::Object(t) => {
-                match t.location.as_str() {
-                    "query" => parameters.push(test::http::Parameter {
-                        param: t.name.clone(),
-                        value: String::default(),
-                        matches_variable: std::cell::Cell::new(false),
-                    }),
-                    "header" => headers.push(test::http::Header {
-                        header: t.name.clone(),
-                        value: String::default(),
-                        matches_variable: std::cell::Cell::new(false),
-                    }),
-                    "path" => (), //user will have to do this themselves, based upon generated template
-                    "cookie" => (), //no cookie support
-                    _ => (),
-                }
-            }
-            ObjectOrReference::Ref { .. } => (),
+        op.parameters.iter().for_each(|f| {
+            f.resolve(spec).ok().map(|t| match t.location.as_str() {
+                "query" => parameters.push(test::http::Parameter {
+                    param: t.name.clone(),
+                    value: String::default(),
+                    matches_variable: std::cell::Cell::new(false),
+                }),
+                "header" => headers.push(test::http::Header {
+                    header: t.name.clone(),
+                    value: String::default(),
+                    matches_variable: std::cell::Cell::new(false),
+                }),
+                "path" => (), //user will have to do this themselves, based upon generated template
+                "cookie" => (), //These will get picked up automatically as state vars
+                _ => (),
+            });
         });
 
         UnvalidatedRequest {
@@ -448,18 +473,23 @@ mod openapi_v31 {
         }
     }
 
-    fn create_variables(op: &Operation) -> Option<Vec<test::file::UnvalidatedVariable>> {
+    fn create_variables(
+        op: &Operation,
+        spec: &Spec,
+    ) -> Option<Vec<test::file::UnvalidatedVariable>> {
         let ret = op
             .parameters
             .iter()
-            .map(|p_or_ref| match p_or_ref {
-                ObjectOrReference::Ref { .. } => None,
-                ObjectOrReference::Object(t) => Some(test::file::UnvalidatedVariable {
-                    name: t.name.clone(),
-                    value: test::file::ValueOrDatumOrFile::Value {
-                        value: serde_json::Value::from("".to_string()),
-                    },
-                }),
+            .map(|p_or_ref| {
+                p_or_ref
+                    .resolve(spec)
+                    .ok()
+                    .map(|t| test::file::UnvalidatedVariable {
+                        name: t.name.clone(),
+                        value: test::file::ValueOrDatumOrFile::Value {
+                            value: serde_json::Value::from("".to_string()),
+                        },
+                    })
             })
             .filter(Option::is_some)
             .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
@@ -479,6 +509,7 @@ mod openapi_v31 {
         full: bool,
         multistage: bool,
         path_string: &str,
+        spec: &Spec,
     ) -> Option<File> {
         let default = if full {
             test::template::template_full().unwrap()
@@ -488,10 +519,15 @@ mod openapi_v31 {
             test::File::default()
         };
 
+        //openapi spec describes path paramters as /foo/{myVar}
+        //change that to fit how Jikken specifies variables
+        //and create jikken variables for each
         let resolved_path = path.replace('{', "${").to_string();
-        let request = create_request(resolved_path.as_str(), verb, op);
-        let response = create_response(&op.responses).or(Some(UnvalidatedResponse::default()));
-        let variables = create_variables(op);
+        let variables = create_variables(op, spec);
+
+        let request = create_request(resolved_path.as_str(), verb, op, spec);
+        let response =
+            create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
 
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
@@ -533,6 +569,7 @@ mod openapi_v31 {
         verb: test::http::Verb,
         full: bool,
         multistage: bool,
+        spec: &Spec,
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
@@ -546,6 +583,7 @@ mod openapi_v31 {
                             full,
                             multistage,
                             path_string,
+                            spec,
                         )
                     })
                     .collect::<Vec<File>>()
@@ -559,6 +597,7 @@ mod openapi_v31 {
         path: &PathItem,
         full: bool,
         multistage: bool,
+        spec: &Spec,
     ) -> Vec<File> {
         let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
@@ -571,7 +610,16 @@ mod openapi_v31 {
         stuff
             .into_iter()
             .flat_map(|(op, verb)| {
-                create_tests_for_op(op, root_servers, path, path_string, verb, full, multistage)
+                create_tests_for_op(
+                    op,
+                    root_servers,
+                    path,
+                    path_string,
+                    verb,
+                    full,
+                    multistage,
+                    spec,
+                )
             })
             .collect()
     }
@@ -586,7 +634,7 @@ mod openapi_v31 {
                 s.paths
                     .iter()
                     .flat_map(|(path_string, path)| {
-                        create_tests(&s.servers, path_string, path, full, multistage)
+                        create_tests(&s.servers, path_string, path, full, multistage, &s)
                     })
                     .collect()
             })
