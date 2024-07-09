@@ -59,7 +59,7 @@ impl<'de> Visitor<'de> for VariableNameVisitor {
     where
         E: serde::de::Error,
     {
-        if !value.starts_with("$") && !value.starts_with("\"$\"") {
+        if !value.starts_with('$') && !value.starts_with("\"$\"") {
             return Err(E::custom("expecting identifier starting with $"));
         }
 
@@ -1851,6 +1851,7 @@ pub struct UnvalidatedResponse {
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
 }
 

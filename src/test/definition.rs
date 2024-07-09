@@ -215,8 +215,8 @@ impl CompareDescriptor {
 
                 let maybe_body_or_schema = request
                     .body
-                    .map(|value| BodyOrSchema::Body(value))
-                    .or(request.body_schema.map(|s| BodyOrSchema::Schema(s)));
+                    .map(BodyOrSchema::Body)
+                    .or(request.body_schema.map(BodyOrSchema::Schema));
 
                 let compare_body = maybe_body_or_schema.map(|b| RequestBody {
                     data: b,
