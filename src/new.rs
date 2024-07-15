@@ -3,7 +3,6 @@ use super::test::template;
 use log::{error, info};
 
 use crate::test::file::NumericSpecification;
-//use crate::test::file::Specification;
 use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::File;
@@ -57,13 +56,25 @@ mod openapi_legacy {
     use super::*;
     use crate::test;
     use crate::test::file;
+    use crate::test::file::generate_value_from_schema;
+    use crate::test::file::DatumSchema;
+    use crate::test::file::FloatSpecification;
+    use crate::test::file::IntegerSpecification;
+    use crate::test::file::Specification;
+    use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
+    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
+    use crate::test::file::UnvalidatedVariableNameOrValue;
+    use crate::test::file::ValueOrDatumSchema;
     use openapiv3::IndexMap;
     use openapiv3::OpenAPI;
     use openapiv3::Parameter;
+    use openapiv3::Schema;
+    use openapiv3::VariantOrUnknownOrEmpty;
     use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
     use std::collections::hash_map::RandomState;
+    use std::collections::BTreeMap;
     use std::io::BufReader;
 
     fn create_headers(
@@ -92,18 +103,118 @@ mod openapi_legacy {
             .map(|(sc, obj_or_ref)| (sc.to_string(), obj_or_ref))
             .filter(|(status_code_pattern, _)| status_code_pattern.starts_with('2'))
             .map(|(status_code_pattern, obj_or_ref)| {
-                obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
-                    status: create_status_code(status_code_pattern.as_str()),
-                    body: None, //would need a way to validate against a provided schema
-                    headers: create_headers(&t.headers),
-                    extract: None,
-                    ignore: None,
-                    strict: None,
-                    body_schema: None,
+                obj_or_ref.resolve(spec).ok().map(|t| {
+                    let body_stuff = t.content.get("application/json").and_then(|content| {
+                        content
+                            .schema
+                            .as_ref()
+                            .and_then(|s| schema_to_datum(s.resolve(spec), spec))
+                            .map(|ds| {
+                                (
+                                    generate_value_from_schema(&ds, 10)
+                                        .map(UnvalidatedVariableNameOrValue::Component),
+                                    UnvalidatedVariableNameOrDatumSchema::Component(ds),
+                                )
+                            })
+                    });
+                    UnvalidatedResponse {
+                        status: create_status_code(status_code_pattern.as_str()),
+                        headers: create_headers(&t.headers),
+                        extract: None,
+                        ignore: None,
+                        strict: None,
+                        body: body_stuff.clone().and_then(|(v, _)| v),
+                        body_schema: None, //body_stuff.map(|(_, ds)| ds),
+                    }
                 })
             })
             .last()
             .flatten()
+    }
+
+    fn schema_to_datum(schema: &Schema, spec: &OpenAPI) -> Option<DatumSchema> {
+        match &schema.kind {
+            openapiv3::SchemaKind::Type(t) => match t {
+                openapiv3::Type::Array(a) => {
+                    let f = a
+                        .items
+                        .as_ref()
+                        .and_then(|s| schema_to_datum(s.resolve(spec), spec));
+                    Some(DatumSchema::List {
+                        specification: Some(file::SequenceSpecification {
+                            schema: f.map(|ds| {
+                                file::ValuesOrSchema::Schemas(
+                                    Specification::<Box<DatumSchema>>::Value(Box::from(ds)),
+                                )
+                            }),
+                            min_length: a.min_items.map(|s| s as i64),
+                            max_length: a.max_items.map(|s| s as i64),
+                        }),
+                    })
+                }
+                openapiv3::Type::Boolean {} => Some(DatumSchema::Boolean {
+                    specification: None,
+                }),
+                openapiv3::Type::Integer(int) => Some(DatumSchema::Int {
+                    specification: Some(IntegerSpecification {
+                        max: int.maximum.map(|v| v + int.exclusive_maximum as i64),
+                        min: int.minimum.map(|v| v + int.exclusive_minimum as i64),
+                        ..Default::default()
+                    }),
+                }),
+                openapiv3::Type::Number(num) => Some(DatumSchema::Float {
+                    specification: Some(FloatSpecification {
+                        max: num.maximum.map(|v| v + num.exclusive_maximum as i16 as f64),
+                        min: num.minimum.map(|v| v + num.exclusive_minimum as i16 as f64),
+                        ..Default::default()
+                    }),
+                }),
+                openapiv3::Type::Object(obj) => {
+                    let f = &obj
+                        .properties
+                        .iter()
+                        .map(|(name, prop)| {
+                            (name.clone(), schema_to_datum(prop.resolve(spec), spec))
+                        })
+                        .filter(|(_, s)| s.is_some())
+                        .map(|(n, s)| (n, ValueOrDatumSchema::Datum(s.unwrap())))
+                        .collect::<BTreeMap<String, ValueOrDatumSchema>>();
+
+                    if f.is_empty() {
+                        Some(DatumSchema::Object { schema: None })
+                    } else {
+                        Some(DatumSchema::Object {
+                            schema: Some(f.clone()),
+                        })
+                    }
+                }
+                openapiv3::Type::String(string) => {
+                    let string_spec = StringSpecification {
+                        max_length: string.max_length.map(|s| s as i64),
+                        min_length: string.min_length.map(|s| s as i64),
+                        pattern: string.pattern.clone(),
+                        ..Default::default()
+                    };
+                    match &string.format {
+                        VariantOrUnknownOrEmpty::<openapiv3::StringFormat>::Item(s) => match s {
+                            openapiv3::StringFormat::Date => Some(DatumSchema::Date {
+                                specification: None,
+                            }),
+                            openapiv3::StringFormat::DateTime => Some(DatumSchema::DateTime {
+                                specification: None,
+                            }),
+                            _ => Some(DatumSchema::String {
+                                specification: Some(string_spec),
+                            }),
+                        },
+                        _ => Some(DatumSchema::String {
+                            specification: Some(string_spec),
+                        }),
+                    }
+                }
+            },
+            _ => None,
+        }
     }
 
     fn create_request(
@@ -136,9 +247,27 @@ mod openapi_legacy {
             }
         });
 
+        let body_schema = op.request_body.as_ref().and_then(|maybe_request| {
+            maybe_request.resolve(spec).ok().and_then(|r| {
+                r.content.get("application/json").and_then(|content| {
+                    content
+                        .schema
+                        .as_ref()
+                        .and_then(|s| schema_to_datum(s.resolve(spec), spec))
+                        .map(|ds| {
+                            (
+                                generate_value_from_schema(&ds, 10)
+                                    .map(UnvalidatedVariableNameOrValue::Component),
+                                UnvalidatedVariableNameOrDatumSchema::Component(ds),
+                            )
+                        })
+                })
+            })
+        });
+
         UnvalidatedRequest {
-            body: None,
-            body_schema: None,
+            body: body_schema.clone().and_then(|(v, _)| v),
+            body_schema: None, //body_schema.map(|(_, ds)| ds),
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -176,7 +305,6 @@ mod openapi_legacy {
 
     fn create_tests_for_op(
         op: &Option<Operation>,
-        root_servers: &[Server],
         path: &PathItem,
         path_string: &str,
         verb: test::http::Verb,
@@ -186,7 +314,7 @@ mod openapi_legacy {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "{url}")
+                get_test_paths(&spec.servers, &path.servers, &op.servers, "{url}")
                     .iter()
                     .flat_map(|url| {
                         create_test(
@@ -287,7 +415,6 @@ mod openapi_legacy {
     }
 
     fn create_tests(
-        root_servers: &[Server],
         path_string: &str,
         path: &PathItem,
         full: bool,
@@ -305,16 +432,7 @@ mod openapi_legacy {
         stuff
             .into_iter()
             .flat_map(|(op, verb)| {
-                create_tests_for_op(
-                    op,
-                    root_servers,
-                    path,
-                    path_string,
-                    verb,
-                    full,
-                    multistage,
-                    spec,
-                )
+                create_tests_for_op(op, path, path_string, verb, full, multistage, spec)
             })
             .collect()
     }
@@ -338,14 +456,9 @@ mod openapi_legacy {
                     .paths
                     .iter()
                     .flat_map(|(path_string, ref_or_path)| match ref_or_path {
-                        RefOr::Item(path) => create_tests(
-                            &openapi.servers,
-                            path_string,
-                            path,
-                            full,
-                            multistage,
-                            &openapi,
-                        ),
+                        RefOr::Item(path) => {
+                            create_tests(path_string, path, full, multistage, &openapi)
+                        }
                         RefOr::Reference { .. } => Vec::default(),
                     })
                     .collect())
@@ -357,8 +470,18 @@ mod openapi_legacy {
 mod openapi_v31 {
     use super::*;
     use crate::test;
+    use crate::test::file::DateSpecification;
+    use crate::test::file::DateTimeSpecification;
+    use crate::test::file::DatumSchema;
+    use crate::test::file::EmailSpecification;
+    use crate::test::file::FloatSpecification;
+    use crate::test::file::IntegerSpecification;
+    use crate::test::file::Specification;
+    use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
+    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
+    use crate::test::file::ValueOrDatumSchema;
     use oas3::spec::Header;
     use oas3::spec::ObjectOrReference;
     use oas3::spec::Operation;
@@ -367,6 +490,9 @@ mod openapi_v31 {
     use oas3::spec::Server;
     use oas3::spec::Spec;
     use std::collections::BTreeMap;
+    use test::file::SequenceSpecification;
+    use test::file::ValuesOrSchema;
+
     pub fn get_test_paths(
         root_servers: &[Server],
         path_servers: &[Server],
@@ -416,16 +542,120 @@ mod openapi_v31 {
             .map(|(status_code_pattern, obj_or_ref)| {
                 obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
-                    body: None, //would need a way to validate against a provided schema
+                    body: None,
                     headers: create_headers(&t.headers),
                     extract: None,
                     ignore: None,
                     strict: None,
-                    body_schema: None,
+                    body_schema: t.content.get("application/json").and_then(|c| {
+                        c.schema(spec).ok().and_then(|s| {
+                            schema_to_datum(s, spec)
+                                .map(UnvalidatedVariableNameOrDatumSchema::Component)
+                        })
+                    }),
                 })
             })
             .last()
             .flatten()
+    }
+
+    fn schema_to_datum(schema: oas3::Schema, spec: &Spec) -> Option<DatumSchema> {
+        schema.schema_type.map(|t| match t {
+            oas3::spec::SchemaType::Array => DatumSchema::List {
+                specification: Some(SequenceSpecification {
+                    schema: schema.items.and_then(|items| {
+                        items.resolve(spec).ok().and_then(|s| {
+                            schema_to_datum(s, spec).map(|ds| {
+                                ValuesOrSchema::Schemas(Specification::<Box<DatumSchema>>::Value(
+                                    Box::from(ds),
+                                ))
+                            })
+                        })
+                    }),
+                    max_length: schema.max_items.map(|n| n as i64),
+                    min_length: schema.min_items.map(|n| n as i64),
+                }),
+            },
+            oas3::spec::SchemaType::Boolean => DatumSchema::Boolean {
+                specification: None,
+            },
+            oas3::spec::SchemaType::Integer => DatumSchema::Int {
+                specification: Some(IntegerSpecification {
+                    max: schema.maximum.and_then(|n| {
+                        n.as_i64()
+                            .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64)
+                    }),
+                    min: schema.minimum.and_then(|n| {
+                        n.as_i64()
+                            .map(|n| n + schema.exclusive_minimum.unwrap_or_default() as i64)
+                    }),
+                    ..Default::default()
+                }),
+            },
+            oas3::spec::SchemaType::Number => DatumSchema::Float {
+                specification: Some(FloatSpecification {
+                    max: schema.maximum.and_then(|n| {
+                        n.as_f64()
+                            .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64 as f64)
+                    }),
+                    min: schema.minimum.and_then(|n| {
+                        n.as_f64()
+                            .map(|n| n + schema.exclusive_minimum.unwrap_or_default() as i64 as f64)
+                    }),
+                    ..Default::default()
+                }),
+            },
+            oas3::spec::SchemaType::Object => DatumSchema::Object {
+                schema: Some(
+                    schema
+                        .properties
+                        .iter()
+                        .filter_map(|(k, maybe_schema)| {
+                            maybe_schema
+                                .resolve(spec)
+                                .ok()
+                                .map(|v| {
+                                    (
+                                        k.clone(),
+                                        schema_to_datum(v, spec).map(ValueOrDatumSchema::Datum),
+                                    )
+                                })
+                                .filter(|(_, ds)| ds.is_some())
+                                .map(|(n, ds)| (n, ds.unwrap()))
+                        })
+                        .collect::<BTreeMap<String, ValueOrDatumSchema>>(),
+                ),
+            },
+            oas3::spec::SchemaType::String => {
+                let string_spec = StringSpecification {
+                    pattern: schema.pattern,
+                    max_length: schema.max_length.map(|n| n as i64),
+                    min_length: schema.min_length.map(|n| n as i64),
+                    ..Default::default()
+                };
+
+                match schema.format.unwrap_or_default().as_str() {
+                    "date" => DatumSchema::Date {
+                        specification: Some(DateSpecification {
+                            ..Default::default()
+                        }),
+                    },
+                    "date-time" => DatumSchema::DateTime {
+                        specification: Some(DateTimeSpecification {
+                            ..Default::default()
+                        }),
+                    },
+                    "email" => DatumSchema::Email {
+                        specification: Some(EmailSpecification {
+                            specification: string_spec,
+                        }),
+                    },
+                    _ => DatumSchema::String {
+                        specification: Some(string_spec),
+                    },
+                }
+            }
+        })
     }
 
     fn create_request(
@@ -438,26 +668,39 @@ mod openapi_v31 {
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
         op.parameters.iter().for_each(|f| {
-            f.resolve(spec).ok().map(|t| match t.location.as_str() {
-                "query" => parameters.push(test::http::Parameter {
-                    param: t.name.clone(),
-                    value: String::default(),
-                    matches_variable: std::cell::Cell::new(false),
-                }),
-                "header" => headers.push(test::http::Header {
-                    header: t.name.clone(),
-                    value: String::default(),
-                    matches_variable: std::cell::Cell::new(false),
-                }),
-                "path" => (), //user will have to do this themselves, based upon generated template
-                "cookie" => (), //These will get picked up automatically as state vars
-                _ => (),
-            });
+            if let Ok(t) = f.resolve(spec) {
+                match t.location.as_str() {
+                    "query" => parameters.push(test::http::Parameter {
+                        param: t.name.clone(),
+                        value: String::default(),
+                        matches_variable: std::cell::Cell::new(false),
+                    }),
+                    "header" => headers.push(test::http::Header {
+                        header: t.name.clone(),
+                        value: String::default(),
+                        matches_variable: std::cell::Cell::new(false),
+                    }),
+                    "path" => (), //user will have to do this themselves, based upon generated template
+                    "cookie" => (), //These will get picked up automatically as state vars
+                    _ => (),
+                }
+            }
+        });
+
+        let maybe_schema = op.request_body.as_ref().and_then(|body| {
+            body.resolve(spec).ok().and_then(|b| {
+                b.content.get("application/json").and_then(|c| {
+                    c.schema(spec).ok().and_then(|s| {
+                        schema_to_datum(s, spec)
+                            .map(UnvalidatedVariableNameOrDatumSchema::Component)
+                    })
+                })
+            })
         });
 
         UnvalidatedRequest {
             body: None,
-            body_schema: None,
+            body_schema: maybe_schema,
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -563,7 +806,6 @@ mod openapi_v31 {
 
     fn create_tests_for_op(
         op: &Option<Operation>,
-        root_servers: &[Server],
         path: &PathItem,
         path_string: &str,
         verb: test::http::Verb,
@@ -573,7 +815,7 @@ mod openapi_v31 {
     ) -> Vec<File> {
         op.clone()
             .map(|op| {
-                get_test_paths(root_servers, &path.servers, &op.servers, "${url}")
+                get_test_paths(&spec.servers, &path.servers, &op.servers, "${url}")
                     .into_iter()
                     .filter_map(|url| {
                         create_test(
@@ -592,7 +834,6 @@ mod openapi_v31 {
     }
 
     fn create_tests(
-        root_servers: &[Server],
         path_string: &str,
         path: &PathItem,
         full: bool,
@@ -610,16 +851,7 @@ mod openapi_v31 {
         stuff
             .into_iter()
             .flat_map(|(op, verb)| {
-                create_tests_for_op(
-                    op,
-                    root_servers,
-                    path,
-                    path_string,
-                    verb,
-                    full,
-                    multistage,
-                    spec,
-                )
+                create_tests_for_op(op, path, path_string, verb, full, multistage, spec)
             })
             .collect()
     }
@@ -634,7 +866,7 @@ mod openapi_v31 {
                 s.paths
                     .iter()
                     .flat_map(|(path_string, path)| {
-                        create_tests(&s.servers, path_string, path, full, multistage, &s)
+                        create_tests(path_string, path, full, multistage, &s)
                     })
                     .collect()
             })
