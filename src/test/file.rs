@@ -90,8 +90,9 @@ pub enum Specification<T> {
     AnyOf(Vec<T>),
     OneOf(Vec<T>),
     NoneOf(Vec<T>),
-    #[serde(untagged)]
     Value(T),
+    #[serde(untagged)]
+    UnTaggedValue(T),
 }
 
 impl<T> Default for Specification<T> {
@@ -276,6 +277,7 @@ impl Specification<Box<DatumSchema>> {
             Specification::AnyOf(any_ofs) => self.schema_any_one_of(vals, any_ofs, formatter),
             Specification::OneOf(one_ofs) => self.schema_check_one_of(vals, one_ofs, formatter),
             Specification::Value(val) => self.schema_check_val(vals, val, formatter),
+            Specification::UnTaggedValue(val) => self.schema_check_val(vals, val, formatter),
         };
 
         vec![findings]
@@ -284,6 +286,7 @@ impl Specification<Box<DatumSchema>> {
         trace!("schema_generate_if_constrained()");
         match &self {
             Specification::Value(v) => generate_value_from_schema(v, 1),
+            Specification::UnTaggedValue(v) => generate_value_from_schema(v, 1),
             Specification::OneOf(oneofs) => oneofs
                 .get(rng.gen_range(0..oneofs.len()))
                 .and_then(|s| generate_value_from_schema(s, 1)),
@@ -392,6 +395,7 @@ where
         trace!("generate_if_constrained{:?}", &self);
         match &self {
             Specification::Value(v) => Some(v.clone()),
+            Specification::UnTaggedValue(v) => Some(v.clone()),
             Specification::OneOf(oneofs) => oneofs.get(rng.gen_range(0..oneofs.len())).cloned(),
             Specification::AnyOf(anyofs) => anyofs.get(rng.gen_range(0..anyofs.len())).cloned(),
             Specification::NoneOf(_) => None,
@@ -592,6 +596,9 @@ where
             Specification::OneOf(oneofs) => self.check_one_of(val, oneofs, formatter),
             Specification::AnyOf(anyofs) => self.check_any_of(val, anyofs, formatter),
             Specification::Value(specified_value) => {
+                self.check_val(val, specified_value, formatter)
+            }
+            Specification::UnTaggedValue(specified_value) => {
                 self.check_val(val, specified_value, formatter)
             }
         }]
@@ -2080,6 +2087,7 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
                     Specification::Value(v) => spec.get(v).ok(),
+                    Specification::UnTaggedValue(v) => spec.get(v).ok(),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
@@ -2147,6 +2155,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
                     Specification::Value(v) => spec.get(v).ok(),
+                    Specification::UnTaggedValue(v) => spec.get(v).ok(),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
