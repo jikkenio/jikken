@@ -15,6 +15,6 @@ response:
       user:
         type: object
         schema: 
-          username: {"type" : "string"}
+          username: testuser
           lastActivity: {"type": "date", "format": "%Y-%m-%d %H:%M:%S%.f %Z"}
       
