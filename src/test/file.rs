@@ -159,18 +159,16 @@ impl ValuesOrSchema {
                 .map(serde_json::Value::from),
         }
     }
-}
 
-impl Checker for ValuesOrSchema {
-    type Item = Vec<Value>;
     fn check(
         &self,
-        val: &Self::Item,
+        val: &Vec<Value>,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         match &self {
-            ValuesOrSchema::Schemas(schema) => schema.schema_check(val, formatter),
-            ValuesOrSchema::Values(vals) => vals.check(val, formatter),
+            ValuesOrSchema::Schemas(schema) => schema.schema_check(val, strict, formatter),
+            ValuesOrSchema::Values(vals) => vals.vec_check(val, strict, formatter),
         }
     }
 }
@@ -270,18 +268,28 @@ impl Specification<Box<DatumSchema>> {
     fn schema_check(
         &self,
         vals: &Vec<Value>,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         let findings = match self {
-            Specification::NoneOf(none_ofs) => self.schema_check_none_of(vals, none_ofs, formatter),
-            Specification::AnyOf(any_ofs) => self.schema_any_one_of(vals, any_ofs, formatter),
-            Specification::OneOf(one_ofs) => self.schema_check_one_of(vals, one_ofs, formatter),
-            Specification::Value(val) => self.schema_check_val(vals, val, formatter),
-            Specification::UnTaggedValue(val) => self.schema_check_val(vals, val, formatter),
+            Specification::NoneOf(none_ofs) => {
+                self.schema_check_none_of(vals, none_ofs, strict, formatter)
+            }
+            Specification::AnyOf(any_ofs) => {
+                self.schema_any_one_of(vals, any_ofs, strict, formatter)
+            }
+            Specification::OneOf(one_ofs) => {
+                self.schema_check_one_of(vals, one_ofs, strict, formatter)
+            }
+            Specification::Value(val) => self.schema_check_val(vals, val, strict, formatter),
+            Specification::UnTaggedValue(val) => {
+                self.schema_check_val(vals, val, strict, formatter)
+            }
         };
 
         vec![findings]
     }
+
     fn schema_generate_if_constrained(&self, rng: &mut ThreadRng) -> Option<Value> {
         trace!("schema_generate_if_constrained()");
         match &self {
@@ -301,11 +309,12 @@ impl Specification<Box<DatumSchema>> {
         &self,
         actuals: &Vec<Value>,
         specified_value: &DatumSchema,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         if actuals.iter().all(|actual| {
             specified_value
-                .check(actual, formatter)
+                .check(actual, strict, formatter)
                 .iter()
                 .all(|v| v.is_good())
         }) {
@@ -322,13 +331,14 @@ impl Specification<Box<DatumSchema>> {
         &self,
         actuals: &Vec<Value>,
         specified_values: &[Box<DatumSchema>],
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         let matchers = specified_values
             .iter()
             .filter(|v| {
                 actuals.iter().all(|actual| {
-                    v.check(actual, formatter)
+                    v.check(actual, strict, formatter)
                         .iter()
                         .all(|validation| validation.is_good())
                 })
@@ -348,12 +358,15 @@ impl Specification<Box<DatumSchema>> {
         &self,
         actuals: &Vec<Value>,
         specified_values: &[Box<DatumSchema>],
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         if actuals.iter().all(|actual| {
-            specified_values
-                .iter()
-                .any(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
+            specified_values.iter().any(|x| {
+                x.check(actual, strict, formatter)
+                    .iter()
+                    .all(|v| v.is_good())
+            })
         }) {
             Good(())
         } else {
@@ -368,18 +381,122 @@ impl Specification<Box<DatumSchema>> {
         &self,
         actuals: &Vec<Value>,
         specified_values: &[Box<DatumSchema>],
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Validated<(), String> {
         if actuals.iter().all(|actual| {
-            !specified_values
-                .iter()
-                .any(|x| x.check(actual, formatter).iter().all(|v| v.is_good()))
+            !specified_values.iter().any(|x| {
+                x.check(actual, strict, formatter)
+                    .iter()
+                    .all(|v| v.is_good())
+            })
         }) {
             Good(())
         } else {
             Validated::fail(formatter(
                 format!("none of {:?}", specified_values).as_str(),
                 format!("{:?}", actuals).as_str(),
+            ))
+        }
+    }
+}
+
+impl Specification<Vec<Value>> {
+    //Strict currently isn't supported for the arrays
+    //We can add later, but assert_json_diff::CompareMode::Inclusive produces
+    //weird results for arrays
+    fn vec_check(
+        &self,
+        vals: &Vec<Value>,
+        strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let findings = match self {
+            Specification::NoneOf(none_ofs) => {
+                self.vec_check_none_of(vals, none_ofs, strict, formatter)
+            }
+            Specification::AnyOf(any_ofs) => {
+                self.vec_check_any_of(vals, any_ofs, strict, formatter)
+            }
+            Specification::OneOf(one_ofs) => {
+                self.vec_check_one_of(vals, one_ofs, strict, formatter)
+            }
+            Specification::Value(val) => self.vec_check_val(vals, val, strict, formatter),
+            Specification::UnTaggedValue(val) => self.vec_check_val(vals, val, strict, formatter),
+        };
+
+        vec![findings]
+    }
+
+    fn vec_check_val(
+        &self,
+        actual: &Vec<Value>,
+        specified_value: &Vec<Value>,
+        _strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if specified_value == actual {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("{:?}", specified_value).as_str(),
+                format!("{:?}", actual).as_str(),
+            ))
+        }
+    }
+
+    fn vec_check_one_of(
+        &self,
+        actual: &Vec<Value>,
+        specified_values: &[Vec<Value>],
+        _strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        let hits = specified_values
+            .iter()
+            .filter(|v| *v == actual)
+            .collect::<Vec<&Vec<Value>>>();
+
+        if hits.len() == 1 {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{:?}", actual).as_str(),
+            ))
+        }
+    }
+
+    fn vec_check_any_of(
+        &self,
+        actual: &Vec<Value>,
+        specified_values: &[Vec<Value>],
+        _strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if specified_values.contains(actual) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("one of {:?}", specified_values).as_str(),
+                format!("{:?}", actual).as_str(),
+            ))
+        }
+    }
+
+    fn vec_check_none_of(
+        &self,
+        actual: &Vec<Value>,
+        specified_values: &[Vec<Value>],
+        _strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        if !specified_values.contains(actual) {
+            Good(())
+        } else {
+            Validated::fail(formatter(
+                format!("none of {:?}", specified_values).as_str(),
+                format!("{:?}", actual).as_str(),
             ))
         }
     }
@@ -837,6 +954,26 @@ impl SequenceSpecification {
             None => Good(()),
         }
     }
+
+    fn check(
+        &self,
+        val: &Vec<Value>,
+        strict: bool,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Vec<Validated<(), String>> {
+        let mut ret = vec![
+            self.check_min_length(val, formatter),
+            self.check_max_length(val, formatter),
+        ];
+        ret.append(
+            self.schema
+                .as_ref()
+                .map(|s| s.check(val, strict, formatter))
+                .unwrap_or_default()
+                .as_mut(),
+        );
+        ret
+    }
 }
 
 impl Checker for StringSpecification {
@@ -853,28 +990,6 @@ impl Checker for StringSpecification {
         ];
         ret.append(
             self.specification
-                .as_ref()
-                .map(|s| s.check(val, formatter))
-                .unwrap_or_default()
-                .as_mut(),
-        );
-        ret
-    }
-}
-
-impl Checker for SequenceSpecification {
-    type Item = Vec<Value>;
-    fn check(
-        &self,
-        val: &Vec<Value>,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Vec<Validated<(), String>> {
-        let mut ret = vec![
-            self.check_min_length(val, formatter),
-            self.check_max_length(val, formatter),
-        ];
-        ret.append(
-            self.schema
                 .as_ref()
                 .map(|s| s.check(val, formatter))
                 .unwrap_or_default()
@@ -1352,6 +1467,7 @@ impl DatumSchema {
     fn check(
         &self,
         actual: &serde_json::Value,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         trace!("validating datum");
@@ -1373,10 +1489,10 @@ impl DatumSchema {
             }
             DatumSchema::Int { specification } => Self::check_int(specification, actual, formatter),
             DatumSchema::List { specification } => {
-                Self::check_list(specification, actual, formatter)
+                Self::check_list(specification, actual, strict, formatter)
             }
             DatumSchema::Object { schema } => {
-                Self::check_value_or_datumschema(schema, actual, formatter)
+                Self::check_value_or_datumschema(schema, actual, strict, formatter)
             }
             DatumSchema::Name { specification } => {
                 Self::check_name(specification, actual, formatter)
@@ -1504,6 +1620,7 @@ impl DatumSchema {
     fn check_list(
         specification: &Option<SequenceSpecification>,
         actual: &serde_json::Value,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         if !actual.is_array() {
@@ -1512,13 +1629,25 @@ impl DatumSchema {
 
         specification
             .as_ref()
-            .map(|s| s.check(actual.as_array().unwrap(), formatter))
+            .map(|s| s.check(actual.as_array().unwrap(), strict, formatter))
             .unwrap_or(vec![Good(())])
     }
 
+    /*
+       Strict :
+            If there is any difference between the keys of actual and expected, we fail
+
+       Non strict:
+            If there is stuff in expected that is not in actual, we fail
+            If there is stuff in actual that is not in expected, we're ok
+
+        Factored Out:
+            Always fail if stuff in expected that is not in actual
+    */
     fn check_value_or_datumschema(
         schema: &Option<BTreeMap<String, ValueOrDatumSchema>>,
         actual: &serde_json::Value,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         if !actual.is_object() {
@@ -1529,24 +1658,44 @@ impl DatumSchema {
         schema
             .as_ref()
             .map(|bt| {
-                bt.iter()
-                    .flat_map(|(k, value_or_datum)| match value_or_datum {
-                        ValueOrDatumSchema::Datum(datum) => vals
-                            .get(k)
-                            .map(|v| datum.check(v, formatter))
-                            .unwrap_or(vec![Validated::fail(formatter(
-                                format!(r#"member "{k}""#).as_str(),
-                                format!(r#"object with "{k}" missing"#).as_str(),
-                            ))]),
-                        ValueOrDatumSchema::Values(expected) => vals
-                            .get(k)
-                            .map(|v| Self::check_value(expected, v, formatter))
-                            .unwrap_or(vec![Validated::fail(formatter(
-                                format!(r#"member "{k}""#).as_str(),
-                                format!(r#"object with "{k}" missing"#).as_str(),
-                            ))]),
+                let mut in_expected_and_not_in_actual = bt
+                    .iter()
+                    .filter(|(k, _)| !vals.contains_key(k.as_str()))
+                    .map(|(k, _)| {
+                        Validated::fail(formatter(
+                            format!(r#"member "{k}""#).as_str(),
+                            format!(r#"object with "{k}" missing"#).as_str(),
+                        ))
                     })
-                    .collect()
+                    .collect::<Vec<Validated<(), String>>>();
+
+                let mut actual_validations = vals
+                    .iter()
+                    .flat_map(|(k, value)| {
+                        bt.get(k)
+                            .map(|value_or_datum| match value_or_datum {
+                                ValueOrDatumSchema::Datum(datum) => {
+                                    datum.check(value, strict, formatter)
+                                }
+                                ValueOrDatumSchema::Values(expected) => {
+                                    Self::check_value(expected, value, strict, formatter)
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                if strict {
+                                    vec![Validated::fail(formatter(
+                                        format!(r#"member "{k}""#).as_str(),
+                                        format!(r#"object with "{k}" missing"#).as_str(),
+                                    ))]
+                                } else {
+                                    vec![Good(())]
+                                }
+                            })
+                    })
+                    .collect::<Vec<Validated<(), String>>>();
+
+                in_expected_and_not_in_actual.append(actual_validations.as_mut());
+                in_expected_and_not_in_actual
             })
             .unwrap_or(vec![Good(())])
     }
@@ -1554,27 +1703,27 @@ impl DatumSchema {
     fn check_value(
         expected: &serde_json::Value,
         actual: &serde_json::Value,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
-        if expected == actual {
-            vec![Good(())]
+        let compare_mode = if strict {
+            assert_json_diff::CompareMode::Strict
         } else {
-            vec![Validated::fail(formatter(
-                format!("{:?}", expected).as_str(),
-                format!("{:?}", actual).as_str(),
-            ))]
-        }
-    }
-}
+            assert_json_diff::CompareMode::Inclusive
+        };
 
-impl Checker for DatumSchema {
-    type Item = serde_json::Value;
-    fn check(
-        &self,
-        val: &Self::Item,
-        formatter: &impl Fn(&str, &str) -> String,
-    ) -> Vec<Validated<(), String>> {
-        self.check(val, formatter)
+        let result = assert_json_diff::assert_json_matches_no_panic(
+            &actual,
+            &expected,
+            assert_json_diff::Config::new(compare_mode),
+        );
+        match result {
+            Ok(_) => vec![Good(())],
+            Err(msg) => vec![Validated::fail(formatter(
+                format!("{:?}", expected).as_str(),
+                format!("{:?} ; {msg}", actual).as_str(),
+            ))],
+        }
     }
 }
 
@@ -1762,17 +1911,73 @@ pub struct BodyOrSchemaChecker<'a> {
 }
 
 impl<'a> BodyOrSchemaChecker<'a> {
+    fn apply_ignored_values(
+        &self,
+        actual: &serde_json::Value,
+        expected: &serde_json::Value,
+    ) -> (serde_json::Value, serde_json::Value) {
+        let mut modified_actual = actual.clone();
+        let mut modified_expected = expected.clone();
+
+        // TODO: make this more efficient, with a single pass filter
+        for path in self.ignore_values.iter() {
+            trace!("stripping path({}) from response", path);
+            modified_actual = filter_json(path, 0, modified_actual).unwrap();
+            modified_expected = filter_json(path, 0, modified_expected).unwrap();
+        }
+
+        (modified_actual, modified_expected)
+    }
+
+    fn apply_ignored_values_datum_schema(
+        &self,
+        actual: &serde_json::Value,
+        schema: &DatumSchema,
+    ) -> (serde_json::Value, DatumSchema) {
+        //DatumSchema isomorphic to Value
+        //But we want the "schema" member of DatumSchema::Object
+        // \todo revisit to support nested ignore : foo.bar.car
+        let mut datum_schema_as_value = serde_json::to_value(schema).unwrap();
+
+        let (actual, expected_schema_val) = self.apply_ignored_values(
+            actual,
+            datum_schema_as_value
+                .get("schema")
+                .unwrap_or(&serde_json::json!(null)),
+        );
+
+        datum_schema_as_value
+            .as_object_mut()
+            .unwrap()
+            .insert("schema".to_string(), expected_schema_val);
+        (
+            actual,
+            serde_json::from_value(datum_schema_as_value).unwrap(),
+        )
+    }
+
     pub fn check_schema(
         &self,
         actual: &serde_json::Value,
         schema: &DatumSchema,
+        strict: bool,
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Result<Vec<Validated<(), String>>, Box<dyn Error + Send + Sync>> {
         trace!("validating response body using schema");
-        //\todo How do I apply ignore in this case?
-        //Or does it even make sense? If not, we would need to
-        //factor it out of response and into the "Value" part of ValueOrSchema
-        Ok(schema.check(actual, formatter))
+        //It doesn't make much sense *today* to modify
+        //schema when applying ignored members, but
+        //I can see future use cases that would break if we didn't
+
+        let (modified_actual, modified_schema) =
+            self.apply_ignored_values_datum_schema(actual, schema);
+
+        trace!(
+            "After modified, {:?} \n {:?}",
+            modified_actual,
+            modified_schema
+        );
+
+        Ok(modified_schema.check(&modified_actual, strict, formatter))
     }
 
     pub fn check_expected_value(
@@ -1782,15 +1987,7 @@ impl<'a> BodyOrSchemaChecker<'a> {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Result<Vec<Validated<(), String>>, Box<dyn Error + Send + Sync>> {
         trace!("validating response body");
-        let mut modified_actual = actual.clone();
-        let mut modified_expected = expected.clone();
-
-        // TODO: make this more efficient, with a single pass filter
-        for path in self.ignore_values.iter() {
-            trace!("stripping path({}) from response", path);
-            modified_actual = filter_json(path, 0, modified_actual)?;
-            modified_expected = filter_json(path, 0, modified_expected)?;
-        }
+        let (modified_actual, modified_expected) = self.apply_ignored_values(actual, expected);
 
         trace!("compare json");
         let compare_mode = if self.strict {
@@ -1825,7 +2022,9 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
             BodyOrSchema::Body(v) => {
                 BodyOrSchemaChecker::check_expected_value(self, val, v, formatter)
             }
-            BodyOrSchema::Schema(s) => BodyOrSchemaChecker::check_schema(self, val, s, formatter),
+            BodyOrSchema::Schema(s) => {
+                BodyOrSchemaChecker::check_schema(self, val, s, self.strict, formatter)
+            }
         };
 
         match res {
@@ -2009,10 +2208,6 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
-                               /*
-                               if spec.specification.value.is_some() {
-                                   return spec.specification.value.clone();
-                               }*/
 
     let mut rng = rand::thread_rng();
     let string_length: usize = rng.gen_range(1..50);
@@ -2250,7 +2445,7 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
         })
         .find(|v| {
             let ret = spec
-                .check(v, &|_e, _a| "".to_string())
+                .check(v, false, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>();
             ret.is_good()
@@ -2683,7 +2878,7 @@ mod tests {
             DatumSchema::Float {
                 specification: None,
             }
-            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2694,7 +2889,7 @@ mod tests {
             DatumSchema::Float {
                 specification: None,
             }
-            .check(&serde_json::json!(4.53), &|_e, _a| "".to_string())
+            .check(&serde_json::json!(4.53), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2708,7 +2903,7 @@ mod tests {
             DatumSchema::Date {
                 specification: None
             }
-            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2719,7 +2914,8 @@ mod tests {
             DatumSchema::Date {
                 specification: None
             }
-            .check(&serde_json::json!("2024-12-08"), &|_e, _a| "".to_string())
+            .check(&serde_json::json!("2024-12-08"), true, &|_e, _a| ""
+                .to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2733,7 +2929,7 @@ mod tests {
             DatumSchema::Int {
                 specification: None,
             }
-            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2744,7 +2940,7 @@ mod tests {
             DatumSchema::Int {
                 specification: None,
             }
-            .check(&serde_json::json!(4), &|_e, _a| "".to_string())
+            .check(&serde_json::json!(4), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2758,7 +2954,7 @@ mod tests {
             DatumSchema::String {
                 specification: None,
             }
-            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2769,7 +2965,7 @@ mod tests {
             DatumSchema::String {
                 specification: None,
             }
-            .check(&serde_json::json!("hello"), &|_e, _a| "".to_string())
+            .check(&serde_json::json!("hello"), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2783,7 +2979,7 @@ mod tests {
             DatumSchema::List {
                 specification: None
             }
-            .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+            .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2794,7 +2990,7 @@ mod tests {
             DatumSchema::List {
                 specification: None
             }
-            .check(&serde_json::json!([]), &|_e, _a| "".to_string())
+            .check(&serde_json::json!([]), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_fail(),
@@ -2806,7 +3002,7 @@ mod tests {
         assert_eq!(
             false,
             DatumSchema::Object { schema: None }
-                .check(&serde_json::json!({}), &|_e, _a| "".to_string())
+                .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_fail(),
@@ -2815,7 +3011,7 @@ mod tests {
         assert_eq!(
             true,
             DatumSchema::Object { schema: None }
-                .check(&serde_json::json!([]), &|_e, _a| "".to_string())
+                .check(&serde_json::json!([]), true, &|_e, _a| "".to_string())
                 .into_iter()
                 .collect::<Validated<Vec<()>, String>>()
                 .is_fail(),
@@ -2866,6 +3062,7 @@ mod tests {
                         "name" : "foo",
                         "cars" : [ "bmw", "porsche", "mercedes"]
                     }),
+                    true,
                     &|_e, _a| "".to_string()
                 )
                 .into_iter()
@@ -2886,6 +3083,7 @@ mod tests {
                         "name" : "foo",
                         "cars" : [ 1, 2, 3]
                     }),
+                    true,
                     &|_e, _a| "".to_string()
                 )
                 .into_iter()
@@ -2895,12 +3093,125 @@ mod tests {
     }
 
     #[test]
-    fn datum_object_member_validation_missing_member_detected() {
+    fn datum_object_member_validation_missing_expected_member_detected_strict() {
         let datum = construct_datum_schema_object();
 
         assert_eq!(
             true,
             datum
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo"
+                    }),
+                    true,
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn datum_object_member_validation_missing_expected_member_detected_non_strict() {
+        let datum = construct_datum_schema_object();
+
+        assert_eq!(
+            true,
+            datum
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo"
+                    }),
+                    false,
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn datum_object_member_validation_missing_actual_member_detected_strict() {
+        let datum = construct_datum_schema_object();
+
+        assert_eq!(
+            true,
+            datum
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo",
+                        "cars": ["audi", "mercedes", "bmw"],
+                        "airlines" : ["aa", "delta"]
+                    }),
+                    true,
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn datum_object_member_validation_missing_actual_member_detected_non_strict() {
+        let datum = construct_datum_schema_object();
+
+        assert_eq!(
+            false,
+            datum
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo",
+                        "cars": ["audi", "mercedes", "bmw"],
+                        "airlines" : ["aa", "delta"]
+                    }),
+                    false,
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn body_or_schema_checker_non_empty_ignores() {
+        let body_or_schema = BodyOrSchema::Schema(construct_datum_schema_object());
+        let ignores = vec!["cars".to_string()];
+        let checker: BodyOrSchemaChecker = BodyOrSchemaChecker {
+            ignore_values: &ignores,
+            strict: true,
+            value_or_schema: &body_or_schema,
+        };
+        assert_eq!(
+            false,
+            checker
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo"
+                    }),
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn body_or_schema_checker_empty_ignores() {
+        let body_or_schema = BodyOrSchema::Schema(construct_datum_schema_object());
+        let ignores: Vec<String> = vec![];
+        let checker: BodyOrSchemaChecker = BodyOrSchemaChecker {
+            ignore_values: &ignores,
+            strict: true,
+            value_or_schema: &body_or_schema,
+        };
+        assert_eq!(
+            true,
+            checker
                 .check(
                     &serde_json::json!({
                         "name" : "foo"
@@ -2957,7 +3268,7 @@ mod tests {
         let val = generate_value_from_schema(&schema, 10);
         assert!(val.is_some());
         assert!(schema
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .check(&val.unwrap(), true, &|_e, _a| "".to_string())
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_good());
@@ -3216,6 +3527,7 @@ mod tests {
                 .schema_any_one_of(
                     &vec![serde_json::Value::from(1), serde_json::Value::from("hello")],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_good());
@@ -3241,6 +3553,7 @@ mod tests {
                         serde_json::Value::from("hello")
                     ],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_fail());
@@ -3266,6 +3579,7 @@ mod tests {
                         serde_json::Value::from("hello")
                     ],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_fail());
@@ -3291,6 +3605,7 @@ mod tests {
                         serde_json::Value::from("hello")
                     ],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_good());
@@ -3312,6 +3627,7 @@ mod tests {
                         serde_json::Value::from("hello")
                     ],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_fail());
@@ -3332,6 +3648,7 @@ mod tests {
                         serde_json::Value::from("hello")
                     ],
                     v,
+                    true,
                     &|s, _| s.to_string(),
                 )
                 .is_good());
