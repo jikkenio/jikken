@@ -1050,14 +1050,41 @@ impl DateSpecification {
                 })
                 .unwrap_or(Validated::Good(None))
         };
+
+        let modifier_validation = if modifier.is_some() {
+            specification
+                .as_ref()
+                .map(|s| match s {
+                    Specification::Value(_) => Good(modifier.clone()),
+                    _ => {
+                        if modifier.is_some() {
+                            Validated::fail(
+                                "modifier can only be used with \"value\" field".to_string(),
+                            )
+                        } else {
+                            Good(modifier.clone())
+                        }
+                    }
+                })
+                .unwrap_or_else(|| {
+                    Validated::fail("modifier can only be used with \"value\" field".to_string())
+                })
+        } else {
+            Good(modifier.clone())
+        };
+
         date_validator(&min, "min")
-            .map2(date_validator(&max, "max"), |min_v, max_v| Self {
-                format,
-                min: min_v,
-                max: max_v,
-                modifier,
-                specification,
-            })
+            .map3(
+                date_validator(&max, "max"),
+                modifier_validation,
+                |min_v, max_v, modifier| Self {
+                    format,
+                    min: min_v,
+                    max: max_v,
+                    modifier,
+                    specification,
+                },
+            )
             .ok()
             .map_err(|nev| {
                 nev.into_nonempty_iter()
@@ -1248,14 +1275,39 @@ impl DateTimeSpecification {
                 })
                 .unwrap_or(Validated::Good(None))
         };
+        let modifier_validation = if modifier.is_some() {
+            specification
+                .as_ref()
+                .map(|s| match s {
+                    Specification::Value(_) => Good(modifier.clone()),
+                    _ => {
+                        if modifier.is_some() {
+                            Validated::fail(
+                                "modifier can only be used with \"value\" field".to_string(),
+                            )
+                        } else {
+                            Good(modifier.clone())
+                        }
+                    }
+                })
+                .unwrap_or_else(|| {
+                    Validated::fail("modifier can only be used with \"value\" field".to_string())
+                })
+        } else {
+            Good(modifier.clone())
+        };
         date_validator(&min, "min")
-            .map2(date_validator(&max, "max"), |min_v, max_v| Self {
-                format,
-                min: min_v,
-                max: max_v,
-                modifier,
-                specification,
-            })
+            .map3(
+                date_validator(&max, "max"),
+                modifier_validation,
+                |min_v, max_v, modifier| Self {
+                    format,
+                    min: min_v,
+                    max: max_v,
+                    modifier,
+                    specification,
+                },
+            )
             .ok()
             .map_err(|nev| {
                 nev.into_nonempty_iter()
@@ -2548,6 +2600,8 @@ pub fn generate_value_from_schema(
 
 #[cfg(test)]
 mod tests {
+    use variable::Modifier;
+
     use super::*;
 
     #[test]
@@ -2869,6 +2923,146 @@ mod tests {
         assert!(res.is_err());
         assert!(res.as_ref().err().unwrap().as_str().contains("max"));
         assert!(res.as_ref().err().unwrap().as_str().contains("min"));
+    }
+
+    #[test]
+    fn datetime_specification_valid_inputs() {
+        assert!(DateTimeSpecification::new(None, None, None, None, None).is_ok());
+    }
+
+    #[test]
+    fn datetime_specification_invalid_input() {
+        let res = DateTimeSpecification::new(
+            None,
+            Some("Hello!".to_string()),
+            Some("2020-09-12".to_string()),
+            None,
+            None,
+        );
+
+        assert!(res.is_err());
+        assert!(res.err().unwrap().as_str().contains("min"));
+    }
+
+    #[test]
+    fn datetime_specification_invalid_inputs() {
+        let res = DateTimeSpecification::new(
+            None,
+            Some("Hello!".to_string()),
+            Some("Hello".to_string()),
+            None,
+            None,
+        );
+
+        assert!(res.is_err());
+        assert!(res.as_ref().err().unwrap().as_str().contains("max"));
+        assert!(res.as_ref().err().unwrap().as_str().contains("min"));
+    }
+
+    #[test]
+    fn datespecification_modifier_missing_value() {
+        let validations = vec![
+            DateSpecification::new(
+                None,
+                None,
+                None,
+                None,
+                Some(Modifier {
+                    operation: "add".to_string(),
+                    value: "1".to_string(),
+                    unit: "days".to_string(),
+                }),
+            ),
+            DateSpecification::new(
+                Some(Specification::AnyOf(vec![
+                    "2020-09-12".to_string(),
+                    "2020-09-13".to_string(),
+                ])),
+                None,
+                None,
+                None,
+                Some(Modifier {
+                    operation: "add".to_string(),
+                    value: "1".to_string(),
+                    unit: "days".to_string(),
+                }),
+            ),
+        ];
+
+        validations.into_iter().for_each(|res| {
+            assert!(res.is_err());
+            assert!(res.err().unwrap().as_str().contains("value"));
+        });
+    }
+
+    #[test]
+    fn datespecification_modifier_with_value() {
+        let res = DateSpecification::new(
+            Some(Specification::Value("2020-09-12".to_string())),
+            None,
+            None,
+            None,
+            Some(Modifier {
+                operation: "add".to_string(),
+                value: "1".to_string(),
+                unit: "days".to_string(),
+            }),
+        );
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn datetime_specification_modifier_missing_value() {
+        let validations = vec![
+            DateTimeSpecification::new(
+                None,
+                None,
+                None,
+                None,
+                Some(Modifier {
+                    operation: "add".to_string(),
+                    value: "1".to_string(),
+                    unit: "days".to_string(),
+                }),
+            ),
+            DateTimeSpecification::new(
+                Some(Specification::AnyOf(vec![
+                    "2020-09-12".to_string(),
+                    "2020-09-13".to_string(),
+                ])),
+                None,
+                None,
+                None,
+                Some(Modifier {
+                    operation: "add".to_string(),
+                    value: "1".to_string(),
+                    unit: "days".to_string(),
+                }),
+            ),
+        ];
+
+        validations.into_iter().for_each(|res| {
+            assert!(res.is_err());
+            assert!(res.err().unwrap().as_str().contains("value"));
+        });
+    }
+
+    #[test]
+    fn datetime_specification_modifier_with_value() {
+        let res = DateTimeSpecification::new(
+            Some(Specification::Value("2020-09-12".to_string())),
+            None,
+            None,
+            None,
+            Some(Modifier {
+                operation: "add".to_string(),
+                value: "1".to_string(),
+                unit: "days".to_string(),
+            }),
+        );
+
+        assert!(res.is_ok());
     }
 
     #[test]
