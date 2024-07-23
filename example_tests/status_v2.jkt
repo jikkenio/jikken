@@ -1,5 +1,6 @@
 name: Compare StatusV2 and StatusV1
 requires: auth
+tags: ignore compare
 request:
   url: https://api.jikken.io/api/v2/examples/status
   headers:

@@ -1,4 +1,5 @@
-name: Using Simple Variable  
+name: Using Simple Variable
+tags: variables 
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login

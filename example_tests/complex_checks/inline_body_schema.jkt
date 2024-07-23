@@ -1,5 +1,5 @@
 name: Inline Body Schema
-tags: regression flaky triaged
+tags: schema
 requires: auth
 request:
   url: https://api.jikken.io/api/v2/examples/status

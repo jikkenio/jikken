@@ -1,4 +1,5 @@
 name: Generation Using Schema Defined in a Variable
+tags: variables generation
 request:
   method: Post
   url: https://api.postcodes.io/postcodes

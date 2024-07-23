@@ -1,4 +1,5 @@
-name: Using Variable to Inject File Json Contents 
+name: Using Variable to Inject File Json Contents
+tags: variables files extract
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login

@@ -1,4 +1,5 @@
 name: A cat for every status code  
+tags: variables generation
 request:
   url: https://http.cat/${status_val}
 response:
