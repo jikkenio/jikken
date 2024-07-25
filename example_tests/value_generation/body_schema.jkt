@@ -1,4 +1,5 @@
 name: Body Schema
+tags: generation
 request:
   method: Post
   url: https://api.postcodes.io/postcodes

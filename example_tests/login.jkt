@@ -1,4 +1,5 @@
 id: auth
+tags: extract
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login

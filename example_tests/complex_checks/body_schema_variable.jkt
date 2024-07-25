@@ -1,5 +1,5 @@
 name: Complex Check Using Body Schema Variable
-tags: regression flaky triaged
+tags: schema variables
 requires: auth
 request:
   url: https://api.jikken.io/api/v2/examples/status
