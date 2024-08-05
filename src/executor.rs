@@ -2704,6 +2704,7 @@ mod tests {
                 test_name: "name".to_string(),
                 iteration_results: vec![],
             }],
+            runtime: 0,
         };
 
         let report = Report::from(execution_result);
