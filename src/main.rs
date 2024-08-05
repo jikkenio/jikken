@@ -433,26 +433,31 @@ async fn run_tests(
     )
     .await;
 
+
+    let runtime_label = executor::runtime_formatter(report.runtime);
+
     if report.skipped > 0 {
         info!(
-            "Jikken executed {} test{} from {} file{} with {} passed, {} skipped, and {} failed.\n",
+            "Jikken executed {} test{} from {} file{} with {} passed, {} skipped, and {} failed in {}.\n",
             report.run,
             plurality_policy(report.run.into()),
             report.test_files,
             plurality_policy(report.test_files as usize),
             report.passed,
             report.skipped,
-            report.failed
+            report.failed,
+            runtime_label,
         );
     } else {
         info!(
-            "Jikken executed {} test{} from {} file{} with {} passed and {} failed.\n",
+            "Jikken executed {} test{} from {} file{} with {} passed and {} failed in {}.\n",
             report.run,
             plurality_policy(report.run.into()),
             report.test_files,
             plurality_policy(report.test_files as usize),
             report.passed,
-            report.failed
+            report.failed,
+            runtime_label,
         );
     }
     Ok(report)
