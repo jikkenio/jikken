@@ -35,6 +35,7 @@ pub struct Report {
     pub passed: u16,
     pub failed: u16,
     pub skipped: u16,
+    pub runtime: u32,
 }
 
 impl From<ExecutionResult> for Report {
@@ -75,6 +76,7 @@ impl From<ExecutionResult> for Report {
             passed: totals.0,
             test_files: test_files as u16,
             run: totals.1 + totals.0,
+            runtime: execution_result.runtime,
         }
     }
 }
@@ -125,6 +127,7 @@ pub struct ExecutionResult {
     //Elapsed Time?
     //Start Time?
     pub test_results: Vec<TestResult>,
+    pub runtime: u32,
 }
 
 struct FormattedExecutionResult(String);
@@ -379,6 +382,23 @@ impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
     }
 }
 
+pub fn runtime_formatter(time_ms: u32) -> String {
+    let mut time_left = time_ms;
+    let milliseconds = time_left % 1000;
+    time_left /= 1000;
+    let seconds = time_left % 60;
+    time_left /= 60;
+    let minutes = time_left;
+
+    if minutes > 0 {
+        format!("{}m {}s {}ms", minutes, seconds, milliseconds)
+    } else if seconds > 0 {
+        format!("{}s {}ms", seconds, milliseconds)
+    } else {
+        format!("{}ms", milliseconds)
+    }
+}
+
 async fn run_tests<T: ExecutionPolicy>(
     tests: Vec<Vec<test::Definition>>,
     telemetry: Option<telemetry::Session>,
@@ -415,7 +435,7 @@ async fn run_tests<T: ExecutionPolicy>(
             if any_failures && !config.settings.continue_on_failure {
                 if iteration == 0 {
                     info!(
-                        "{} Test ({}/{}) `{}`...\x1b[33mSKIPPED\x1b[0m\n",
+                        "{} Test ({}/{}) `{}` ... \x1b[33mSKIPPED\x1b[0m\n",
                         exec_policy.name(),
                         i + 1,
                         total_count,
@@ -429,7 +449,7 @@ async fn run_tests<T: ExecutionPolicy>(
 
             if test.disabled {
                 info!(
-                    "{} Test ({}/{}) `{}`...\x1b[33mDISABLED\x1b[0m\n",
+                    "{} Test ({}/{}) `{}` ... \x1b[33mDISABLED\x1b[0m\n",
                     exec_policy.name(),
                     i + 1,
                     total_count,
@@ -441,7 +461,7 @@ async fn run_tests<T: ExecutionPolicy>(
             }
 
             info!(
-                "{} Test ({}/{}) `{}` Iteration({}/{})...",
+                "{} Test ({}/{}) `{}` Iteration({}/{})",
                 exec_policy.name(),
                 i + 1,
                 total_count,
@@ -456,16 +476,18 @@ async fn run_tests<T: ExecutionPolicy>(
 
             match &result {
                 Ok(p) => {
+                    let total_runtime: u32 = p.1.iter().map(|r| r.runtime).sum();
+                    let runtime_label = runtime_formatter(total_runtime);
                     if p.0 {
-                        info!("\x1b[32mPASSED\x1b[0m\n");
+                        info!(" Runtime({}) ... \x1b[32mPASSED\x1b[0m\n", runtime_label);
                     } else {
                         any_failures = true;
-                        info!("\x1b[31mFAILED\x1b[0m\n");
+                        info!(" Runtime({}) ... \x1b[31mFAILED\x1b[0m\n", runtime_label);
                     }
                 }
                 Err(e) => {
                     any_failures = true;
-                    info!("\x1b[31mFAILED\x1b[0m\n");
+                    info!(" ... \x1b[31mFAILED\x1b[0m\n");
                     error!("{}", e);
                 }
             }
@@ -489,6 +511,7 @@ async fn run_tests<T: ExecutionPolicy>(
 
     ExecutionResult {
         test_results: results,
+        runtime: runtime,
     }
 }
 
@@ -2681,6 +2704,7 @@ mod tests {
                 test_name: "name".to_string(),
                 iteration_results: vec![],
             }],
+            runtime: 0,
         };
 
         let report = Report::from(execution_result);

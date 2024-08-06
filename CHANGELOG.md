@@ -30,6 +30,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 * Telemetry no longer sends global variables attached to test data, but instead sends them as part of the session
 * Test iterations now count as distinct test runs for telemetry data
 * Updated Example tests to better showcase tag usage
+* Added test execution runtimes to CLI output
 
 # Bug Fixes
 * CLI output now properly flushes prior to test completion (for long-running tests).
