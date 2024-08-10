@@ -37,7 +37,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 
 - CLI output now properly flushes prior to test completion (for long-running tests)
 - Each run of a test iteration now correctly counts as a distinct test
-- Test Definitions no longer include global variables in telemetry, which fixes an issue that could result in inconsistent test ids
+- Test Definitions no longer include global variables in telemetry, which fixes an issue that may result in inconsistent test ids
 
   # 0.7.2
 
