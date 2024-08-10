@@ -129,7 +129,7 @@ to make this change before the number of tests in the wild using variables grows
 As always we aim to minimize breaking changes, and since usage is increasing, in the future we'll
 likely support backwards compatibility or automated tooling to migrate tests.
 
-We don't forsee any additional breaking changes on the horizon.
+We don't foresee any additional breaking changes on the horizon.
 
 # New Features:
 
