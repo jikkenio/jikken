@@ -115,6 +115,7 @@ pub struct CompareDescriptor {
 impl CompareDescriptor {
     pub fn new_opt(
         request_opt: Option<file::UnvalidatedCompareRequest>,
+        variables: &[Variable],
     ) -> Result<Option<CompareDescriptor>, validation::Error> {
         match request_opt {
             Some(request) => {
@@ -186,21 +187,29 @@ impl CompareDescriptor {
                     };
                 }
 
-                if request.body.is_some() && request.body_schema.is_some() {
-                    return Err(validation::Error {
-                        reason: "Requests can contain a body OR a bodySchema. Not both".to_string(),
-                    });
-                }
-
-                let maybe_body_or_schema = request
+                let compare_body = request
                     .body
-                    .map(BodyOrSchema::Body)
-                    .or(request.body_schema.map(BodyOrSchema::Schema));
-
-                let compare_body = maybe_body_or_schema.map(|b| RequestBody {
-                    data: b,
-                    matches_variable: Cell::from(false),
-                });
+                    .and_then(|variable_name_or_value| match variable_name_or_value {
+                        file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                            Some(BodyOrSchema::Body(v))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| name == format!("${{{}}}", v.name))
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Value { value: v } => {
+                                    Some(BodyOrSchema::Body(v.clone()))
+                                }
+                                _ => None,
+                            })
+                            .or_else(|| {
+                                Some(BodyOrSchema::Body(serde_json::Value::from(name.val())))
+                            }),
+                    })
+                    .map(|b| RequestBody {
+                        data: b,
+                        matches_variable: Cell::from(false),
+                    });
 
                 Ok(Some(CompareDescriptor {
                     method: request.method.unwrap_or(http::Verb::Get),
@@ -351,7 +360,7 @@ impl StageDescriptor {
     ) -> Result<StageDescriptor, validation::Error> {
         Ok(StageDescriptor {
             request: RequestDescriptor::new(stage.request, variables)?,
-            compare: CompareDescriptor::new_opt(stage.compare)?,
+            compare: CompareDescriptor::new_opt(stage.compare, variables)?,
             response: ResponseDescriptor::new_opt(stage.response, variables)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             // source_path: source_path.to_string(),
@@ -374,7 +383,7 @@ impl StageDescriptor {
         if let Some(request) = request_opt {
             results.push(StageDescriptor {
                 request: RequestDescriptor::new(request, variables)?,
-                compare: CompareDescriptor::new_opt(compare_opt)?,
+                compare: CompareDescriptor::new_opt(compare_opt, variables)?,
                 response: ResponseDescriptor::new_opt(response_opt, variables)?,
                 variables: Vec::new(),
                 // source_path: source_path.to_string(),

@@ -1892,9 +1892,7 @@ pub struct UnvalidatedCompareRequest {
     //structure manually in this manner and leave the enums only
     //in the (Validated)CompareDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema: Option<DatumSchema>,
+    pub body: Option<UnvalidatedVariableNameOrValue>,
     pub strict: Option<bool>,
 }
 
@@ -1904,7 +1902,6 @@ impl Hash for UnvalidatedCompareRequest {
         self.url.hash(state);
         self.params.hash(state);
         serde_json::to_string(&self.body).unwrap().hash(state);
-        self.body_schema.hash(state);
         self.add_params.hash(state);
         self.ignore_params.hash(state);
         self.headers.hash(state);
