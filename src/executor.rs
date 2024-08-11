@@ -227,6 +227,8 @@ impl ExecutionResultFormatter for JunitResultFormatter {
 
 trait ExecutionPolicy {
     fn name(&self) -> String;
+    fn new_line(&self) -> bool;
+
     async fn execute(
         &mut self,
         state: &mut State,
@@ -249,6 +251,10 @@ struct DryRunExecutionPolicy;
 impl ExecutionPolicy for DryRunExecutionPolicy {
     fn name(&self) -> String {
         "Dry Run".to_string()
+    }
+
+    fn new_line(&self) -> bool {
+        true
     }
 
     async fn execute(
@@ -279,6 +285,10 @@ struct ActualRunExecutionPolicy;
 impl ExecutionPolicy for ActualRunExecutionPolicy {
     fn name(&self) -> String {
         "Running".to_string()
+    }
+
+    fn new_line(&self) -> bool {
+        false
     }
 
     async fn execute(
@@ -353,6 +363,10 @@ impl<T: ExecutionPolicy> FailurePolicy<T> {
 impl<T: ExecutionPolicy> ExecutionPolicy for FailurePolicy<T> {
     fn name(&self) -> String {
         self.wrapped_policy.name()
+    }
+
+    fn new_line(&self) -> bool {
+        self.wrapped_policy.new_line()
     }
 
     async fn execute(
@@ -460,14 +474,17 @@ async fn run_tests<T: ExecutionPolicy>(
                 break;
             }
 
+            let new_line = if exec_policy.new_line() { "\n" } else { "" };
+
             info!(
-                "{} Test ({}/{}) `{}` Iteration({}/{})",
+                "{} Test ({}/{}) `{}` Iteration({}/{}){}",
                 exec_policy.name(),
                 i + 1,
                 total_count,
                 &test_name,
                 iteration + 1,
                 test.iterate,
+                new_line,
             );
 
             let result = exec_policy
