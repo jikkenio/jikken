@@ -7,5 +7,4 @@ response:
 variables:
   - name: status_val
     type: int
-    oneOf: [200,201,202,400,500]
-          
+    oneOf: [200, 201, 202, 400, 500]

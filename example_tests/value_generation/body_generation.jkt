@@ -4,7 +4,7 @@ request:
   method: Post
   url: https://api.postcodes.io/postcodes
   body: 
-    postcodes : ${postcodes}
+    postcodes: ${postcodes}
 response:
   status: 200
 variables:
@@ -12,4 +12,3 @@ variables:
     type: list
     schema:
         type: string
-        
