@@ -147,6 +147,7 @@ mod openapi_legacy {
                                     Specification::<Box<DatumSchema>>::Value(Box::from(ds)),
                                 )
                             }),
+                            length: Option::None,
                             min_length: a.min_items.map(|s| s as i64),
                             max_length: a.max_items.map(|s| s as i64),
                         }),
@@ -190,6 +191,7 @@ mod openapi_legacy {
                 }
                 openapiv3::Type::String(string) => {
                     let string_spec = StringSpecification {
+                        length: Option::None,
                         max_length: string.max_length.map(|s| s as i64),
                         min_length: string.min_length.map(|s| s as i64),
                         pattern: string.pattern.clone(),
@@ -572,6 +574,7 @@ mod openapi_v31 {
                             })
                         })
                     }),
+                    length: Option::None,
                     max_length: schema.max_items.map(|n| n as i64),
                     min_length: schema.min_items.map(|n| n as i64),
                 }),
@@ -629,6 +632,7 @@ mod openapi_v31 {
             oas3::spec::SchemaType::String => {
                 let string_spec = StringSpecification {
                     pattern: schema.pattern,
+                    length: Option::None,
                     max_length: schema.max_length.map(|n| n as i64),
                     min_length: schema.min_length.map(|n| n as i64),
                     ..Default::default()

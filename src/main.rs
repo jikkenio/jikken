@@ -8,6 +8,7 @@ mod new;
 mod telemetry;
 mod test;
 mod updater;
+mod validated;
 
 use clap::{Parser, Subcommand};
 use glob::{glob_with, MatchOptions};

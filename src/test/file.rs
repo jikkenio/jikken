@@ -2,6 +2,7 @@ use crate::json::filter::filter_json;
 use crate::test;
 use crate::test::file::Validated::Good;
 use crate::test::{definition, http, variable};
+use crate::validated::ValidatedExt;
 use chrono::NaiveDate;
 use chrono::NaiveDateTime;
 use chrono::TimeZone;
@@ -122,6 +123,8 @@ pub struct StringSpecification {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub specification: Option<Specification<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<i64>,
@@ -178,6 +181,8 @@ impl ValuesOrSchema {
 pub struct SequenceSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<ValuesOrSchema>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -754,6 +759,7 @@ where
 impl StringSpecification {
     pub fn new(
         specification: Option<Specification<String>>,
+        length: Option<i64>,
         min_length: Option<i64>,
         max_length: Option<i64>,
         pattern: Option<String>,
@@ -771,12 +777,13 @@ impl StringSpecification {
                 .unwrap_or(Validated::Good(None))
         };
 
-        let negative_validation_max = negative_validator(&max_length, "max");
-        let negative_validation_min = negative_validator(&min_length, "min");
+        let negative_validation_length = negative_validator(&length, "length");
+        let negative_validation_max = negative_validator(&max_length, "maxLength");
+        let negative_validation_min = negative_validator(&min_length, "minLength");
         let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
             Good(())
         } else {
-            Validated::fail("min_length must be less than or equal to max_length".to_string())
+            Validated::fail("minLength must be less than or equal to maxLength".to_string())
         };
 
         let pattern_validation = pattern
@@ -785,17 +792,19 @@ impl StringSpecification {
                 Regex::new(p.as_str())
                     .map(|_| Good(Some(p)))
                     .unwrap_or_else(|e| {
-                        Validated::fail(format!("invalid regex supplied for pattern : {}", e))
+                        Validated::fail(format!("invalid regex supplied for pattern: {}", e))
                     })
             })
             .unwrap_or(Good(None));
 
-        negative_validation_max
-            .map4(
+        negative_validation_length
+            .map5(
+                negative_validation_max,
                 negative_validation_min,
                 relation_validation,
                 pattern_validation,
-                |_, _, _, p| Self {
+                |_, _, _, _, p| Self {
+                    length,
                     max_length,
                     min_length,
                     specification,
@@ -829,6 +838,23 @@ impl StringSpecification {
                 })
             }
             _ => Good(()),
+        }
+    }
+
+    fn check_length(
+        &self,
+        actual: &str,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.length {
+            Some(t) => {
+                if *t == actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(format!("length of {}", t).as_str(), actual))
+                }
+            }
+            None => Good(()),
         }
     }
 
@@ -876,6 +902,7 @@ impl StringSpecification {
 impl SequenceSpecification {
     pub fn new(
         schema: Option<ValuesOrSchema>,
+        length: Option<i64>,
         min_length: Option<i64>,
         max_length: Option<i64>,
     ) -> Result<Self, String> {
@@ -892,27 +919,52 @@ impl SequenceSpecification {
                 .unwrap_or(Validated::Good(None))
         };
 
-        let negative_validation_max = negative_validator(&max_length, "max");
-        let negative_validation_min = negative_validator(&min_length, "min");
+        let negative_validation_length = negative_validator(&length, "length");
+        let negative_validation_max = negative_validator(&max_length, "maxLength");
+        let negative_validation_min = negative_validator(&min_length, "minLength");
         let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
             Good(())
         } else {
-            Validated::fail("min_length must be less than or equal to max_length".to_string())
+            Validated::fail("minLength must be less than or equal to maxLength".to_string())
         };
 
-        negative_validation_max
-            .map3(negative_validation_min, relation_validation, |_, _, _| {
-                Self {
+        negative_validation_length
+            .map4(
+                negative_validation_max,
+                negative_validation_min,
+                relation_validation,
+                |_, _, _, _| Self {
+                    length,
                     max_length,
                     min_length,
                     schema,
-                }
-            })
+                },
+            )
             .ok()
             .map_err(|nev| {
                 nev.into_nonempty_iter()
                     .reduce(|acc, e| format!("{},{}", acc, e))
             })
+    }
+
+    fn check_length(
+        &self,
+        actual: &Vec<Value>,
+        formatter: &impl Fn(&str, &str) -> String,
+    ) -> Validated<(), String> {
+        match &self.length {
+            Some(t) => {
+                if *t == actual.len() as i64 {
+                    Good(())
+                } else {
+                    Validated::fail(formatter(
+                        format!("length of {}", t).as_str(),
+                        format!("{:?}", actual).as_str(),
+                    ))
+                }
+            }
+            None => Good(()),
+        }
     }
 
     fn check_min_length(
@@ -962,6 +1014,7 @@ impl SequenceSpecification {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         let mut ret = vec![
+            self.check_length(val, formatter),
             self.check_min_length(val, formatter),
             self.check_max_length(val, formatter),
         ];
@@ -984,6 +1037,7 @@ impl Checker for StringSpecification {
         formatter: &impl Fn(&str, &str) -> String,
     ) -> Vec<Validated<(), String>> {
         let mut ret = vec![
+            self.check_length(val, formatter),
             self.check_min_length(val, formatter),
             self.check_max_length(val, formatter),
             self.check_pattern(val, formatter),
@@ -1003,6 +1057,7 @@ impl NameSpecification {
     pub fn new(string_specification: StringSpecification) -> Result<Self, String> {
         StringSpecification::new(
             string_specification.specification,
+            string_specification.length,
             string_specification.min_length,
             string_specification.max_length,
             string_specification.pattern,
@@ -1015,6 +1070,7 @@ impl EmailSpecification {
     pub fn new(string_specification: StringSpecification) -> Result<Self, String> {
         StringSpecification::new(
             string_specification.specification,
+            string_specification.length,
             string_specification.min_length,
             string_specification.max_length,
             string_specification.pattern,
@@ -2467,22 +2523,29 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
     // you should instead have a list of generators you random access into
     trace!("generate_list({:?})", spec);
     let mut rng = rand::thread_rng();
-    let min_length = spec.min_length.unwrap_or(generate_number_in_range(
-        0,
-        spec.max_length.unwrap_or(100),
-        &mut rng,
-    ));
-    let max_length = spec.max_length.unwrap_or(generate_number_in_range(
-        min_length + 1,
-        min_length * 2,
-        &mut rng,
-    ));
+    let min_length = spec.length.unwrap_or(
+        spec.min_length.unwrap_or(generate_number_in_range(
+            0,
+            spec.length
+                .unwrap_or_else(|| spec.max_length.unwrap_or(100)),
+            &mut rng,
+        )),
+    );
+    let max_length = spec
+        .length
+        .unwrap_or(spec.max_length.unwrap_or(generate_number_in_range(
+            min_length + 1,
+            min_length * 2,
+            &mut rng,
+        )));
+    let actual_length = rng.gen_range(min_length..=max_length);
+
     (0..max_attempts)
         .map(|_| {
             spec.schema
                 .as_ref()
                 .map(|s| match s {
-                    ValuesOrSchema::Schemas(_) => (min_length..max_length)
+                    ValuesOrSchema::Schemas(_) => (0..actual_length)
                         .map(|_| serde_json::Value::from(s.generate_if_constrained(&mut rng)))
                         .collect::<Vec<Value>>(),
                     ValuesOrSchema::Values(v) => {
@@ -2490,7 +2553,7 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
                     }
                 })
                 .unwrap_or_else(|| {
-                    (min_length..max_length)
+                    (0..actual_length)
                         .map(|_| serde_json::Value::from(rng.gen::<i64>()))
                         .collect()
                 })
@@ -2734,6 +2797,38 @@ mod tests {
     }
 
     #[test]
+    fn string_specification_length_checker() {
+        let spec = StringSpecification {
+            length: Some(5),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            true,
+            spec.check(&"hello".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"hell".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+
+        assert_eq!(
+            true,
+            spec.check(&"nooooooo".to_string(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail()
+        );
+    }
+
+    #[test]
     fn string_specification_max_length_checker() {
         let spec = StringSpecification {
             max_length: Some(5),
@@ -2846,49 +2941,60 @@ mod tests {
 
     #[test]
     fn stringspecification_no_inputs() {
-        assert!(StringSpecification::new(None, None, None, None).is_ok());
+        assert!(StringSpecification::new(None, None, None, None, None).is_ok());
     }
 
     #[test]
     fn stringspecification_negative_input() {
         assert_eq!(
-            StringSpecification::new(None, Some(-12), None, None).unwrap_err(),
-            "negative value provided for min".to_string()
+            StringSpecification::new(None, Some(-12), None, None, None).unwrap_err(),
+            "negative value provided for length".to_string()
         );
         assert_eq!(
-            StringSpecification::new(None, Some(-12), Some(-12), None).unwrap_err(),
-            "negative value provided for max,negative value provided for min".to_string()
+            StringSpecification::new(None, None, Some(-12), None, None).unwrap_err(),
+            "negative value provided for minLength".to_string()
         );
         assert_eq!(
-            StringSpecification::new(None, None, Some(-24), None).unwrap_err(),
-            "negative value provided for max".to_string()
+            StringSpecification::new(None, None, Some(-12), Some(-12), None).unwrap_err(),
+            "negative value provided for maxLength,negative value provided for minLength"
+                .to_string()
         );
-        assert!(StringSpecification::new(None, Some(12), None, None).is_ok());
+        assert_eq!(
+            StringSpecification::new(None, None, None, Some(-24), None).unwrap_err(),
+            "negative value provided for maxLength".to_string()
+        );
+        assert!(StringSpecification::new(None, Some(12), None, None, None).is_ok());
     }
 
     #[test]
     fn stringspecification_min_max_agreement() {
         assert_eq!(
-            StringSpecification::new(None, Some(24), Some(12), None).unwrap_err(),
-            "min_length must be less than or equal to max_length".to_string()
+            StringSpecification::new(None, None, Some(24), Some(12), None).unwrap_err(),
+            "minLength must be less than or equal to maxLength".to_string()
         );
-        assert!(StringSpecification::new(None, Some(1), Some(1), None).is_ok());
-        assert!(StringSpecification::new(None, Some(12), Some(24), None).is_ok());
+        assert!(StringSpecification::new(None, None, Some(1), Some(1), None).is_ok());
+        assert!(StringSpecification::new(None, None, Some(12), Some(24), None).is_ok());
     }
 
     #[test]
     fn string_specification_simple_pattern() {
-        assert!(StringSpecification::new(None, None, None, Some("simple".to_string())).is_ok());
+        assert!(
+            StringSpecification::new(None, None, None, None, Some("simple".to_string())).is_ok()
+        );
     }
 
     #[test]
     fn string_specification_invalid_pattern() {
-        assert!(StringSpecification::new(None, None, None, Some("?simple?".to_string())).is_err());
+        assert!(
+            StringSpecification::new(None, None, None, None, Some("?simple?".to_string())).is_err()
+        );
     }
 
     #[test]
     fn string_specification_complex_pattern() {
-        assert!(StringSpecification::new(None, None, None, Some("^simple?".to_string())).is_ok());
+        assert!(
+            StringSpecification::new(None, None, None, None, Some("^simple?".to_string())).is_ok()
+        );
     }
 
     #[test]
@@ -3556,6 +3662,81 @@ mod tests {
     }
 
     #[test]
+    fn sequence_specification_length_more_than_actual() {
+        assert!(SequenceSpecification {
+            length: Some(5),
+            ..Default::default()
+        }
+        .check_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_fail());
+    }
+
+    #[test]
+    fn sequence_specification_length_equal_to_actual() {
+        assert!(SequenceSpecification {
+            length: Some(5),
+            ..Default::default()
+        }
+        .check_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
+    fn sequence_specification_length_less_than_actual() {
+        assert!(SequenceSpecification {
+            length: Some(5),
+            ..Default::default()
+        }
+        .check_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5),
+                serde_json::Value::from(6)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_fail());
+    }
+
+    #[test]
+    fn sequence_specification_length_check_no_bounds() {
+        assert!(SequenceSpecification {
+            ..Default::default()
+        }
+        .check_length(
+            &vec![
+                serde_json::Value::from(1),
+                serde_json::Value::from(2),
+                serde_json::Value::from(3),
+                serde_json::Value::from(4),
+                serde_json::Value::from(5)
+            ],
+            &|s, _| s.to_string()
+        )
+        .is_good());
+    }
+
+    #[test]
     fn sequence_specification_min_length_more_than_actual() {
         assert!(SequenceSpecification {
             min_length: Some(5),
@@ -3902,12 +4083,31 @@ mod tests {
     }
 
     #[test]
+    fn list_generation_sequence_specification_has_length() {
+        let spec = SequenceSpecification {
+            length: Some(5),
+            ..Default::default()
+        };
+        assert!(generate_list(&spec, 1,).unwrap().as_array().unwrap().len() == 5);
+    }
+
+    #[test]
+    fn list_generation_sequence_specification_has_min_and_max() {
+        let spec = SequenceSpecification {
+            min_length: Some(5),
+            max_length: Some(5),
+            ..Default::default()
+        };
+        assert!(generate_list(&spec, 1,).unwrap().as_array().unwrap().len() == 5);
+    }
+
+    #[test]
     fn list_generation_sequence_specification_has_max() {
         let spec = SequenceSpecification {
             max_length: Some(5),
             ..Default::default()
         };
-        assert!(generate_list(&spec, 1,).is_some());
+        assert!(generate_list(&spec, 1,).unwrap().as_array().unwrap().len() <= 5);
     }
 
     #[test]
@@ -3916,7 +4116,7 @@ mod tests {
             min_length: Some(1),
             ..Default::default()
         };
-        assert!(generate_list(&spec, 1,).is_some());
+        assert!(generate_list(&spec, 1,).unwrap().as_array().unwrap().len() >= 1);
     }
 
     #[test]
