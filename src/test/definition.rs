@@ -308,7 +308,7 @@ impl ResponseDescriptor {
                             .iter()
                             .find(|v| name == format!("${{{}}}", v.name))
                             .and_then(|v| match &v.value {
-                                test::ValueOrDatumOrFileOrSecret::Value{ value: v } => {
+                                test::ValueOrDatumOrFileOrSecret::Value { value: v } => {
                                     Some(BodyOrSchema::Body(v.clone()))
                                 }
                                 //In theory, we could try to read from a file variable and
@@ -324,7 +324,7 @@ impl ResponseDescriptor {
                             .iter()
                             .find(|v| name == format!("${{{}}}", v.name))
                             .and_then(|v| match &v.value {
-                                test::ValueOrDatumOrFileOrSecret::Schema{ value: ds } => {
+                                test::ValueOrDatumOrFileOrSecret::Schema { value: ds } => {
                                     Some(BodyOrSchema::Schema(ds.clone()))
                                 }
                                 _ => None,

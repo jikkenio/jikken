@@ -680,7 +680,9 @@ mod tests {
             global_variables: vec![Variable {
                 name: "my_global".to_string(),
                 source_path: "".to_string(),
-                value: test::ValueOrDatumOrFileOrSecret::Value { value: serde_json::Value::from("hello") },
+                value: test::ValueOrDatumOrFileOrSecret::Value {
+                    value: serde_json::Value::from("hello"),
+                },
             }],
             stages: vec![StageDescriptor {
                 name: None,
