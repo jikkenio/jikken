@@ -135,7 +135,6 @@ fn new_full_request() -> Result<file::UnvalidatedRequest, Box<dyn Error + Send +
         params: Some(vec![new_parameter()]),
         headers: Some(vec![new_header()]),
         body: Some(serde_json::from_str("{}")?),
-        body_schema: None,
     })
 }
 

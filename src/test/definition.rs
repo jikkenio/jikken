@@ -56,13 +56,7 @@ impl RequestDescriptor {
             None => Vec::new(),
         };
 
-        if request.body.is_some() && request.body_schema.is_some() {
-            return Err(validation::Error {
-                reason: "Requests can contain a body OR a bodySchema. Not both".to_string(),
-            });
-        }
-
-        let maybe_body_or_schema = request
+        let request_body = request
             .body
             .and_then(|variable_name_or_value| match variable_name_or_value {
                 file::UnvalidatedVariableNameOrComponent::Component(v) => {
@@ -79,25 +73,10 @@ impl RequestDescriptor {
                     })
                     .or_else(|| Some(BodyOrSchema::Body(serde_json::Value::from(name.val())))),
             })
-            .or(request.body_schema.and_then(|s| match s {
-                file::UnvalidatedVariableNameOrComponent::Component(ds) => {
-                    Some(BodyOrSchema::Schema(ds))
-                }
-                file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
-                    .iter()
-                    .find(|v| name == format!("${{{}}}", v.name))
-                    .and_then(|v| match &v.value {
-                        test::ValueOrDatumOrFileOrSecret::Schema { value: ds } => {
-                            Some(BodyOrSchema::Schema(ds.clone()))
-                        }
-                        _ => None,
-                    }),
-            }));
-
-        let request_body = maybe_body_or_schema.map(|b| RequestBody {
-            data: b,
-            matches_variable: Cell::from(false),
-        });
+            .map(|b| RequestBody {
+                data: b,
+                matches_variable: Cell::from(false),
+            });
 
         Ok(RequestDescriptor {
             method: request.method.unwrap_or(http::Verb::Get),

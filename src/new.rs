@@ -269,7 +269,6 @@ mod openapi_legacy {
 
         UnvalidatedRequest {
             body: body_schema.clone().and_then(|(v, _)| v),
-            body_schema: None, //body_schema.map(|(_, ds)| ds),
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
@@ -691,7 +690,7 @@ mod openapi_v31 {
             }
         });
 
-        let maybe_schema = op.request_body.as_ref().and_then(|body| {
+        let _maybe_schema = op.request_body.as_ref().and_then(|body| {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
@@ -704,7 +703,7 @@ mod openapi_v31 {
 
         UnvalidatedRequest {
             body: None,
-            body_schema: maybe_schema,
+            // body_schema: maybe_schema, // TODO: This will have to be moved into a variable
             method: Some(verb),
             url: url.to_string(),
             headers: if headers.is_empty() {
