@@ -135,13 +135,19 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
                     }),
                     DatumSchema::List { specification } => specification
                         .map(|s| {
-                            SequenceSpecification::new(s.schema, s.min_length, s.max_length).map(
-                                |s| ValueOrDatumOrFileOrSecret::Schema {
+                            SequenceSpecification::new(
+                                s.schema,
+                                s.length,
+                                s.min_length,
+                                s.max_length,
+                            )
+                            .map(|s| {
+                                ValueOrDatumOrFileOrSecret::Schema {
                                     value: DatumSchema::List {
                                         specification: Some(s),
                                     },
-                                },
-                            )
+                                }
+                            })
                         })
                         .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema {
                             value: DatumSchema::List {
@@ -202,6 +208,7 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
                         .map(|s| {
                             StringSpecification::new(
                                 s.specification,
+                                s.length,
                                 s.min_length,
                                 s.max_length,
                                 s.pattern,
