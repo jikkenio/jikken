@@ -254,7 +254,6 @@ impl ExecutionPolicy for DryRunExecutionPolicy {
     }
 
     fn new_line(&self) -> bool {
-        info!("new_line() called: {}\n", self.name());
         true
     }
 
@@ -289,7 +288,6 @@ impl ExecutionPolicy for ActualRunExecutionPolicy {
     }
 
     fn new_line(&self) -> bool {
-        info!("new_line() actual called: {}\n", self.name());
         false
     }
 
@@ -477,8 +475,6 @@ async fn run_tests<T: ExecutionPolicy>(
             }
 
             let new_line = if exec_policy.new_line() { "\n" } else { "" };
-
-            info!("new_line: {}\n", exec_policy.new_line());
 
             info!(
                 "{} Test ({}/{}) `{}` Iteration({}/{}){}",
