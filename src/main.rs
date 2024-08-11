@@ -433,7 +433,6 @@ async fn run_tests(
     )
     .await;
 
-
     let runtime_label = executor::runtime_formatter(report.runtime);
 
     if report.skipped > 0 {

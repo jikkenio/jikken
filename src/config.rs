@@ -61,9 +61,9 @@ impl Config {
             .chain(self.globals.iter())
             .map(|i| test::Variable {
                 name: i.0.to_string(),
-                value: test::ValueOrDatumOrFileOrSecret::Value(serde_json::Value::from(
+                value: test::ValueOrDatumOrFileOrSecret::Value { value: serde_json::Value::from(
                     i.1.to_string(),
-                )),
+                ) },
                 source_path: "./".to_string(),
             })
             .chain(
@@ -72,7 +72,7 @@ impl Config {
                     .map(|(secret_name, secret_val)| test::Variable {
                         name: secret_name.clone(),
                         value: test::ValueOrDatumOrFileOrSecret::Secret {
-                            secret: SecretValue::new(secret_val),
+                            value: SecretValue::new(secret_val),
                         },
                         source_path: "/".to_string(),
                     }),
