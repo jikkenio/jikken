@@ -528,7 +528,7 @@ async fn run_tests<T: ExecutionPolicy>(
 
     ExecutionResult {
         test_results: results,
-        runtime: runtime,
+        runtime,
     }
 }
 
