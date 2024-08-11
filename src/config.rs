@@ -11,6 +11,7 @@ use std::path::Path;
 pub struct Config {
     pub settings: Settings,
     pub globals: BTreeMap<String, String>,
+    #[serde(skip_serializing)]
     pub secrets: BTreeMap<String, String>,
 }
 
@@ -30,6 +31,7 @@ pub struct Settings {
 struct File {
     pub settings: Option<FileSettings>,
     pub globals: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing)]
     pub secrets: Option<BTreeMap<String, String>>,
 }
 
