@@ -1,6 +1,7 @@
 use crate::json::filter::filter_json;
 use crate::test;
 use crate::test::file::Validated::Good;
+use crate::test::variable::Modifier;
 use crate::test::{definition, http, variable};
 use crate::validated::ValidatedExt;
 use chrono::NaiveDate;
@@ -9,6 +10,7 @@ use chrono::TimeZone;
 use chrono::{DateTime, ParseError};
 use chrono::{Datelike, Local};
 use chrono::{Days, Months};
+use log::debug;
 use log::error;
 use log::trace;
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
@@ -197,7 +199,9 @@ pub struct DateSpecification {
     pub min: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub modifier: Option<variable::Modifier>,
 }
 
@@ -1222,53 +1226,55 @@ impl DateSpecification {
         format!("{}", time.format(&format))
     }
 
+    pub fn apply_modifier(time: &DateTime<Local>, modifier: &Modifier) -> Option<DateTime<Local>> {
+        trace!("apply_modifier({:?},{:?})", time, modifier);
+
+        let val = match &modifier.value {
+            Value::Number(val) => val.as_u64(),
+            Value::String(val) => val.parse::<u64>().ok(),
+            _ => None,
+        };
+
+        val.and_then(|mod_value| {
+            match modifier.operation.to_lowercase().as_str() {
+                "add" => {
+                    let modified_date = match modifier.unit.to_lowercase().as_str() {
+                        "days" => time.checked_add_days(Days::new(mod_value)),
+                        "weeks" => time.checked_add_days(Days::new(mod_value * 7)),
+                        "months" => time.checked_add_months(Months::new(mod_value as u32)),
+                        // TODO: add support for years
+                        _ => None,
+                    };
+                    modified_date
+                }
+                "subtract" => {
+                    let modified_date = match modifier.unit.to_lowercase().as_str() {
+                        "days" => time.checked_sub_days(Days::new(mod_value)),
+                        "weeks" => time.checked_sub_days(Days::new(mod_value * 7)),
+                        "months" => time.checked_sub_months(Months::new(mod_value as u32)),
+                        // TODO: add support for years
+                        _ => None,
+                    };
+                    modified_date
+                }
+                _ => None,
+            }
+        })
+    }
+
     //validates format stuff and applies the modifier
     //this can be used to generate or validate
     //But its not a "random" generator like our other specifications
-    fn get(&self, string_val: &str) -> Result<String, ParseError> {
-        //debug!("string expression: {:?}", v);
-        //let mut result_date;
+    fn get(&self, string_val: &str) -> Option<String> {
+        trace!("get({:?})", string_val);
         self.str_to_time(string_val)
-            .map(|mut dt| {
+            .ok()
+            .and_then(|dt| {
                 if let Some(m) = &self.modifier {
-                    let mod_value_result = m.value.parse::<u64>();
-                    if let Ok(mod_value) = mod_value_result {
-                        match m.operation.to_lowercase().as_str() {
-                            "add" => {
-                                let modified_date = match m.unit.to_lowercase().as_str() {
-                                    "days" => dt.checked_add_days(Days::new(mod_value)),
-                                    "weeks" => dt.checked_add_days(Days::new(mod_value * 7)),
-                                    "months" => {
-                                        dt.checked_add_months(Months::new(mod_value as u32))
-                                    }
-                                    // TODO: add support for years
-                                    _ => None,
-                                };
-
-                                if let Some(md) = modified_date {
-                                    dt = md;
-                                }
-                            }
-                            "subtract" => {
-                                let modified_date = match m.unit.to_lowercase().as_str() {
-                                    "days" => dt.checked_sub_days(Days::new(mod_value)),
-                                    "weeks" => dt.checked_sub_days(Days::new(mod_value * 7)),
-                                    "months" => {
-                                        dt.checked_sub_months(Months::new(mod_value as u32))
-                                    }
-                                    // TODO: add support for years
-                                    _ => None,
-                                };
-
-                                if let Some(md) = modified_date {
-                                    dt = md;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                    Self::apply_modifier(&dt, m)
+                } else {
+                    Some(dt)
                 }
-                dt
             })
             .map(|d| self.time_to_str(&d))
     }
@@ -1288,15 +1294,25 @@ impl Checker for DateSpecification {
 
         let time = maybe_time.unwrap();
 
+        //If there is a modifier specified, we have to apply the inverse..
+        //Without doing so, we'll fail validation
+        let modified_time = self
+            .modifier
+            .as_ref()
+            .map(|m| m.get_inverse())
+            .and_then(|m| Self::apply_modifier(&time, &m))
+            .unwrap_or(time);
+
+        debug!("Time is {:?}; Modified time is {:?}", time, modified_time);
         let mut ret = vec![
-            self.check_min(&time, formatter),
-            self.check_max(&time, formatter),
+            self.check_min(&modified_time, formatter),
+            self.check_max(&modified_time, formatter),
         ];
 
         ret.append(
             self.specification
                 .as_ref()
-                .map(|s| s.check(val, formatter))
+                .map(|s| s.check(&self.time_to_str(&modified_time), formatter))
                 .unwrap_or_default()
                 .as_mut(),
         );
@@ -1442,53 +1458,55 @@ impl DateTimeSpecification {
         format!("{}", time.format(&format))
     }
 
+    pub fn apply_modifier(time: &DateTime<Local>, modifier: &Modifier) -> Option<DateTime<Local>> {
+        trace!("apply_modifier({:?},{:?})", time, modifier);
+
+        let val = match &modifier.value {
+            Value::Number(val) => val.as_u64(),
+            Value::String(val) => val.parse::<u64>().ok(),
+            _ => None,
+        };
+
+        val.and_then(|mod_value| {
+            match modifier.operation.to_lowercase().as_str() {
+                "add" => {
+                    let modified_date = match modifier.unit.to_lowercase().as_str() {
+                        "days" => time.checked_add_days(Days::new(mod_value)),
+                        "weeks" => time.checked_add_days(Days::new(mod_value * 7)),
+                        "months" => time.checked_add_months(Months::new(mod_value as u32)),
+                        // TODO: add support for years
+                        _ => None,
+                    };
+                    modified_date
+                }
+                "subtract" => {
+                    let modified_date = match modifier.unit.to_lowercase().as_str() {
+                        "days" => time.checked_sub_days(Days::new(mod_value)),
+                        "weeks" => time.checked_sub_days(Days::new(mod_value * 7)),
+                        "months" => time.checked_sub_months(Months::new(mod_value as u32)),
+                        // TODO: add support for years
+                        _ => None,
+                    };
+                    modified_date
+                }
+                _ => None,
+            }
+        })
+    }
+
     //validates format stuff and applies the modifier
     //this can be used to generate or validate
     //But its not a "random" generator like our other specifications
-    fn get(&self, string_val: &str) -> Result<String, ParseError> {
-        //debug!("string expression: {:?}", v);
-        //let mut result_date;
+    fn get(&self, string_val: &str) -> Option<String> {
+        trace!("get({:?})", string_val);
         self.str_to_time(string_val)
-            .map(|mut dt| {
+            .ok()
+            .and_then(|dt| {
                 if let Some(m) = &self.modifier {
-                    let mod_value_result = m.value.parse::<u64>();
-                    if let Ok(mod_value) = mod_value_result {
-                        match m.operation.to_lowercase().as_str() {
-                            "add" => {
-                                let modified_date = match m.unit.to_lowercase().as_str() {
-                                    "days" => dt.checked_add_days(Days::new(mod_value)),
-                                    "weeks" => dt.checked_add_days(Days::new(mod_value * 7)),
-                                    "months" => {
-                                        dt.checked_add_months(Months::new(mod_value as u32))
-                                    }
-                                    // TODO: add support for years
-                                    _ => None,
-                                };
-
-                                if let Some(md) = modified_date {
-                                    dt = md;
-                                }
-                            }
-                            "subtract" => {
-                                let modified_date = match m.unit.to_lowercase().as_str() {
-                                    "days" => dt.checked_sub_days(Days::new(mod_value)),
-                                    "weeks" => dt.checked_sub_days(Days::new(mod_value * 7)),
-                                    "months" => {
-                                        dt.checked_sub_months(Months::new(mod_value as u32))
-                                    }
-                                    // TODO: add support for years
-                                    _ => None,
-                                };
-
-                                if let Some(md) = modified_date {
-                                    dt = md;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                    Self::apply_modifier(&dt, m)
+                } else {
+                    Some(dt)
                 }
-                dt
             })
             .map(|d| self.time_to_str(&d))
     }
@@ -1508,15 +1526,25 @@ impl Checker for DateTimeSpecification {
 
         let time = maybe_time.unwrap();
 
+        //If there is a modifier specified, we have to apply the inverse..
+        //Without doing so, we'll fail validation
+        let modified_time = self
+            .modifier
+            .as_ref()
+            .map(|m| m.get_inverse())
+            .and_then(|m| Self::apply_modifier(&time, &m))
+            .unwrap_or(time);
+
+        debug!("Time is {:?}; Modified time is {:?}", time, modified_time);
         let mut ret = vec![
-            self.check_min(&time, formatter),
-            self.check_max(&time, formatter),
+            self.check_min(&modified_time, formatter),
+            self.check_max(&modified_time, formatter),
         ];
 
         ret.append(
             self.specification
                 .as_ref()
-                .map(|s| s.check(val, formatter))
+                .map(|s| s.check(&self.time_to_str(&modified_time), formatter))
                 .unwrap_or_default()
                 .as_mut(),
         );
@@ -1526,45 +1554,54 @@ impl Checker for DateTimeSpecification {
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum DatumSchema {
+    #[serde(alias = "boolean")]
     Boolean {
         #[serde(flatten)]
         specification: Option<BooleanSpecification>,
     },
+    #[serde(alias = "float")]
     Float {
         #[serde(flatten)]
         specification: Option<FloatSpecification>,
     },
+    #[serde(alias = "int")]
     Int {
         #[serde(flatten)]
         specification: Option<IntegerSpecification>,
     },
+    #[serde(alias = "string")]
     String {
         #[serde(flatten)]
         specification: Option<StringSpecification>,
     },
+    #[serde(alias = "date")]
     Date {
         #[serde(flatten)]
         specification: Option<DateSpecification>,
     },
+    #[serde(alias = "dateTime")]
     DateTime {
         #[serde(flatten)]
         specification: Option<DateTimeSpecification>,
     },
+    #[serde(alias = "name")]
     Name {
         #[serde(flatten)]
         specification: Option<NameSpecification>,
     },
+    #[serde(alias = "email")]
     Email {
         #[serde(flatten)]
         specification: Option<EmailSpecification>,
     },
+    #[serde(alias = "list")]
     List {
         #[serde(flatten)]
         specification: Option<SequenceSpecification>,
     },
+    #[serde(alias = "object")]
     Object {
         #[serde(skip_serializing_if = "Option::is_none")]
         schema: Option<BTreeMap<String, ValueOrDatumSchema>>,
@@ -1987,8 +2024,8 @@ pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrCompone
 #[serde(untagged)]
 pub enum ValueOrDatumOrFile {
     File { file: String },
-    Value { value: Value },
     Schema(DatumSchema),
+    Value { value: Value },
 }
 
 impl Hash for ValueOrDatumOrFile {
@@ -2380,8 +2417,8 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
-                    Specification::Value(v) => spec.get(v).ok(),
-                    Specification::UnTaggedValue(v) => spec.get(v).ok(),
+                    Specification::Value(v) => spec.get(v),
+                    Specification::UnTaggedValue(v) => spec.get(v),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
@@ -2448,8 +2485,8 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                 //issue here is "generate_if_constrained" can't be used indiscriminately ; it doesn't apply modifier unless we do it at
                 //parse time. Would require Unvalidated version of type. So we have to match
                 .and_then(|s| match s {
-                    Specification::Value(v) => spec.get(v).ok(),
-                    Specification::UnTaggedValue(v) => spec.get(v).ok(),
+                    Specification::Value(v) => spec.get(v),
+                    Specification::UnTaggedValue(v) => spec.get(v),
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
@@ -3066,7 +3103,7 @@ mod tests {
                 None,
                 Some(Modifier {
                     operation: "add".to_string(),
-                    value: "1".to_string(),
+                    value: serde_json::to_value(1).unwrap(),
                     unit: "days".to_string(),
                 }),
             ),
@@ -3080,7 +3117,7 @@ mod tests {
                 None,
                 Some(Modifier {
                     operation: "add".to_string(),
-                    value: "1".to_string(),
+                    value: serde_json::to_value("1").unwrap(),
                     unit: "days".to_string(),
                 }),
             ),
@@ -3101,7 +3138,7 @@ mod tests {
             None,
             Some(Modifier {
                 operation: "add".to_string(),
-                value: "1".to_string(),
+                value: serde_json::to_value("1").unwrap(),
                 unit: "days".to_string(),
             }),
         );
@@ -3119,7 +3156,7 @@ mod tests {
                 None,
                 Some(Modifier {
                     operation: "add".to_string(),
-                    value: "1".to_string(),
+                    value: serde_json::to_value("1").unwrap(),
                     unit: "days".to_string(),
                 }),
             ),
@@ -3133,7 +3170,7 @@ mod tests {
                 None,
                 Some(Modifier {
                     operation: "add".to_string(),
-                    value: "1".to_string(),
+                    value: serde_json::to_value("1").unwrap(),
                     unit: "days".to_string(),
                 }),
             ),
@@ -3154,7 +3191,7 @@ mod tests {
             None,
             Some(Modifier {
                 operation: "add".to_string(),
-                value: "1".to_string(),
+                value: serde_json::to_value("1").unwrap(),
                 unit: "days".to_string(),
             }),
         );
@@ -3592,6 +3629,32 @@ mod tests {
     }
 
     #[test]
+    fn date_generation_with_modifier() {
+        let spec = DateSpecification::new(
+            Some(Specification::Value("2020-09-12".to_string())),
+            None,
+            None,
+            None,
+            Some(Modifier {
+                operation: "add".to_string(),
+                value: serde_json::to_value("1").unwrap(),
+                unit: "days".to_string(),
+            }),
+        )
+        .unwrap();
+
+        let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+
+        assert_eq!("2020-09-13", val.unwrap());
+    }
+
+    #[test]
     fn bool_generation() {
         let spec = BooleanSpecification::default();
         let val = generate_bool(&spec, 10);
@@ -3613,6 +3676,33 @@ mod tests {
             .into_iter()
             .collect::<Validated<Vec<()>, String>>()
             .is_good());
+    }
+
+    #[test]
+    fn datetime_generation_with_modifier() {
+        let spec = DateTimeSpecification::new(
+            Some(Specification::Value(
+                "2020-09-12 04:27:27.477711492".to_string(),
+            )),
+            None,
+            None,
+            None,
+            Some(Modifier {
+                operation: "add".to_string(),
+                value: serde_json::to_value("1").unwrap(),
+                unit: "days".to_string(),
+            }),
+        )
+        .unwrap();
+        let val = generate_datetime(&spec, 10);
+        assert!(val.is_some());
+        assert!(spec
+            .check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+
+        assert_eq!("2020-09-13 04:27:27.477711492", val.clone().unwrap());
     }
 
     #[test]

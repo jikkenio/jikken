@@ -104,6 +104,7 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 
     fn try_from(value: ValueOrDatumOrFile) -> Result<Self, Self::Error> {
+        trace!("try_from({:?})", value);
         match value {
             ValueOrDatumOrFile::Value { value } => Ok(ValueOrDatumOrFileOrSecret::Value { value }),
             // \todo : check if file is valid?
@@ -946,7 +947,7 @@ impl Definition {
                 .replace(var_pattern.as_str(), value.as_str())
                 .trim()
                 .to_string();
-            //play with recurision here, these could be complex variables
+            //play with recursion here, these could be complex variables
             //ALSO you can generate values from complex variables prior to running
             //a stage? That way they're consistent and can just be replaced here without
             //issue?
@@ -973,9 +974,14 @@ impl Definition {
 
             //Do extra for non string stuff
             let do_extra = match &variable.value {
-                ValueOrDatumOrFileOrSecret::Schema { value: ds } => {
-                    !matches!(ds, DatumSchema::String { .. })
-                }
+                ValueOrDatumOrFileOrSecret::Schema { value: ds } => !matches!(
+                    ds,
+                    DatumSchema::String { .. }
+                        | DatumSchema::Name { .. }
+                        | DatumSchema::Date { .. }
+                        | DatumSchema::DateTime { .. }
+                        | DatumSchema::Email { .. }
+                ),
                 ValueOrDatumOrFileOrSecret::Value { value: v } => {
                     !matches!(v, serde_json::Value::String(_))
                 }
