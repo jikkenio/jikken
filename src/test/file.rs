@@ -26,6 +26,7 @@ use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
+use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self};
@@ -2347,7 +2348,7 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
 
     let mut rng = rand::thread_rng();
     let min_length = spec.min_length.unwrap_or(1);
-    let max_length = spec.max_length.unwrap_or(50);
+    let max_length = spec.max_length.unwrap_or(max(min_length * 2, 50));
     let string_length = spec
         .length
         .unwrap_or(rng.gen_range(min_length..=max_length));
