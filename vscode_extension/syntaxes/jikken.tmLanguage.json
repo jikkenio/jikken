@@ -62,7 +62,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|type|value|file|format|modifier|dataType|operation|unit)\\b"
+					"match": "\\b(name|type|value|file|min|max|pattern|oneOf|noneOf|anyOf|length|minLength|maxLength|schema|modifier|format)\\b"
 				},
 				{
 					"include": "#modifier-keywords"
@@ -89,13 +89,13 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(method|url|body|params|headers)\\b"
+					"match": "\\b(method|url|params)\\b"
 				},
 				{
 					"include": "#params-keywords"
 				},
 				{
-					"include": "#headers-keywords"
+					"include": "#http-keywords"
 				}
 			]
 		},
@@ -127,7 +127,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(body)\\b"
+					"match": "\\b(body|headers)\\b"
 				},
 				{
 					"include": "#headers-keywords"
@@ -146,7 +146,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(status|body|ignore|extract|headers)\\b"
+					"match": "\\b(status|ignore|extract|strict|bodySchema)\\b"
 				},
 				{
 					"include": "#http-keywords"
@@ -182,16 +182,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(ignoreParams|ignoreHeaders)\\b"
-				},
-				{
-					"include": "#http-keywords"
-				},
-				{
-					"include": "#headers-keywords"
-				},
-				{
-					"include": "#params-keywords"
+					"match": "\\b(ignoreParams|ignoreHeaders|strict)\\b"
 				},
 				{
 					"include": "#addheaders-keywords"

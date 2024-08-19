@@ -28,8 +28,6 @@
             "\t\t- header:",
             "\t\t  value:",
             "\tbody:",
-            "\tignore:",
-            "\t\t- ",
             "\textract:",
             "\t\t- name:",
             "\t\t  field:"
@@ -51,17 +49,7 @@
             "\t\t\t  value:",
             "\t\theaders:",
             "\t\t\t- header:",
-            "\t\t\t  value:",
-            "\taddParams:",
-            "\t\t- param:",
-            "\t\t  value:",
-            "\tignoreParams:",
-            "\t\t-",
-            "\taddHeaders:",
-            "\t\t- header:",
-            "\t\t  value:",
-            "\tignoreHeaders:",
-            "\t\t-"
+            "\t\t\t  value:"
         ],
         "description": "A compare block"
     },
@@ -84,14 +72,9 @@
         "body": [
             "variables:",
             "\t- name:",
-            "\t  dataType:",
+            "\t  type:",
             "\t  value:",
-            "\t  file:",
-            "\t  modifier:",
-            "\t\t  operation:",
-            "\t\t  value:",
-            "\t\t  unit:",
-            "\t  format:"
+            "\t  file:"
         ],
         "description": "A variables block"
     }
