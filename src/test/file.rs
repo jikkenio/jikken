@@ -2346,7 +2346,11 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
                             "; // 0123456789)(*&^%$#@!~";
 
     let mut rng = rand::thread_rng();
-    let string_length: usize = rng.gen_range(1..50);
+    let min_length = spec.min_length.unwrap_or(1);
+    let max_length = spec.max_length.unwrap_or(50);
+    let string_length = spec
+        .length
+        .unwrap_or(rng.gen_range(min_length..=max_length));
 
     for _ in 0..max_attempts {
         let ret = spec
@@ -3583,6 +3587,44 @@ mod tests {
         let val = generate_string(&spec, 10);
 
         assert!(val.is_some());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn string_generation_with_length() {
+        let spec = StringSpecification {
+            length: Some(10),
+            ..Default::default()
+        };
+
+        let val = generate_string(&spec, 10);
+
+        assert!(val.is_some());
+        assert!(val.clone().unwrap_or("".to_string()).len() == 10usize);
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn string_generation_with_min_max_length() {
+        let spec = StringSpecification {
+            min_length: Some(1),
+            max_length: Some(5),
+            ..Default::default()
+        };
+
+        let val = generate_string(&spec, 10);
+        let val_length = val.clone().unwrap_or("".to_string()).len();
+
+        assert!(val.is_some());
+        assert!(val_length >= 1usize && val_length <= 5usize);
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
             .into_iter()
