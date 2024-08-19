@@ -790,8 +790,16 @@ impl StringSpecification {
             Validated::fail("minLength must be less than or equal to maxLength".to_string())
         };
 
+        let length_not_combined_with_min_or_max_validation =
+            if length.and(min_length).is_some() || length.and(max_length).is_some() {
+                Validated::fail(
+                    "length cannot be specified alongside minLegth or maxLength".to_string(),
+                )
+            } else {
+                Good(())
+            };
+
         let pattern_validation = pattern
-            //.as_ref()
             .map(|p| {
                 Regex::new(p.as_str())
                     .map(|_| Good(Some(p)))
@@ -801,9 +809,10 @@ impl StringSpecification {
             })
             .unwrap_or(Good(None));
 
-        negative_validation_length
+        negative_validation_max
             .map5(
-                negative_validation_max,
+                length_not_combined_with_min_or_max_validation
+                    .map2(negative_validation_length, |_, _| length),
                 negative_validation_min,
                 relation_validation,
                 pattern_validation,
@@ -932,12 +941,22 @@ impl SequenceSpecification {
             Validated::fail("minLength must be less than or equal to maxLength".to_string())
         };
 
+        let length_not_combined_with_min_or_max_validation =
+            if length.and(min_length).is_some() || length.and(max_length).is_some() {
+                Validated::fail(
+                    "length cannot be specified alongside minLegth or maxLength".to_string(),
+                )
+            } else {
+                Good(())
+            };
+
         negative_validation_length
-            .map4(
+            .map5(
+                length_not_combined_with_min_or_max_validation,
                 negative_validation_max,
                 negative_validation_min,
                 relation_validation,
-                |_, _, _, _| Self {
+                |_, _, _, _, _| Self {
                     length,
                     max_length,
                     min_length,
@@ -3005,6 +3024,24 @@ mod tests {
     }
 
     #[test]
+    fn stringspecification_min_max_and_length_specified() {
+        vec![
+            StringSpecification::new(None, Some(12), Some(24), Some(30), None),
+            StringSpecification::new(None, Some(12), Some(24), None, None),
+            StringSpecification::new(None, Some(12), None, Some(24), None),
+        ]
+        .into_iter()
+        .for_each(|s| {
+            assert_eq!(
+                s.unwrap_err(),
+                "length cannot be specified alongside minLegth or maxLength".to_string()
+            )
+        });
+
+        assert!(StringSpecification::new(None, Some(12), None, None, None).is_ok());
+    }
+
+    #[test]
     fn string_specification_simple_pattern() {
         assert!(
             StringSpecification::new(None, None, None, None, Some("simple".to_string())).is_ok()
@@ -4161,6 +4198,24 @@ mod tests {
                 )
                 .is_fail());
         }
+    }
+
+    #[test]
+    fn sequence_specification_min_max_and_length_specified() {
+        vec![
+            SequenceSpecification::new(None, Some(12), Some(24), Some(30)),
+            SequenceSpecification::new(None, Some(12), Some(24), None),
+            SequenceSpecification::new(None, Some(12), None, Some(24)),
+        ]
+        .into_iter()
+        .for_each(|s| {
+            assert_eq!(
+                s.unwrap_err(),
+                "length cannot be specified alongside minLegth or maxLength".to_string()
+            )
+        });
+
+        assert!(SequenceSpecification::new(None, Some(12), None, None).is_ok());
     }
 
     #[test]
