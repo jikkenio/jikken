@@ -19,8 +19,6 @@ use rand::distributions::uniform::SampleUniform;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use regex::Regex;
-use rnglib::Language;
-use rnglib::RNG;
 use serde::de::Visitor;
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
@@ -34,6 +32,35 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use validated::Validated;
+
+const GIVEN_NAMES: [&str; 20] = [
+    "James",
+    "Michael",
+    "Robert",
+    "John",
+    "David",
+    "William",
+    "Richard",
+    "Joseph",
+    "Thomas",
+    "Christopher",
+    "Mary",
+    "Patricia",
+    "Jennifer",
+    "Linda",
+    "Elizabeth",
+    "Barbara",
+    "Susan",
+    "Jessica",
+    "Karen",
+    "Sarah",
+];
+
+const SURNAMES: [&str; 20] = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Wilson", "Anderson",
+    "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Thompson", "Harris", "Clark",
+    "Lewis", "Robinson",
+];
 
 impl std::cmp::PartialEq<String> for VariableName {
     fn eq(&self, other: &String) -> bool {
@@ -2527,7 +2554,6 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
 }
 
 pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
-    let name_rng = RNG::from(&Language::Fantasy);
     let mut rng = rand::thread_rng();
     (0..max_attempts)
         .map(|_| {
@@ -2535,7 +2561,13 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
                 .specification
                 .as_ref()
                 .and_then(|s| s.generate_if_constrained(&mut rng))
-                .unwrap_or_else(|| name_rng.generate_name())
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} {}",
+                        GIVEN_NAMES.get(rng.gen_range(0..20)).unwrap(),
+                        SURNAMES.get(rng.gen_range(0..20)).unwrap()
+                    )
+                })
         })
         .find(|v| {
             spec.specification
@@ -2556,22 +2588,11 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
     // you should instead have a list of generators you random access into
     trace!("generate_list({:?})", spec);
     let mut rng = rand::thread_rng();
-    let min_length = spec.length.unwrap_or(
-        spec.min_length.unwrap_or(generate_number_in_range(
-            0,
-            spec.length
-                .unwrap_or_else(|| spec.max_length.unwrap_or(100)),
-            &mut rng,
-        )),
-    );
-    let max_length = spec
+    let min_length = spec.min_length.unwrap_or(1);
+    let max_length = spec.max_length.unwrap_or(max(min_length * 2, 10));
+    let actual_length = spec
         .length
-        .unwrap_or(spec.max_length.unwrap_or(generate_number_in_range(
-            min_length + 1,
-            min_length * 2,
-            &mut rng,
-        )));
-    let actual_length = rng.gen_range(min_length..=max_length);
+        .unwrap_or(rng.gen_range(min_length..=max_length));
 
     (0..max_attempts)
         .map(|_| {

@@ -853,7 +853,6 @@ dependencies = [
  "oas3",
  "openapiv3-extended",
  "rand",
- "random_name_generator",
  "regex",
  "remove_dir_all",
  "reqwest",
@@ -871,12 +870,6 @@ dependencies = [
  "validated",
  "walkdir",
 ]
-
-[[package]]
-name = "joinery"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72167d68f5fce3b8655487b8038691a3c9984ee769590f93f2a631f4ad64e4f5"
 
 [[package]]
 name = "js-sys"
@@ -1334,23 +1327,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "random_name_generator"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83f35cf4ff1039c849a4d890c6aa4332df47f9def1e9398ef1e5959bc7f89992"
-dependencies = [
- "anyhow",
- "bitflags 2.5.0",
- "clap",
- "lazy_static",
- "log",
- "rand",
- "regex",
- "rust-embed",
- "titlecase",
-]
-
-[[package]]
 name = "rayon"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1473,40 +1449,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "winreg",
-]
-
-[[package]]
-name = "rust-embed"
-version = "8.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb78f46d0066053d16d4ca7b898e9343bc3530f71c61d5ad84cd404ada068745"
-dependencies = [
- "rust-embed-impl",
- "rust-embed-utils",
- "walkdir",
-]
-
-[[package]]
-name = "rust-embed-impl"
-version = "8.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91ac2a3c6c0520a3fb3dd89321177c3c692937c4eb21893378219da10c44fc8"
-dependencies = [
- "proc-macro2",
- "quote",
- "rust-embed-utils",
- "syn 2.0.60",
- "walkdir",
-]
-
-[[package]]
-name = "rust-embed-utils"
-version = "8.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f69089032567ffff4eada41c573fc43ff466c7db7c5688b2e7969584345581"
-dependencies = [
- "sha2",
- "walkdir",
 ]
 
 [[package]]
@@ -1889,17 +1831,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "titlecase"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38397a8cdb017cfeb48bf6c154d6de975ac69ffeed35980fde199d2ee0842042"
-dependencies = [
- "joinery",
- "lazy_static",
- "regex",
-]
 
 [[package]]
 name = "tokio"

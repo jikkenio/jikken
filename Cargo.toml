@@ -55,6 +55,6 @@ oas3 = { version = "0.4.0" }
 openapiv3-extended = { version="6.0.0", features = ["v2"] }
 num = { version = "0.4.1" }
 rand = { version = "0.8.5" }
-random_name_generator = "0.3.6"
 nonempty-collections = { version="0.2.5" }
+
 [dev-dependencies]
