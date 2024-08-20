@@ -944,7 +944,7 @@ impl SequenceSpecification {
         let length_not_combined_with_min_or_max_validation =
             if length.and(min_length).is_some() || length.and(max_length).is_some() {
                 Validated::fail(
-                    "length cannot be specified alongside minLegth or maxLength".to_string(),
+                    "length cannot be specified alongside minLength or maxLength".to_string(),
                 )
             } else {
                 Good(())
@@ -3034,7 +3034,7 @@ mod tests {
         .for_each(|s| {
             assert_eq!(
                 s.unwrap_err(),
-                "length cannot be specified alongside minLegth or maxLength".to_string()
+                "length cannot be specified alongside minLength or maxLength".to_string()
             )
         });
 
@@ -4211,7 +4211,7 @@ mod tests {
         .for_each(|s| {
             assert_eq!(
                 s.unwrap_err(),
-                "length cannot be specified alongside minLegth or maxLength".to_string()
+                "length cannot be specified alongside minLength or maxLength".to_string()
             )
         });
 
