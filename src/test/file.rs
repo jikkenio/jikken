@@ -5,11 +5,11 @@ use crate::test::variable::Modifier;
 use crate::test::{definition, http, variable};
 use crate::validated::ValidatedExt;
 use chrono::NaiveDate;
-use chrono::NaiveDateTime;
 use chrono::TimeZone;
 use chrono::{DateTime, ParseError};
 use chrono::{Datelike, Local};
 use chrono::{Days, Months};
+use chrono::{Duration, NaiveDateTime};
 use log::debug;
 use log::error;
 use log::trace;
@@ -2455,10 +2455,6 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
         .unwrap_or(Local::now());
 
-    let year_range = (min.year(), max.year());
-    let month_range = (max.month(), min.month());
-    let day_range = (max.day(), min.day());
-
     let mut rng = rand::thread_rng();
 
     (0..max_attempts)
@@ -2473,27 +2469,9 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
-                    let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
-
-                    let month = if year == year_range.1 {
-                        generate_number_in_range(month_range.0, month_range.1, &mut rng)
-                    } else {
-                        generate_number_in_range(1, 12, &mut rng)
-                    };
-
-                    let day = if month == month_range.1 && year == year_range.1 {
-                        generate_number_in_range(day_range.0, day_range.1, &mut rng)
-                    } else {
-                        generate_number_in_range(day_range.0, 28, &mut rng)
-                    };
-
-                    chrono::NaiveDate::default()
-                        .with_year(year)
-                        .and_then(|d| d.with_month(month))
-                        .and_then(|d| d.with_day(day))
-                        .map(|d| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()))
-                        .map(|d| spec.time_to_str(&d.unwrap()))
-                        .unwrap_or_default()
+                    let days_diff = (max - min).num_days();
+                    let new_date = min + Duration::days(rng.gen_range(0..=days_diff));
+                    spec.time_to_str(&new_date)
                 })
         })
         .find(|date_str| {
@@ -2523,10 +2501,6 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
         .unwrap_or(Local::now());
 
-    let year_range = (min.year(), max.year());
-    let month_range = (max.month(), min.month());
-    let day_range = (max.day(), min.day());
-
     let mut rng = rand::thread_rng();
 
     (0..max_attempts)
@@ -2541,27 +2515,9 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                     _ => s.generate_if_constrained(&mut rng),
                 })
                 .unwrap_or_else(|| {
-                    let year = generate_number_in_range(year_range.0, year_range.1, &mut rng);
-
-                    let month = if year == year_range.1 {
-                        generate_number_in_range(month_range.0, month_range.1, &mut rng)
-                    } else {
-                        generate_number_in_range(1, 12, &mut rng)
-                    };
-
-                    let day = if month == month_range.1 && year == year_range.1 {
-                        generate_number_in_range(day_range.0, day_range.1, &mut rng)
-                    } else {
-                        generate_number_in_range(day_range.0, 28, &mut rng)
-                    };
-
-                    chrono::NaiveDateTime::default()
-                        .with_year(year)
-                        .and_then(|d| d.with_month(month))
-                        .and_then(|d| d.with_day(day))
-                        .map(|d| Local.from_local_datetime(&d))
-                        .map(|d| spec.time_to_str(&d.unwrap()))
-                        .unwrap_or_default()
+                    let seconds_diff = (max - min).num_seconds();
+                    let new_date_time = min + Duration::seconds(rng.gen_range(0..=seconds_diff));
+                    spec.time_to_str(&new_date_time)
                 })
         })
         .find(|date_str| {
@@ -3730,6 +3686,30 @@ mod tests {
     }
 
     #[test]
+    fn date_generation_with_min_max() {
+        let min_date = "2024-01-01";
+        let max_date = "2024-12-31";
+        let spec = DateSpecification::new(
+            None,
+            Some(min_date.to_string()),
+            Some(max_date.to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        let val = generate_date(&spec, 10);
+        assert!(val.is_some());
+        let date = spec.str_to_time(val.clone().unwrap().as_str()).unwrap();
+        assert!(date > spec.str_to_time(min_date).unwrap());
+        assert!(date < spec.str_to_time(max_date).unwrap());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
     fn date_generation_with_modifier() {
         let spec = DateSpecification::new(
             Some(Specification::Value("2020-09-12".to_string())),
@@ -3804,6 +3784,30 @@ mod tests {
             .is_good());
 
         assert_eq!("2020-09-13 04:27:27.477711492", val.clone().unwrap());
+    }
+
+    #[test]
+    fn datetime_generation_with_min_max() {
+        let min_dt = "2024-01-01 12:34:56";
+        let max_dt = "2024-12-31 12:34:56";
+        let spec = DateTimeSpecification::new(
+            None,
+            Some(min_dt.to_string()),
+            Some(max_dt.to_string()),
+            None,
+            None,
+        )
+        .unwrap();
+        let val = generate_datetime(&spec, 10);
+        assert!(val.is_some());
+        let dt = spec.str_to_time(val.clone().unwrap().as_str()).unwrap();
+        assert!(dt > spec.str_to_time(min_dt).unwrap());
+        assert!(dt < spec.str_to_time(max_dt).unwrap());
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
     }
 
     #[test]
