@@ -60,12 +60,12 @@ impl Config {
 
         global_variables.insert(
             "NOW".to_string(),
-            format!("{}", now.format("%Y-%m-%d %H:%M:%S%.f")),
+            format!("{}", now.format("%Y-%m-%d %H:%M:%S.%3f")),
         );
 
         global_variables.insert(
             "NOW_UTC".to_string(),
-            format!("{}", now_utc.format("%Y-%m-%d %H:%M:%S%.f")),
+            format!("{}", now_utc.format("%Y-%m-%d %H:%M:%S.%3f")),
         );
 
         global_variables
