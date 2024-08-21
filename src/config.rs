@@ -1,5 +1,5 @@
 use crate::test::{self, SecretValue};
-use chrono::{Local, Utc};
+use chrono::Local;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -47,15 +47,25 @@ struct FileSettings {
 
 impl Config {
     pub fn generate_global_variables(&self) -> Vec<test::Variable> {
+        let now = Local::now();
+        let now_utc = now.to_utc();
         let mut global_variables = BTreeMap::new();
-        global_variables.insert(
-            "TODAY".to_string(),
-            format!("{}", Local::now().format("%Y-%m-%d")),
-        );
+
+        global_variables.insert("TODAY".to_string(), format!("{}", now.format("%Y-%m-%d")));
 
         global_variables.insert(
             "TODAY_UTC".to_string(),
-            format!("{}", Utc::now().format("%Y-%m-%d")),
+            format!("{}", now_utc.format("%Y-%m-%d")),
+        );
+
+        global_variables.insert(
+            "NOW".to_string(),
+            format!("{}", now.format("%Y-%m-%d %H:%M:%S.%3f")),
+        );
+
+        global_variables.insert(
+            "NOW_UTC".to_string(),
+            format!("{}", now_utc.format("%Y-%m-%d %H:%M:%S.%3f")),
         );
 
         global_variables
