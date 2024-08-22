@@ -1603,7 +1603,7 @@ impl Checker for DateTimeSpecification {
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum DatumSchema {
-    #[serde(alias = "boolean")]
+    #[serde(alias = "boolean", alias = "Bool", alias = "bool")]
     Boolean {
         #[serde(flatten)]
         specification: Option<BooleanSpecification>,
