@@ -17,6 +17,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - OpenApi test generation now supports ref links
 - OpenApi test generation can now produce variable definitions for generating test data
 - Stages in multi-stage tests can now have names via the `name` field
+- New `NOW` and `NOW_UTC` built-in global variables, which contain the current timestamp in local and UTC time
 
 # Changes
 
@@ -39,7 +40,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Each run of a test iteration now correctly counts as a distinct test
 - Test Definitions no longer include global variables in telemetry, which fixes an issue that may result in inconsistent test ids
 
-  # 0.7.2
+# 0.7.2
 
 # New Features:
 
@@ -49,14 +50,14 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 
 - Fixed compare endpoints not properly comparing bodies.
 
-  # 0.7.1
+# 0.7.1
 
 # New Features:
 
 - State Variables (extracted from responses) are now able to be embedded into Post Bodies and URLs for subsequent stage/test runs.
 - Basic Cookie support. Cookies returned from API endpoints are now added to state and treated as Strict domain/path cookies which pass to future stages.
 
-  # 0.7.0
+# 0.7.0
 
   This release marks a big milestone for Jikken. We've added support for JUnit output and the ability to generate
   tests based on OpenAPI Specs. While these functionalities are working, we plan to incrementally improve them
@@ -86,7 +87,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Improved default messaging so that errors/details print after initial test pass/fail line.
 - The CLI tool now provides different exit codes based on test success/failure.
 
-  # 0.6.2
+# 0.6.2
 
 # New Features:
 
@@ -109,7 +110,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Fixed calls which have body data to properly calculate content-type and content-length headers.
 - Fixed console colors for legacy windows terminals (ansi-support).
 
-  # 0.6.1
+# 0.6.1
 
 # Changes:
 
@@ -119,7 +120,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 
 - A println! used for local testing was incorrectly merged into the 0.6.0 release. It has been removed.
 
-  # 0.6.0
+# 0.6.0
 
 **BREAKING CHANGE**
 In agreement with user feedback, we've decided to make our first breaking change to the test format.
@@ -153,7 +154,7 @@ We don't foresee any additional breaking changes on the horizon.
 - If a test is not checking response bodies, the test will no longer fail if the response body is not valid JSON.
 - If test runs are configured to exit early on failure, the telemetry session completion and console status messages now properly trigger.
 
-  # 0.5.0
+# 0.5.0
 
 # New Features:
 
@@ -170,7 +171,7 @@ We don't foresee any additional breaking changes on the horizon.
 
 - Ignore and Add Parameter definitions now properly work for compare requests
 
-  # 0.4.0
+# 0.4.0
 
 # New Features:
 
@@ -189,7 +190,7 @@ We don't foresee any additional breaking changes on the horizon.
 
 - Fix cleanup stage to properly handle onsuccess and onfailure definitions
 
-  # 0.3.0
+# 0.3.0
 
 # New Features:
 
@@ -203,7 +204,7 @@ We don't foresee any additional breaking changes on the horizon.
 - Added basic example of a multistage test
 - Created Windows Installer for releases
 
-  # 0.2.0
+# 0.2.0
 
 # New Features:
 
@@ -215,7 +216,7 @@ We don't foresee any additional breaking changes on the horizon.
 
 - Fix label when printing tests by number. They now print starting at 1 instead of 0.
 
-  # 0.1.0
+# 0.1.0
 
   Initial release of the Jikken CLI tool.
 
