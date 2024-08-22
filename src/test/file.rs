@@ -1628,7 +1628,7 @@ pub enum DatumSchema {
         #[serde(flatten)]
         specification: Option<DateSpecification>,
     },
-    #[serde(alias = "dateTime")]
+    #[serde(alias = "dateTime", alias = "Datetime", alias = "datetime")]
     DateTime {
         #[serde(flatten)]
         specification: Option<DateTimeSpecification>,
