@@ -2393,7 +2393,12 @@ pub fn generate_bool(spec: &BooleanSpecification, max_attempts: u16) -> Option<b
 
 pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
     // note: this could potentially overflow with very large floats, but there doesn't seem to be another way to do this...
-    generate_number::<f64>(spec, max_attempts, 0f64, 100f64).map(|f| (f * 1001.0).round() / 1000.0)
+    generate_number::<f64>(spec, max_attempts, 0_f64, 100_f64)
+        .map(|f| (f * 1001.0).round() / 1000.0)
+}
+
+pub fn generate_integer(spec: &NumericSpecification<i64>, max_attempts: u16) -> Option<i64> {
+    generate_number::<i64>(spec, max_attempts, 0_i64, 100_i64)
 }
 
 pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<String> {
@@ -2601,8 +2606,9 @@ pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<
                     }
                 })
                 .unwrap_or_else(|| {
+                    let int_spec = NumericSpecification::<i64>::default();
                     (0..actual_length)
-                        .map(|_| serde_json::Value::from(rng.gen::<i64>()))
+                        .map(|_| Value::from(generate_integer(&int_spec, max_attempts)))
                         .collect()
                 })
         })
@@ -2636,13 +2642,11 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(serde_json::Value::from),
-        DatumSchema::Integer { specification } => generate_number(
+        DatumSchema::Integer { specification } => generate_integer(
             specification
                 .as_ref()
                 .unwrap_or(&NumericSpecification::<i64>::default()),
             max_attempts,
-            0_i64,
-            100_i64,
         )
         .map(serde_json::Value::from),
         DatumSchema::String { specification } => generate_string(
