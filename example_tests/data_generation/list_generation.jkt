@@ -1,4 +1,4 @@
-name: Generation Using Schema Defined in a Variable
+name: List Body Generation
 tags: variables generation
 request:
   method: Post
@@ -9,6 +9,8 @@ response:
   status: 200
 variables:
   - name: postcodes
-    type: list
+    type: List
+    minLength: 1
+    maxLength: 5
     schema:
-        type: string
+      type: String

@@ -190,18 +190,18 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
                                 specification: None,
                             },
                         })),
-                    DatumSchema::Int { specification } => specification
+                    DatumSchema::Integer { specification } => specification
                         .map(|s| {
                             IntegerSpecification::new(s.specification, s.min, s.max).map(|s| {
                                 ValueOrDatumOrFileOrSecret::Schema {
-                                    value: DatumSchema::Int {
+                                    value: DatumSchema::Integer {
                                         specification: Some(s),
                                     },
                                 }
                             })
                         })
                         .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Int {
+                            value: DatumSchema::Integer {
                                 specification: None,
                             },
                         })),
@@ -267,7 +267,7 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
                             })
                         })
                         .unwrap_or(Ok(ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Int {
+                            value: DatumSchema::Integer {
                                 specification: None,
                             },
                         })),
@@ -1139,11 +1139,11 @@ mod tests {
 
         assert_eq!(
             ValueOrDatumOrFileOrSecret::Schema {
-                value: DatumSchema::Int {
+                value: DatumSchema::Integer {
                     specification: None
                 }
             },
-            ValueOrDatumOrFile::Schema(DatumSchema::Int {
+            ValueOrDatumOrFile::Schema(DatumSchema::Integer {
                 specification: None
             })
             .try_into()

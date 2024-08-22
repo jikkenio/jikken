@@ -156,7 +156,7 @@ mod openapi_legacy {
                 openapiv3::Type::Boolean {} => Some(DatumSchema::Boolean {
                     specification: None,
                 }),
-                openapiv3::Type::Integer(int) => Some(DatumSchema::Int {
+                openapiv3::Type::Integer(int) => Some(DatumSchema::Integer {
                     specification: Some(IntegerSpecification {
                         max: int.maximum.map(|v| v + int.exclusive_maximum as i64),
                         min: int.minimum.map(|v| v + int.exclusive_minimum as i64),
@@ -581,7 +581,7 @@ mod openapi_v31 {
             oas3::spec::SchemaType::Boolean => DatumSchema::Boolean {
                 specification: None,
             },
-            oas3::spec::SchemaType::Integer => DatumSchema::Int {
+            oas3::spec::SchemaType::Integer => DatumSchema::Integer {
                 specification: Some(IntegerSpecification {
                     max: schema.maximum.and_then(|n| {
                         n.as_i64()
