@@ -2405,7 +2405,7 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
     let mut rng = rand::thread_rng();
     let min_length = spec
         .min_length
-        .unwrap_or(min(5, spec.max_length.unwrap_or(5)));
+        .unwrap_or(min(5, spec.max_length.map(|m| m / 2).unwrap_or(5)));
     let max_length = spec.max_length.unwrap_or(max(min_length * 2, 20));
     let string_length = spec
         .length
