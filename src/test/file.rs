@@ -1613,8 +1613,8 @@ pub enum DatumSchema {
         #[serde(flatten)]
         specification: Option<FloatSpecification>,
     },
-    #[serde(alias = "int")]
-    Int {
+    #[serde(alias = "integer", alias = "Int", alias = "int")]
+    Integer {
         #[serde(flatten)]
         specification: Option<IntegerSpecification>,
     },
@@ -1679,7 +1679,9 @@ impl DatumSchema {
             DatumSchema::Boolean { specification } => {
                 Self::check_bool(specification, actual, formatter)
             }
-            DatumSchema::Int { specification } => Self::check_int(specification, actual, formatter),
+            DatumSchema::Integer { specification } => {
+                Self::check_int(specification, actual, formatter)
+            }
             DatumSchema::List { specification } => {
                 Self::check_list(specification, actual, strict, formatter)
             }
@@ -2617,7 +2619,7 @@ pub fn generate_value_from_schema(
             max_attempts,
         )
         .map(serde_json::Value::from),
-        DatumSchema::Int { specification } => generate_number(
+        DatumSchema::Integer { specification } => generate_number(
             specification
                 .as_ref()
                 .unwrap_or(&NumericSpecification::<i64>::default()),
@@ -3273,7 +3275,7 @@ mod tests {
     fn datum_int_type_validation() {
         assert_eq!(
             true,
-            DatumSchema::Int {
+            DatumSchema::Integer {
                 specification: None,
             }
             .check(&serde_json::json!({}), true, &|_e, _a| "".to_string())
@@ -3284,7 +3286,7 @@ mod tests {
 
         assert_eq!(
             false,
-            DatumSchema::Int {
+            DatumSchema::Integer {
                 specification: None,
             }
             .check(&serde_json::json!(4), true, &|_e, _a| "".to_string())
@@ -4078,7 +4080,7 @@ mod tests {
             Box::from(DatumSchema::String {
                 specification: None,
             }),
-            Box::from(DatumSchema::Int {
+            Box::from(DatumSchema::Integer {
                 specification: None,
             }),
         ]);
@@ -4101,7 +4103,7 @@ mod tests {
             Box::from(DatumSchema::String {
                 specification: None,
             }),
-            Box::from(DatumSchema::Int {
+            Box::from(DatumSchema::Integer {
                 specification: None,
             }),
         ]);
@@ -4127,7 +4129,7 @@ mod tests {
             Box::from(DatumSchema::String {
                 specification: None,
             }),
-            Box::from(DatumSchema::Int {
+            Box::from(DatumSchema::Integer {
                 specification: None,
             }),
         ]);
@@ -4153,7 +4155,7 @@ mod tests {
             Box::from(DatumSchema::String {
                 specification: None,
             }),
-            Box::from(DatumSchema::Int {
+            Box::from(DatumSchema::Integer {
                 specification: None,
             }),
         ]);
@@ -4197,9 +4199,10 @@ mod tests {
 
     #[test]
     fn datum_specification_none_of_following_spec() {
-        let spec = Specification::<Box<DatumSchema>>::NoneOf(vec![Box::from(DatumSchema::Int {
-            specification: None,
-        })]);
+        let spec =
+            Specification::<Box<DatumSchema>>::NoneOf(vec![Box::from(DatumSchema::Integer {
+                specification: None,
+            })]);
 
         if let Specification::<Box<DatumSchema>>::NoneOf(v) = &spec {
             assert!(spec
