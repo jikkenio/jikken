@@ -24,7 +24,7 @@ use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self};
@@ -61,6 +61,8 @@ const SURNAMES: [&str; 20] = [
     "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Thompson", "Harris", "Clark",
     "Lewis", "Robinson",
 ];
+
+const EMAIL_DOMAINS: [&str; 3] = ["example.com", "example.net", "example.org"];
 
 impl std::cmp::PartialEq<String> for VariableName {
     fn eq(&self, other: &String) -> bool {
@@ -2329,7 +2331,12 @@ pub fn load(filename: &str) -> Result<test::File, Box<dyn Error + Send + Sync>> 
     }
 }
 
-pub fn generate_number<T>(spec: &NumericSpecification<T>, max_attempts: u16) -> Option<T>
+pub fn generate_number<T>(
+    spec: &NumericSpecification<T>,
+    max_attempts: u16,
+    default_min: T,
+    default_max: T,
+) -> Option<T>
 where
     T: num::Num
         + num::Bounded
@@ -2351,8 +2358,8 @@ where
                 .as_ref()
                 .and_then(|s| s.generate_if_constrained(&mut rng))
                 .unwrap_or(generate_number_in_range(
-                    spec.min.unwrap_or(T::min_value()),
-                    spec.max.unwrap_or(T::max_value()),
+                    spec.min.unwrap_or(default_min),
+                    spec.max.unwrap_or(default_max),
                     &mut rng,
                 ))
         })
@@ -2385,7 +2392,8 @@ pub fn generate_bool(spec: &BooleanSpecification, max_attempts: u16) -> Option<b
 }
 
 pub fn generate_float(spec: &FloatSpecification, max_attempts: u16) -> Option<f64> {
-    generate_number::<f64>(spec, max_attempts)
+    // note: this could potentially overflow with very large floats, but there doesn't seem to be another way to do this...
+    generate_number::<f64>(spec, max_attempts, 0f64, 100f64).map(|f| (f * 1001.0).round() / 1000.0)
 }
 
 pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<String> {
@@ -2395,8 +2403,10 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
                             "; // 0123456789)(*&^%$#@!~";
 
     let mut rng = rand::thread_rng();
-    let min_length = spec.min_length.unwrap_or(1);
-    let max_length = spec.max_length.unwrap_or(max(min_length * 2, 50));
+    let min_length = spec
+        .min_length
+        .unwrap_or(min(5, spec.max_length.map(|m| m / 2).unwrap_or(5)));
+    let max_length = spec.max_length.unwrap_or(max(min_length * 2, 20));
     let string_length = spec
         .length
         .unwrap_or(rng.gen_range(min_length..=max_length));
@@ -2455,7 +2465,10 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
         .max
         .as_ref()
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
-        .unwrap_or(Local::now());
+        .unwrap_or(
+            min.with_year(max(Local::now().year(), min.year() + 10))
+                .unwrap(),
+        );
 
     let mut rng = rand::thread_rng();
 
@@ -2501,7 +2514,10 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
         .max
         .as_ref()
         .and_then(|date_str| spec.str_to_time(date_str.as_str()).ok())
-        .unwrap_or(Local::now());
+        .unwrap_or(
+            min.with_year(max(Local::now().year(), min.year() + 10))
+                .unwrap(),
+        );
 
     let mut rng = rand::thread_rng();
 
@@ -2556,8 +2572,9 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
 }
 
 pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<String> {
+    let mut rng = rand::thread_rng();
     generate_string(&spec.specification, max_attempts)
-        .map(|ran_string| format!("{}@gmail.com", ran_string))
+        .map(|s| format!("{}@{}", s, EMAIL_DOMAINS.get(rng.gen_range(0..3)).unwrap()))
 }
 
 pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<Value> {
@@ -2624,6 +2641,8 @@ pub fn generate_value_from_schema(
                 .as_ref()
                 .unwrap_or(&NumericSpecification::<i64>::default()),
             max_attempts,
+            0_i64,
+            100_i64,
         )
         .map(serde_json::Value::from),
         DatumSchema::String { specification } => generate_string(
@@ -2956,12 +2975,12 @@ mod tests {
     }
 
     #[test]
-    fn numericspecification_no_inputs() {
+    fn numeric_specification_no_inputs() {
         assert!(IntegerSpecification::new(None, None, None).is_ok());
     }
 
     #[test]
-    fn numericspecification_min_max_agreemnt() {
+    fn numeric_specification_min_max_agreemnt() {
         assert!(IntegerSpecification::new(None, Some(12), Some(12)).is_ok());
         assert!(IntegerSpecification::new(None, Some(12), Some(24)).is_ok());
         assert_eq!(
@@ -2971,12 +2990,12 @@ mod tests {
     }
 
     #[test]
-    fn stringspecification_no_inputs() {
+    fn string_specification_no_inputs() {
         assert!(StringSpecification::new(None, None, None, None, None).is_ok());
     }
 
     #[test]
-    fn stringspecification_negative_input() {
+    fn string_specification_negative_input() {
         assert_eq!(
             StringSpecification::new(None, Some(-12), None, None, None).unwrap_err(),
             "negative value provided for length".to_string()
@@ -2998,7 +3017,7 @@ mod tests {
     }
 
     #[test]
-    fn stringspecification_min_max_agreement() {
+    fn string_specification_min_max_agreement() {
         assert_eq!(
             StringSpecification::new(None, None, Some(24), Some(12), None).unwrap_err(),
             "minLength must be less than or equal to maxLength".to_string()
@@ -3008,7 +3027,7 @@ mod tests {
     }
 
     #[test]
-    fn stringspecification_min_max_and_length_specified() {
+    fn string_specification_min_max_and_length_specified() {
         vec![
             StringSpecification::new(None, Some(12), Some(24), Some(30), None),
             StringSpecification::new(None, Some(12), Some(24), None, None),
@@ -3047,12 +3066,12 @@ mod tests {
     }
 
     #[test]
-    fn datespecification_valid_inputs() {
+    fn date_specification_valid_inputs() {
         assert!(DateSpecification::new(None, None, None, None, None).is_ok());
     }
 
     #[test]
-    fn datespecification_invalid_input() {
+    fn date_specification_invalid_input() {
         let res = DateSpecification::new(
             None,
             Some("Hello!".to_string()),
@@ -3066,7 +3085,7 @@ mod tests {
     }
 
     #[test]
-    fn datespecification_invalid_inputs() {
+    fn date_specification_invalid_inputs() {
         let res = DateSpecification::new(
             None,
             Some("Hello!".to_string()),
@@ -3115,7 +3134,7 @@ mod tests {
     }
 
     #[test]
-    fn datespecification_modifier_missing_value() {
+    fn date_specification_modifier_missing_value() {
         let validations = vec![
             DateSpecification::new(
                 None,
@@ -3151,7 +3170,7 @@ mod tests {
     }
 
     #[test]
-    fn datespecification_modifier_with_value() {
+    fn date_specification_modifier_with_value() {
         let res = DateSpecification::new(
             Some(Specification::Value("2020-09-12".to_string())),
             None,
@@ -3575,15 +3594,34 @@ mod tests {
 
     #[test]
     fn number_generation() {
+        let spec = NumericSpecification::<i16>::default();
+        let num = generate_number(&spec, 10, 0_i16, 100_i16);
+
+        assert!(num.is_some());
+        let val = num.unwrap();
+        assert!(val >= 0);
+        assert!(val <= 100);
+        assert!(spec
+            .check(&num.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn number_generation_with_min_max() {
         let spec = NumericSpecification::<u16> {
             min: Some(1),
             max: Some(9),
             ..Default::default()
         };
 
-        let num = generate_number(&spec, 10);
+        let num = generate_number(&spec, 10, 0_u16, 100_u16);
 
         assert!(num.is_some());
+        let val = num.unwrap();
+        assert!(val >= 1);
+        assert!(val <= 9);
         assert!(spec
             .check(&num.unwrap(), &|_e, _a| "".to_string())
             .into_iter()
@@ -3593,6 +3631,22 @@ mod tests {
 
     #[test]
     fn string_generation() {
+        let spec = StringSpecification::default();
+        let val = generate_string(&spec, 10);
+
+        assert!(val.is_some());
+        let string = val.clone().unwrap();
+        assert!(string.len() >= 5);
+        assert!(string.len() <= 20);
+        assert!(spec
+            .check(&val.unwrap(), &|_e, _a| "".to_string())
+            .into_iter()
+            .collect::<Validated<Vec<()>, String>>()
+            .is_good());
+    }
+
+    #[test]
+    fn string_generation_with_none_of() {
         let spec = StringSpecification {
             specification: Some(Specification::NoneOf(vec![
                 "foo".to_string(),
@@ -3604,6 +3658,9 @@ mod tests {
         let val = generate_string(&spec, 10);
 
         assert!(val.is_some());
+        let string = val.clone().unwrap();
+        assert!(!string.eq("foo"));
+        assert!(!string.eq("bar"));
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
             .into_iter()
@@ -3829,6 +3886,8 @@ mod tests {
         let spec = EmailSpecification::default();
         let val = generate_email(&spec, 10);
         assert!(val.is_some());
+        let email = val.clone().unwrap();
+        assert!(email.contains("@example."));
         assert!(spec
             .check(&val.unwrap(), &|_e, _a| "".to_string())
             .into_iter()
