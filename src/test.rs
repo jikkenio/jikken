@@ -367,7 +367,7 @@ impl Variable {
         let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();
         if !regex.is_match(variable.name.as_str()) {
             debug!("variable name '{}' is invalid", variable.name);
-            return Err(validation::Error{reason: "name invalid - may only contain alphanumeric characters, hyphens, and underscores".to_string()});
+            return Err(validation::Error{reason: "name is invalid - may only contain alphanumeric characters, hyphens, and underscores".to_string()});
         }
 
         variable
