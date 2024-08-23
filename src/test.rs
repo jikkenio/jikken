@@ -19,6 +19,7 @@ use file::EmailSpecification;
 use file::SequenceSpecification;
 use file::StringSpecification;
 use log::{debug, error, trace};
+use regex::Regex;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -363,6 +364,12 @@ impl Variable {
         variable: file::UnvalidatedVariable,
         source_path: &str,
     ) -> Result<Variable, validation::Error> {
+        let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();
+        if !regex.is_match(variable.name.as_str()) {
+            debug!("variable name '{}' is invalid", variable.name);
+            return Err(validation::Error{reason: "name invalid - may only contain alphanumeric characters, hyphens, and underscores".to_string()});
+        }
+
         variable
             .value
             .try_into()
@@ -1077,9 +1084,64 @@ impl Definition {
 #[cfg(test)]
 mod tests {
 
+    use file::UnvalidatedVariable;
+    use serde_json::Value;
+
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::test::definition::CleanupDescriptor;
+
+    #[test]
+    fn variable_new_with_valid_name() {
+        let var = UnvalidatedVariable {
+            name: "VALID-name_123".to_string(),
+            value: ValueOrDatumOrFile::Value {
+                value: Value::default(),
+            },
+        };
+
+        let res = Variable::new(var, "");
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn variable_new_with_invalid_name_dot() {
+        let var = UnvalidatedVariable {
+            name: "invalid.name".to_string(),
+            value: ValueOrDatumOrFile::Value {
+                value: Value::default(),
+            },
+        };
+
+        let res = Variable::new(var, "");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn variable_new_with_invalid_name_space() {
+        let var = UnvalidatedVariable {
+            name: "invalid name".to_string(),
+            value: ValueOrDatumOrFile::Value {
+                value: Value::default(),
+            },
+        };
+
+        let res = Variable::new(var, "");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn variable_new_with_invalid_name_empty() {
+        let var = UnvalidatedVariable {
+            name: "".to_string(),
+            value: ValueOrDatumOrFile::Value {
+                value: Value::default(),
+            },
+        };
+
+        let res = Variable::new(var, "");
+        assert!(res.is_err());
+    }
 
     #[test]
     fn secret_value_debug_obsfucated() {
