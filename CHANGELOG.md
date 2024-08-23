@@ -33,6 +33,7 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Test iterations now count as distinct test runs for telemetry data
 - Updated Example tests to better showcase tag usage
 - Added test execution runtimes to CLI output
+- Added restrictions for variable names, which must now contain only alphanumeric characters, hyphens, and underscores
 
 # Bug Fixes
 
