@@ -71,7 +71,7 @@ impl std::cmp::PartialEq<String> for VariableName {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Clone)]
-pub struct VariableName(String);
+pub struct VariableName(pub String);
 
 impl VariableName {
     pub fn val(&self) -> String {

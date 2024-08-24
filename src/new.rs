@@ -481,8 +481,12 @@ mod openapi_v31 {
     use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
+    use crate::test::file::UnvalidatedVariable;
+    use crate::test::file::UnvalidatedVariableNameOrComponent;
     use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
+    use crate::test::file::ValueOrDatumOrFile;
     use crate::test::file::ValueOrDatumSchema;
+    use crate::test::file::VariableName;
     use oas3::spec::Header;
     use oas3::spec::ObjectOrReference;
     use oas3::spec::Operation;
@@ -666,7 +670,7 @@ mod openapi_v31 {
         verb: test::http::Verb,
         op: &oas3::spec::Operation,
         spec: &Spec,
-    ) -> UnvalidatedRequest {
+    ) -> (UnvalidatedRequest, Option<UnvalidatedVariable>) {
         let mut headers: Vec<test::http::Header> = vec![];
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
@@ -690,41 +694,45 @@ mod openapi_v31 {
             }
         });
 
-        let _maybe_schema = op.request_body.as_ref().and_then(|body| {
+        let maybe_variable = op.request_body.as_ref().and_then(|body| {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
-                        schema_to_datum(s, spec)
-                            .map(UnvalidatedVariableNameOrDatumSchema::Component)
+                        schema_to_datum(s, spec).map(|s| UnvalidatedVariable {
+                            name: "body".to_string(),
+                            value: ValueOrDatumOrFile::Schema(s),
+                        })
                     })
                 })
             })
         });
 
-        UnvalidatedRequest {
-            body: None,
-            // body_schema: maybe_schema, // TODO: This will have to be moved into a variable
-            method: Some(verb),
-            url: url.to_string(),
-            headers: if headers.is_empty() {
-                None
-            } else {
-                Some(headers)
+        (
+            UnvalidatedRequest {
+                body: maybe_variable.as_ref().map(|_| {
+                    UnvalidatedVariableNameOrComponent::VariableName(VariableName(
+                        "${body}".to_string(),
+                    ))
+                }),
+                method: Some(verb),
+                url: url.to_string(),
+                headers: if headers.is_empty() {
+                    None
+                } else {
+                    Some(headers)
+                },
+                params: if parameters.is_empty() {
+                    None
+                } else {
+                    Some(parameters)
+                },
             },
-            params: if parameters.is_empty() {
-                None
-            } else {
-                Some(parameters)
-            },
-        }
+            maybe_variable,
+        )
     }
 
-    fn create_variables(
-        op: &Operation,
-        spec: &Spec,
-    ) -> Option<Vec<test::file::UnvalidatedVariable>> {
-        let ret = op
-            .parameters
+    fn create_variables(op: &Operation, spec: &Spec) -> Vec<test::file::UnvalidatedVariable> {
+        op.parameters
             .iter()
             .map(|p_or_ref| {
                 p_or_ref
@@ -739,13 +747,7 @@ mod openapi_v31 {
             })
             .filter(Option::is_some)
             .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
-            .unwrap_or_default();
-
-        if ret.is_empty() {
-            None
-        } else {
-            Some(ret)
-        }
+            .unwrap_or_default()
     }
 
     fn create_test(
@@ -769,9 +771,18 @@ mod openapi_v31 {
         //change that to fit how Jikken specifies variables
         //and create jikken variables for each
         let resolved_path = path.replace('{', "${").to_string();
-        let variables = create_variables(op, spec);
+        let mut variables = create_variables(op, spec);
 
-        let request = create_request(resolved_path.as_str(), verb, op, spec);
+        let (request, request_var) = create_request(resolved_path.as_str(), verb, op, spec);
+        if let Some(v) = request_var {
+            variables.push(v)
+        }
+        let maybe_vars = if !variables.is_empty() {
+            Some(variables)
+        } else {
+            None
+        };
+
         let response =
             create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
 
@@ -785,7 +796,7 @@ mod openapi_v31 {
                     request,
                     compare: None,
                     response,
-                    variables,
+                    variables: maybe_vars,
                     name: None,
                     delay: None,
                 }]),
@@ -801,7 +812,7 @@ mod openapi_v31 {
                 response,
                 request: Some(request),
                 filename: create_filename(path_string, &verb),
-                variables,
+                variables: maybe_vars,
                 ..default
             })
         }
@@ -843,7 +854,7 @@ mod openapi_v31 {
         multistage: bool,
         spec: &Spec,
     ) -> Vec<File> {
-        let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
+        let operations: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
             (&path.post, test::http::Verb::Post),
             (&path.delete, test::http::Verb::Delete),
@@ -851,7 +862,7 @@ mod openapi_v31 {
             (&path.put, test::http::Verb::Put),
         ];
 
-        stuff
+        operations
             .into_iter()
             .flat_map(|(op, verb)| {
                 create_tests_for_op(op, path, path_string, verb, full, multistage, spec)
@@ -920,7 +931,7 @@ pub fn create_tests_from_openapi_spec(
                     .collect()
             });
             match &ret {
-                Ok(_) => info!("Tests generated:{tests_generated}"),
+                Ok(_) => info!("Tests generated:{tests_generated}\n"),
                 Err(e) => error!("{e}"),
             }
 
