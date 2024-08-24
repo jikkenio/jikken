@@ -854,7 +854,7 @@ mod openapi_v31 {
         multistage: bool,
         spec: &Spec,
     ) -> Vec<File> {
-        let stuff: [(&Option<Operation>, test::http::Verb); 5] = [
+        let operations: [(&Option<Operation>, test::http::Verb); 5] = [
             (&path.get, test::http::Verb::Get),
             (&path.post, test::http::Verb::Post),
             (&path.delete, test::http::Verb::Delete),
@@ -862,7 +862,7 @@ mod openapi_v31 {
             (&path.put, test::http::Verb::Put),
         ];
 
-        stuff
+        operations
             .into_iter()
             .flat_map(|(op, verb)| {
                 create_tests_for_op(op, path, path_string, verb, full, multistage, spec)
@@ -931,7 +931,7 @@ pub fn create_tests_from_openapi_spec(
                     .collect()
             });
             match &ret {
-                Ok(_) => info!("Tests generated:{tests_generated}"),
+                Ok(_) => info!("Tests generated:{tests_generated}\n"),
                 Err(e) => error!("{e}"),
             }
 
