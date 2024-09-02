@@ -14,7 +14,7 @@ use log::debug;
 use log::error;
 use log::trace;
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
-use num::Num;
+use num::{Num, Signed};
 use rand::distributions::uniform::SampleUniform;
 use rand::rngs::ThreadRng;
 use rand::Rng;
@@ -663,11 +663,62 @@ where
     }
 }
 
-fn min_less_than_equal_max<T: PartialOrd>(min: &Option<T>, max: &Option<T>) -> bool {
-    min.as_ref()
-        .zip(max.as_ref())
-        .map(|(min, max)| min <= max)
-        .unwrap_or(true)
+fn validate1<T: Copy>(
+    pred: &impl Fn(&T) -> bool,
+    val: &Option<T>,
+    message: String,
+) -> Validated<Option<T>, String> {
+    val.map(|v| {
+        if !pred(&v) {
+            Validated::fail(message)
+        } else {
+            Good(val.clone())
+        }
+    })
+    .unwrap_or(Validated::Good(None))
+}
+
+fn validate2<T>(
+    pred: &impl Fn(&T, &T) -> bool,
+    val: &Option<T>,
+    val2: &Option<T>,
+    message: String,
+) -> Validated<(), String> {
+    val.as_ref()
+        .zip(val2.as_ref())
+        .map(|(v, v2)| {
+            if !pred(v, v2) {
+                Validated::fail(message)
+            } else {
+                Good(())
+            }
+        })
+        .unwrap_or(Good(()))
+}
+
+fn non_negative_validator<T: Signed + Copy>(
+    num: &Option<T>,
+    variable_name: &str,
+) -> Validated<Option<T>, String> {
+    validate1::<T>(
+        &|val| val.is_positive() || val.is_zero(),
+        num,
+        format!("negative value provided for {variable_name}"),
+    )
+}
+
+fn less_than_or_equal_validator<T: PartialOrd>(
+    lhs: &Option<T>,
+    rhs: &Option<T>,
+    lhs_variable_name: &str,
+    rhs_variable_name: &str,
+) -> Validated<(), String> {
+    validate2::<T>(
+        &|lhs, rhs| lhs <= rhs,
+        lhs,
+        rhs,
+        format!("{lhs_variable_name} must be less than or equal to {rhs_variable_name}"),
+    )
 }
 
 impl<T> NumericSpecification<T>
@@ -683,15 +734,17 @@ where
         min: Option<T>,
         max: Option<T>,
     ) -> Result<Self, String> {
-        if min_less_than_equal_max(&min, &max) {
-            Ok(Self {
+        less_than_or_equal_validator(&min, &max, "min", "max")
+            .map(|_| Self {
                 specification,
                 min,
                 max,
             })
-        } else {
-            Err("min must be less than or equal to max".to_string())
-        }
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{}", acc, e))
+            })
     }
 
     fn check_min(
@@ -798,27 +851,11 @@ impl StringSpecification {
         max_length: Option<i64>,
         pattern: Option<String>,
     ) -> Result<Self, String> {
-        let negative_validator = |number: &Option<i64>, var_name: &str| {
-            number
-                .as_ref()
-                .map(|s| {
-                    if s.is_negative() {
-                        Validated::fail(format!("negative value provided for {var_name}"))
-                    } else {
-                        Good(*number)
-                    }
-                })
-                .unwrap_or(Validated::Good(None))
-        };
-
-        let negative_validation_length = negative_validator(&length, "length");
-        let negative_validation_max = negative_validator(&max_length, "maxLength");
-        let negative_validation_min = negative_validator(&min_length, "minLength");
-        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
-            Good(())
-        } else {
-            Validated::fail("minLength must be less than or equal to maxLength".to_string())
-        };
+        let negative_validation_length = non_negative_validator(&length, "length");
+        let negative_validation_max = non_negative_validator(&max_length, "maxLength");
+        let negative_validation_min = non_negative_validator(&min_length, "minLength");
+        let relation_validation =
+            less_than_or_equal_validator(&min_length, &max_length, "minLength", "maxLength");
 
         let length_not_combined_with_min_or_max_validation =
             if length.and(min_length).is_some() || length.and(max_length).is_some() {
@@ -949,27 +986,11 @@ impl SequenceSpecification {
         min_length: Option<i64>,
         max_length: Option<i64>,
     ) -> Result<Self, String> {
-        let negative_validator = |number: &Option<i64>, var_name: &str| {
-            number
-                .as_ref()
-                .map(|s| {
-                    if s.is_negative() {
-                        Validated::fail(format!("negative value provided for {var_name}"))
-                    } else {
-                        Good(*number)
-                    }
-                })
-                .unwrap_or(Validated::Good(None))
-        };
-
-        let negative_validation_length = negative_validator(&length, "length");
-        let negative_validation_max = negative_validator(&max_length, "maxLength");
-        let negative_validation_min = negative_validator(&min_length, "minLength");
-        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
-            Good(())
-        } else {
-            Validated::fail("minLength must be less than or equal to maxLength".to_string())
-        };
+        let negative_validation_length = non_negative_validator(&length, "length");
+        let negative_validation_max = non_negative_validator(&max_length, "maxLength");
+        let negative_validation_min = non_negative_validator(&min_length, "minLength");
+        let relation_validation =
+            less_than_or_equal_validator(&min_length, &max_length, "minLength", "maxLength");
 
         let length_not_combined_with_min_or_max_validation =
             if length.and(min_length).is_some() || length.and(max_length).is_some() {
