@@ -100,7 +100,6 @@ impl<'de> Visitor<'de> for VariableNameVisitor {
     }
 }
 
-    
 impl<'de> Deserialize<'de> for VariableName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -2075,11 +2074,17 @@ pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrCompone
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ValueOrDatumOrFile {
-    File { file: String },
+    File {
+        file: String,
+    },
     Schema(DatumSchema),
-    Value { value: Value },
+    Value {
+        value: Value,
+    },
     #[serde(rename_all = "camelCase")]
-    ValueSet { value_set: Vec<Value> }, 
+    ValueSet {
+        value_set: Vec<Value>,
+    },
 }
 
 impl Hash for ValueOrDatumOrFile {
@@ -2089,9 +2094,10 @@ impl Hash for ValueOrDatumOrFile {
             ValueOrDatumOrFile::Schema(s) => s.hash(state),
             ValueOrDatumOrFile::Value { value } => {
                 serde_json::to_string(value).unwrap().hash(state)
-            },
-            ValueOrDatumOrFile::ValueSet { value_set } => { serde_json::to_string(value_set).unwrap().hash(state)
-            },
+            }
+            ValueOrDatumOrFile::ValueSet { value_set } => {
+                serde_json::to_string(value_set).unwrap().hash(state)
+            }
         }
     }
 }
