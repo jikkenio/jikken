@@ -24,7 +24,8 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Displays an error and skips test if test definition contains unknown fields
 - Displays a warning when user specified config file is not found
 - Some example test API URIs have changed, and the associated tests have been updated
-- VSCode extension now recognizes the `project` keyword
+- Split definition for iterative array variables to use a new `valueSet` keyword
+- VSCode extension now recognizes the `project` and `valueSet` keywords
 - VSCode extension has better support for embedded variables
 - Telemetry now includes test stage names
 - Telemetry now receives skipped tests information

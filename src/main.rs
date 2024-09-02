@@ -244,7 +244,7 @@ async fn search_directory(
     let entry_is_file = |e: &walkdir::DirEntry| e.metadata().map(|e| e.is_file()).unwrap_or(false);
 
     walkdir::WalkDir::new(path)
-        .max_depth(if recursive { ::std::usize::MAX } else { 1 })
+        .max_depth(if recursive { usize::MAX } else { 1 })
         .into_iter()
         .filter_entry(create_top_level_filter(&glob_pattern))
         .filter_map(|e| e.ok())

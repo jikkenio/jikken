@@ -93,10 +93,22 @@ impl Clone for SecretValue {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ValueOrDatumOrFileOrSecret {
-    File { value: String },
-    Secret { value: SecretValue },
-    Schema { value: DatumSchema },
-    Value { value: serde_json::Value },
+    File {
+        value: String,
+    },
+    Secret {
+        value: SecretValue,
+    },
+    Schema {
+        value: DatumSchema,
+    },
+    Value {
+        value: serde_json::Value,
+    },
+    #[serde(rename_all = "camelCase")]
+    ValueSet {
+        value_set: serde_json::Value,
+    },
 }
 /*
     \todo : Address min/max specified AND value
@@ -111,6 +123,11 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
             // \todo : check if file is valid?
             //         we could, but will we ever store responses to file?
             //         basically a TOCTOU question
+            ValueOrDatumOrFile::ValueSet { value_set } => {
+                Ok(ValueOrDatumOrFileOrSecret::ValueSet {
+                    value_set: serde_json::Value::Array(value_set),
+                })
+            }
             ValueOrDatumOrFile::File { file } => {
                 Ok(ValueOrDatumOrFileOrSecret::File { value: file })
             }
@@ -458,6 +475,30 @@ impl Variable {
                 .unwrap_or_default()
                 .trim_matches('"')
                 .to_string(),
+            ValueOrDatumOrFileOrSecret::ValueSet { value_set: v } => {
+                let length = v.as_array().unwrap_or(&Vec::new()).len();
+                if length == 0 {
+                    // divide by zero
+                    return "".to_string();
+                }
+                let index = iteration % length as u32;
+                serde_json::to_string(
+                    v.get(index as usize)
+                        .unwrap_or(&serde_json::Value::from("")),
+                )
+                .map(|jv| {
+                    let ret = definition.resolve_variables(
+                        jv.as_str(),
+                        &HashMap::new(),
+                        global_variables,
+                        iteration,
+                    );
+                    ret
+                })
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string()
+            }
             ValueOrDatumOrFileOrSecret::Schema { value: d } => serde_json::to_string(d)
                 .map(|jv| {
                     definition.resolve_variables(
