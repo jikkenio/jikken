@@ -2728,6 +2728,7 @@ pub fn generate_value_from_schema(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
     use variable::Modifier;
 
     use super::*;
@@ -3584,7 +3585,93 @@ mod tests {
     }
 
     #[test]
-    fn body_or_schema_checker_empty_ignores() {
+    fn body_or_schema_checker_body_empty_ignores() {
+        let body_or_schema = BodyOrSchema::Body(json!(
+            r#"
+                { 
+                    "car":"bmw",
+                    "plane":"merc",
+                    "name": "foo"
+                }
+            "#
+        ));
+        let ignores: Vec<String> = vec![];
+        let checker: BodyOrSchemaChecker = BodyOrSchemaChecker {
+            ignore_values: &ignores,
+            strict: true,
+            value_or_schema: &body_or_schema,
+        };
+        assert_eq!(
+            true,
+            checker
+                .check(
+                    &serde_json::json!({
+                        "name" : "foo"
+                    }),
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn body_or_schema_checker_body_non_empty_ignores() {
+        let body_or_schema = BodyOrSchema::Body(json!({
+                        "foo" : {
+                            "foo3" : 3
+                        },
+                        "bars" : {
+                            "bars2" : {},
+                            "another1" : serde_json::Value::Null,
+                            "another2" : "",
+                            "another3" : "hi"
+                        },
+                        "plane": serde_json::Value::Null,
+                        "name": "foo"
+        }));
+        let ignores = vec![
+            "bars.bars2.bars3".to_string(),
+            "foo.foo2".to_string(),
+            "cars".to_string(),
+        ];
+        let checker: BodyOrSchemaChecker = BodyOrSchemaChecker {
+            ignore_values: &ignores,
+            strict: true,
+            value_or_schema: &body_or_schema,
+        };
+        assert_eq!(
+            false,
+            checker
+                .check(
+                    &serde_json::json!({
+                        "cars" : ["yo"],
+                        "foo" : {
+                            "foo3" : 3
+                        },
+                        "bars" : {
+                            "bars2":{
+                                "bars3" : 3
+                            },
+                            "another1" : serde_json::Value::Null,
+                            "another2" : "",
+                            "another3" : "hi"
+                        },
+                        "plane": serde_json::Value::Null,
+                        "name": "foo"
+
+                    }),
+                    &|_e, _a| "".to_string()
+                )
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_fail(),
+        );
+    }
+
+    #[test]
+    fn body_or_schema_checker_schema_empty_ignores() {
         let body_or_schema = BodyOrSchema::Schema(construct_datum_schema_object());
         let ignores: Vec<String> = vec![];
         let checker: BodyOrSchemaChecker = BodyOrSchemaChecker {
