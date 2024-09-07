@@ -1,5 +1,6 @@
 name: A cat for every status code  
 tags: variables generation
+platformId: 01HX74EC429N5NBWVKGGQ0E4WV
 request:
   url: https://http.cat/${status_val}
 response:

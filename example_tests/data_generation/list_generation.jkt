@@ -1,5 +1,6 @@
 name: List Body Generation
 tags: variables generation
+platformId: 01J6SPMR2XE5Y7A1Q590ST1VAJ
 request:
   method: Post
   url: https://api.postcodes.io/postcodes

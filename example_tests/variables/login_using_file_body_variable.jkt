@@ -1,5 +1,6 @@
 name: Using Variable to Inject File Json Contents
 tags: variables files extract
+platformId: 01HX74ED1BD1D3FASWC72997V1
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
