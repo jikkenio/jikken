@@ -2,7 +2,7 @@ use crate::test;
 use crate::test::{definition, file, http};
 use std::cell::Cell;
 use std::error::Error;
-use uuid::Uuid;
+use ulid::Ulid;
 
 use super::File;
 
@@ -26,7 +26,8 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
     Ok(test::File {
         filename: "".to_string(),
         name: Some("".to_string()),
-        id: Some(Uuid::new_v4().to_string()),
+        id: Some("".to_string()),
+        platform_id: Some(Ulid::new().to_string()),
         project: Some("".to_string()),
         env: Some("".to_string()),
         tags: Some("".to_string()),

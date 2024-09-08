@@ -28,6 +28,7 @@ use std::fmt::Debug;
 use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use ulid::Ulid;
 use uuid::Uuid;
 
 #[derive(Deserialize, PartialEq)]
@@ -299,7 +300,11 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
 #[serde(deny_unknown_fields)]
 pub struct File {
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(rename = "platformId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -339,6 +344,7 @@ impl Default for File {
             filename: "".to_string(),
             name: Some("".to_string()),
             id: Some(Uuid::new_v4().to_string()),
+            platform_id: Some(Ulid::new().to_string()),
             project: None,
             env: None,
             tags: None,
@@ -520,10 +526,12 @@ impl Variable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Definition {
     pub name: Option<String>,
     pub description: Option<String>,
     pub id: String,
+    pub platform_id: Option<String>,
     pub project: Option<String>,
     pub environment: Option<String>,
     pub requires: Option<String>,
@@ -1261,6 +1269,7 @@ mod tests {
             name: None,
             description: None,
             id: "id".to_string(),
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -1291,6 +1300,7 @@ mod tests {
             name: None,
             description: None,
             id: "id".to_string(),
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -1346,6 +1356,7 @@ mod tests {
             name: None,
             description: None,
             id: "id".to_string(),
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,

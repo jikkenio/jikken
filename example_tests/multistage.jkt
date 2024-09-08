@@ -1,5 +1,6 @@
 name: Multistage Test
 tags: multi
+platformId: 01HWK3VEVVRN9CSTH9HG8WKW47
 setup:
   request:
     method: Post

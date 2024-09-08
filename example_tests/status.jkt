@@ -1,5 +1,6 @@
 name: Check Status
 requires: auth
+platformId: 01HWK6J4SSBZED9R4P79P0C8VT
 request:
   url: https://api.jikken.io/api/v1/examples/status
   headers:

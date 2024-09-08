@@ -952,6 +952,31 @@ pub fn tests_from_files(
     (tests_to_run, tests_to_ignore)
 }
 
+fn print_validation_failures(
+    failures: Vec<(&Definition, telemetry::PlatformIdFailure)>,
+    as_errors: bool,
+) {
+    let messages: Vec<String> = failures.iter().map(|(definition, failure)| {
+        match failure {
+            telemetry::PlatformIdFailure::Missing => {
+                format!("Test ({}) is missing a PlatformId. This field is required when streaming telemetry.", definition.filename)
+            },
+            telemetry::PlatformIdFailure::Invalid => {
+                format!("Test ({}) has an invalid PlatformId ({}). This field must be a valid Ulid when streaming telemetry.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+            },
+            telemetry::PlatformIdFailure::Duplicate => {
+                format!("Test ({}) has a duplicate PlatformId ({}). This field must be a valid Ulid and unique across files when streaming telemetry.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+            },
+        }
+   }).collect();
+
+    if as_errors {
+        messages.iter().for_each(|m| error!("{}", m));
+    } else {
+        messages.iter().for_each(|m| warn!("{}", m));
+    }
+}
+
 pub async fn execute_tests(
     config: config::Config,
     tests_to_run: Vec<test::Definition>,
@@ -972,20 +997,35 @@ pub async fn execute_tests(
 
     let mut session: Option<telemetry::Session> = None;
 
-    if !mode_dryrun {
-        if let Some(token) = &config.settings.api_key {
-            if let Ok(t) = uuid::Uuid::parse_str(token) {
-                match telemetry::create_session(t, all_tests, cli_args, &config).await {
-                    Ok(sess) => {
-                        session = Some(sess);
+    if let Some(token) = &config.settings.api_key {
+        if let Ok(t) = uuid::Uuid::parse_str(token) {
+            let validation_results =
+                telemetry::validate_platform_ids(tests_to_run.iter().collect());
+
+            if !mode_dryrun {
+                match validation_results {
+                    Ok(_) => {
+                        match telemetry::create_session(t, all_tests, cli_args, &config).await {
+                            Ok(sess) => {
+                                session = Some(sess);
+                            }
+                            Err(e) => {
+                                debug!("telemetry failed: {}", e);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        debug!("telemetry failed: {}", e);
+                    Err(failures) => {
+                        print_validation_failures(failures, true);
+                        return Report::default();
                     }
                 }
             } else {
-                debug!("invalid api token: {}", &token);
+                if let Err(failures) = validation_results {
+                    print_validation_failures(failures, false);
+                }
             }
+        } else {
+            debug!("invalid api token: {}", &token);
         }
     }
 
@@ -2543,6 +2583,7 @@ mod tests {
             name: None,
             description: None,
             id: String::from(id),
+            platform_id: None,
             project: None,
             environment: None,
             requires,
@@ -2629,6 +2670,7 @@ mod tests {
             name: None,
             description: None,
             id: String::from("id"),
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,

@@ -1,5 +1,6 @@
 name: Response Schema Validation
 tags: validation
+platformId: 01J6SPMTQRMAJXN157EM7B6SNQ
 requires: auth
 request:
   url: https://api.jikken.io/api/v2/examples/status

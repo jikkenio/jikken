@@ -1,8 +1,10 @@
 use crate::test;
 use crate::test::definition;
 use crate::test::variable;
+use log::warn;
 use std::fmt;
 use std::path::PathBuf;
+use ulid::Ulid;
 
 #[derive(Debug, Clone)]
 pub struct Error {
@@ -22,9 +24,18 @@ impl fmt::Display for Error {
 }
 
 fn validate_test_file(
-    _file: &test::File,
+    file: &test::File,
     _global_variables: &[test::Variable],
 ) -> Result<bool, Error> {
+    if !file
+        .platform_id
+        .clone()
+        .map(|ulid| Ulid::from_string(&ulid).is_ok())
+        .unwrap_or(true)
+    {
+        warn!("Test file ({}) has invalid platform identifier ({}). PlatformId must be empty or a valid ULID.", file.filename, file.platform_id.clone().unwrap_or("".to_string()));
+    }
+
     Ok(true)
 }
 
@@ -59,6 +70,7 @@ pub fn validate_file(
         name: file.name,
         description: file.description,
         id: file.id.unwrap_or(generated_id).to_lowercase(),
+        platform_id: file.platform_id,
         project: file.project.or(project),
         environment: file.env.or(environment),
         requires: file.requires,
