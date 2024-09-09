@@ -1,6 +1,6 @@
 id: auth
 tags: extract
-platformId: 01HWK6J4D0MX4H2JZ8JYD2K581
+platformId: 01HW114Y5763WPCQ4GAWW1XVZT
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
