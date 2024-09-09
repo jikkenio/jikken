@@ -1,6 +1,6 @@
 name: Compare StatusV2 and StatusV1
 requires: auth
-platformId: 01HWK6J57815XGNBMM1EZ1FCAW
+platformId: 01HW114YNET41752V6P6W4VWQ6
 tags: ignore compare
 request:
   url: https://api.jikken.io/api/v2/examples/status
