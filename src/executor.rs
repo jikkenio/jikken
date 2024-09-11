@@ -2582,7 +2582,7 @@ mod tests {
         test::Definition {
             name: None,
             description: None,
-            id: String::from(id),
+            id: Some(id.to_string()),
             platform_id: None,
             project: None,
             environment: None,
@@ -2669,7 +2669,7 @@ mod tests {
         test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,

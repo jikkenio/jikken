@@ -29,7 +29,6 @@ use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use ulid::Ulid;
-use uuid::Uuid;
 
 #[derive(Deserialize, PartialEq)]
 pub struct SecretValue(String);
@@ -343,7 +342,7 @@ impl Default for File {
         Self {
             filename: "".to_string(),
             name: Some("".to_string()),
-            id: Some(Uuid::new_v4().to_string()),
+            id: None,
             platform_id: Some(Ulid::new().to_string()),
             project: None,
             env: None,
@@ -530,7 +529,7 @@ impl Variable {
 pub struct Definition {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub id: String,
+    pub id: Option<String>,
     pub platform_id: Option<String>,
     pub project: Option<String>,
     pub environment: Option<String>,
@@ -1268,7 +1267,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -1299,7 +1298,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -1355,7 +1354,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,

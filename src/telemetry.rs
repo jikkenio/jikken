@@ -68,7 +68,7 @@ pub struct Test {
 #[serde(rename_all = "camelCase")]
 struct TestPost {
     pub session_id: String,
-    pub identifier: String,
+    pub identifier: Option<String>,
     pub platform_id: ulid::Ulid,
     pub definition: serde_json::Value,
 }
@@ -292,7 +292,7 @@ pub async fn create_test(
 
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: pruned_definition.id.clone(),
+        identifier: pruned_definition.id,
         platform_id: ulid,
         definition: definition_json,
     };
@@ -594,7 +594,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -715,7 +715,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -786,7 +786,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
