@@ -536,6 +536,9 @@ pub struct Definition {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub index: usize,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -1276,6 +1279,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         assert_eq!(
             None,
@@ -1313,6 +1317,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let body = RequestBody {
@@ -1375,6 +1380,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let body = RequestBody {

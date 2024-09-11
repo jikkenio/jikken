@@ -634,6 +634,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let get_all_headers = |td: test::Definition| -> Vec<Header> {
@@ -761,6 +762,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);
@@ -826,6 +828,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);

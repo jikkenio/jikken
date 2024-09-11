@@ -734,12 +734,13 @@ fn validate_test_file(
     global_variables: &[test::Variable],
     project: Option<String>,
     environment: Option<String>,
+    index: usize,
 ) -> Option<test::Definition> {
     let name = test_file
         .name
         .clone()
         .unwrap_or_else(|| test_file.filename.clone());
-    let res = validation::validate_file(test_file, global_variables, project, environment);
+    let res = validation::validate_file(test_file, global_variables, project, environment, index);
     match res {
         Ok(file) => Some(file),
         Err(e) => {
@@ -2578,6 +2579,7 @@ mod tests {
     fn construct_definition_for_dependency_graph(
         id: &str,
         requires: Option<String>,
+        index: usize,
     ) -> test::Definition {
         test::Definition {
             name: None,
@@ -2600,6 +2602,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index,
         }
     }
 
@@ -2687,6 +2690,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         }
     }
 

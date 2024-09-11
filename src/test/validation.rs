@@ -61,6 +61,7 @@ pub fn validate_file(
     global_variables: &[test::Variable],
     project: Option<String>,
     environment: Option<String>,
+    index: usize,
 ) -> Result<test::Definition, Error> {
     validate_test_file(&file, global_variables)?;
     let new_tags = if let Some(tags) = file.tags.as_ref() {
@@ -104,6 +105,7 @@ pub fn validate_file(
         cleanup: definition::CleanupDescriptor::new(file.cleanup, &variables)?,
         disabled: file.disabled.unwrap_or_default(),
         filename: file.filename,
+        index,
     };
 
     td.update_variable_matching();
