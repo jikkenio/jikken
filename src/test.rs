@@ -22,14 +22,12 @@ use log::{debug, error, trace};
 use regex::Regex;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use ulid::Ulid;
-use uuid::Uuid;
 
 #[derive(Deserialize, PartialEq)]
 pub struct SecretValue(String);
@@ -343,7 +341,7 @@ impl Default for File {
         Self {
             filename: "".to_string(),
             name: Some("".to_string()),
-            id: Some(Uuid::new_v4().to_string()),
+            id: None,
             platform_id: Some(Ulid::new().to_string()),
             project: None,
             env: None,
@@ -360,14 +358,6 @@ impl Default for File {
             disabled: None,
             description: None,
         }
-    }
-}
-
-impl File {
-    pub fn generate_id(&self) -> String {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        format!("{}", s.finish())
     }
 }
 
@@ -530,7 +520,7 @@ impl Variable {
 pub struct Definition {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub id: String,
+    pub id: Option<String>,
     pub platform_id: Option<String>,
     pub project: Option<String>,
     pub environment: Option<String>,
@@ -546,6 +536,9 @@ pub struct Definition {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub index: usize,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -1268,7 +1261,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -1286,6 +1279,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         assert_eq!(
             None,
@@ -1299,7 +1293,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -1323,6 +1317,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let body = RequestBody {
@@ -1355,7 +1350,7 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -1385,6 +1380,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let body = RequestBody {

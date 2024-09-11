@@ -61,6 +61,7 @@ pub fn validate_file(
     global_variables: &[test::Variable],
     project: Option<String>,
     environment: Option<String>,
+    index: usize,
 ) -> Result<test::Definition, Error> {
     validate_test_file(&file, global_variables)?;
     let new_tags = if let Some(tags) = file.tags.as_ref() {
@@ -71,8 +72,6 @@ pub fn validate_file(
     } else {
         Vec::new()
     };
-
-    let generated_id = file.generate_id();
 
     let variables = test::Variable::validate_variables_opt(
         file.variables,
@@ -85,7 +84,7 @@ pub fn validate_file(
     let td = test::Definition {
         name: file.name,
         description: file.description,
-        id: file.id.unwrap_or(generated_id).to_lowercase(),
+        id: file.id.map(|i| i.to_lowercase()),
         platform_id: file.platform_id,
         project: file.project.or(project),
         environment: file.env.or(environment),
@@ -106,6 +105,7 @@ pub fn validate_file(
         cleanup: definition::CleanupDescriptor::new(file.cleanup, &variables)?,
         disabled: file.disabled.unwrap_or_default(),
         filename: file.filename,
+        index,
     };
 
     td.update_variable_matching();

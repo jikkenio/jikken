@@ -68,7 +68,7 @@ pub struct Test {
 #[serde(rename_all = "camelCase")]
 struct TestPost {
     pub session_id: String,
-    pub identifier: String,
+    pub identifier: Option<String>,
     pub platform_id: ulid::Ulid,
     pub definition: serde_json::Value,
 }
@@ -292,7 +292,7 @@ pub async fn create_test(
 
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: pruned_definition.id.clone(),
+        identifier: pruned_definition.id,
         platform_id: ulid,
         definition: definition_json,
     };
@@ -521,7 +521,7 @@ pub fn validate_platform_ids(
             continue;
         };
 
-        let Ok(id) = Ulid::from_string(&id_raw) else {
+        let Ok(id) = Ulid::from_string(id_raw) else {
             failures.push((definition, PlatformIdFailure::Invalid));
             continue;
         };
@@ -533,7 +533,7 @@ pub fn validate_platform_ids(
         duplicate_check.insert(id);
     }
 
-    if failures.len() > 0 {
+    if !failures.is_empty() {
         return Err(failures);
     }
 
@@ -594,7 +594,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -634,6 +634,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
 
         let get_all_headers = |td: test::Definition| -> Vec<Header> {
@@ -715,7 +716,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -761,6 +762,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);
@@ -786,7 +788,7 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -826,6 +828,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);

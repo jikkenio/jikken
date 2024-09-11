@@ -734,12 +734,13 @@ fn validate_test_file(
     global_variables: &[test::Variable],
     project: Option<String>,
     environment: Option<String>,
+    index: usize,
 ) -> Option<test::Definition> {
     let name = test_file
         .name
         .clone()
         .unwrap_or_else(|| test_file.filename.clone());
-    let res = validation::validate_file(test_file, global_variables, project, environment);
+    let res = validation::validate_file(test_file, global_variables, project, environment, index);
     match res {
         Ok(file) => Some(file),
         Err(e) => {
@@ -789,10 +790,10 @@ fn ignored_due_to_tag_filter(
 }
 
 fn schedule_impl(
-    graph: &BTreeMap<String, BTreeSet<String>>,
-    scheduled_nodes: &BTreeSet<String>,
-) -> BTreeSet<String> {
-    let mut ignore: BTreeSet<String> = BTreeSet::new();
+    graph: &BTreeMap<usize, BTreeSet<usize>>,
+    scheduled_nodes: &BTreeSet<usize>,
+) -> BTreeSet<usize> {
+    let mut ignore: BTreeSet<usize> = BTreeSet::new();
     ignore.clone_from(scheduled_nodes);
 
     //Is there a way to do in 1 iteration?
@@ -800,7 +801,7 @@ fn schedule_impl(
         .iter()
         .filter(|(node, _)| !scheduled_nodes.contains(*node))
         .for_each(|(_, edges)| {
-            edges.iter().for_each(|e| _ = ignore.insert(e.clone()));
+            edges.iter().for_each(|e| _ = ignore.insert(*e));
         });
     return graph
         .keys()
@@ -817,56 +818,61 @@ fn construct_test_execution_graph_v2(
         .clone()
         .into_iter()
         .chain(tests_to_ignore)
-        .map(|td| (td.id.clone(), td))
+        .filter(|td| td.id.is_some())
+        .map(|td| (td.id.clone().unwrap(), td))
         .collect();
 
     trace!("determine test execution order based on dependency graph");
 
     //Nodes are IDs ; Directed edges imply ordering; i.e. A -> B; B depends on A
-    let mut graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut graph: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
     tests_to_run
         .iter()
         .map(|td| (td.id.clone(), td))
         .for_each(|(id, definition)| {
-            if let Some(req) = definition.requires.as_ref() {
-                let required_def = tests_by_id.get(req);
-                if required_def.is_none() {
+            if let Some(required_id) = definition.requires.as_ref() {
+                let Some(required_def) = tests_by_id.get(required_id) else {
                     return;
-                }
+                };
 
-                if required_def.unwrap().disabled {
+                if required_def.disabled {
                     warn!(
                         "Test \"{}\" requires a disabled test: \"{}\"",
-                        definition.name.as_deref().unwrap_or(id.as_str()),
-                        required_def.unwrap().id
+                        definition
+                            .name
+                            .as_deref()
+                            .unwrap_or(&id.clone().unwrap_or(definition.index.to_string())),
+                        required_id
                     );
                     //should we do transitive disablement?
                 }
 
-                if let Some(edges) = graph.get_mut(req) {
-                    edges.insert(id.clone());
+                if let Some(edges) = graph.get_mut(&required_def.index) {
+                    edges.insert(definition.index);
                 } else {
-                    graph.insert(req.clone(), BTreeSet::from([id.clone()]));
+                    graph.insert(required_def.index, BTreeSet::from([definition.index]));
                 }
             }
 
-            let node_for_id = graph.get(&id);
-            if node_for_id.is_none() {
-                graph.insert(id.clone(), BTreeSet::new());
+            let node_for_index = graph.get(&definition.index);
+            if node_for_index.is_none() {
+                graph.insert(definition.index, BTreeSet::new());
             }
             //intution: if it already has a dependent, its simply a test
             //depended on by multiple other tests and not a duplicate ID made in error
-            else if node_for_id.unwrap().is_empty() {
-                warn!("Skipping test, found duplicate test id: {}", id.clone());
+            else if node_for_index.unwrap().is_empty() {
+                warn!(
+                    "Skipping test, found duplicate test id: {}",
+                    &id.clone().unwrap()
+                );
             }
         });
 
-    let mut jobs: Vec<BTreeSet<String>> = Vec::new();
-    let mut scheduled_nodes: BTreeSet<String> = BTreeSet::new();
+    let mut jobs: Vec<BTreeSet<usize>> = Vec::new();
+    let mut scheduled_nodes: BTreeSet<usize> = BTreeSet::new();
     while graph.len() != scheduled_nodes.len() {
         let job = schedule_impl(&graph, &scheduled_nodes);
-        job.iter()
-            .for_each(|n| _ = scheduled_nodes.insert(n.clone()));
+        job.iter().for_each(|n| _ = scheduled_nodes.insert(*n));
         jobs.push(job);
     }
 
@@ -874,7 +880,7 @@ fn construct_test_execution_graph_v2(
         .into_iter()
         .map(|hs| {
             hs.into_iter()
-                .map(|id| tests_by_id.get(&id).unwrap().clone())
+                .map(|index| tests_to_run.get(index).unwrap().clone())
                 .collect::<Vec<Definition>>()
         })
         .collect();
@@ -888,11 +894,19 @@ fn construct_test_execution_graph_v2(
         //not smart enough on rust to write generic lambda in order to not repeat myself here
         let s1: HashSet<String> = tests_to_run
             .iter()
-            .map(|td| td.name.clone().unwrap_or(td.id.clone()))
+            .map(|td| {
+                td.name
+                    .clone()
+                    .unwrap_or(td.id.clone().unwrap_or(td.index.to_string()))
+            })
             .collect();
         let s2: HashSet<String> = flattened_jobs
             .iter()
-            .map(|td| td.name.clone().unwrap_or(td.id.clone()))
+            .map(|td| {
+                td.name
+                    .clone()
+                    .unwrap_or(td.id.clone().unwrap_or(td.index.to_string()))
+            })
             .collect();
         let missing_tests = (&s1 - &s2)
             .into_iter()
@@ -912,12 +926,15 @@ fn construct_test_execution_graph_v2(
 
     for (count, job) in job_definitions.iter().enumerate() {
         trace!(
-            "Job {count}, Tests: {}",
-            job.iter().fold("".to_string(), |acc, x| format!(
-                "{},{}",
-                acc,
-                x.name.as_ref().unwrap_or(&x.id)
-            ))
+            "Job {count}: {}",
+            job.iter()
+                .enumerate()
+                .map(|(i, t)| t
+                    .name
+                    .clone()
+                    .unwrap_or(t.id.clone().unwrap_or(i.to_string())))
+                .collect::<Vec<String>>()
+                .join(", ")
         )
     }
 
@@ -937,8 +954,15 @@ pub fn tests_from_files(
     let tests_to_run: Vec<test::Definition> = files
         .into_iter()
         .filter_map(|s| load_test_from_path(s.as_str()))
-        .filter_map(|f| {
-            validate_test_file(f, &global_variables, project.clone(), environment.clone())
+        .enumerate()
+        .filter_map(|(i, f)| {
+            validate_test_file(
+                f,
+                &global_variables,
+                project.clone(),
+                environment.clone(),
+                i,
+            )
         })
         .filter_map(|f| {
             if !ignored_due_to_tag_filter(&f, &tags, &tag_mode) {
@@ -1019,10 +1043,8 @@ pub async fn execute_tests(
                         return Report::default();
                     }
                 }
-            } else {
-                if let Err(failures) = validation_results {
-                    print_validation_failures(failures, false);
-                }
+            } else if let Err(failures) = validation_results {
+                print_validation_failures(failures, false);
             }
         } else {
             debug!("invalid api token: {}", &token);
@@ -2578,11 +2600,12 @@ mod tests {
     fn construct_definition_for_dependency_graph(
         id: &str,
         requires: Option<String>,
+        index: usize,
     ) -> test::Definition {
         test::Definition {
             name: None,
             description: None,
-            id: String::from(id),
+            id: Some(id.to_string()),
             platform_id: None,
             project: None,
             environment: None,
@@ -2600,6 +2623,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index,
         }
     }
 
@@ -2607,12 +2631,13 @@ mod tests {
     fn no_dependencies_is_one_execution_node() {
         let defs = vec!["A", "B", "C", "D"]
             .into_iter()
-            .map(|id| construct_definition_for_dependency_graph(id, None))
+            .enumerate()
+            .map(|(i, id)| construct_definition_for_dependency_graph(id, None, i))
             .collect();
 
         let actual = construct_test_execution_graph_v2(
             defs,
-            vec![construct_definition_for_dependency_graph("E", None)],
+            vec![construct_definition_for_dependency_graph("E", None, 4)],
         );
         assert_eq!(1, actual.len());
         assert_eq!(4, actual.get(0).unwrap().len());
@@ -2622,19 +2647,25 @@ mod tests {
     fn one_root_dependency_is_two_execution_nodes() {
         let mut defs = vec!["A", "B", "C", "D"]
             .into_iter()
-            .map(|id| construct_definition_for_dependency_graph(id, Some("Parent".to_string())))
+            .enumerate()
+            .map(|(i, id)| {
+                construct_definition_for_dependency_graph(id, Some("Parent".to_string()), i)
+            })
             .collect::<Vec<Definition>>();
 
-        defs.push(construct_definition_for_dependency_graph("Parent", None));
+        defs.push(construct_definition_for_dependency_graph("Parent", None, 4));
 
         let actual = construct_test_execution_graph_v2(
             defs,
-            vec![construct_definition_for_dependency_graph("E", None)],
+            vec![construct_definition_for_dependency_graph("E", None, 5)],
         );
 
         assert_eq!(2, actual.len());
         assert_eq!(1, actual.get(0).unwrap().len());
-        assert_eq!("Parent", actual.get(0).unwrap().get(0).unwrap().id);
+        assert_eq!(
+            "Parent",
+            actual.get(0).unwrap().get(0).unwrap().id.clone().unwrap()
+        );
         assert_eq!(4, actual.get(1).unwrap().len());
     }
 
@@ -2647,12 +2678,13 @@ mod tests {
             .map(|(pos, (fst, snd))| {
                 let mut res: Vec<Definition> = Vec::new();
                 if pos == 0 {
-                    res.push(construct_definition_for_dependency_graph(fst, None));
+                    res.push(construct_definition_for_dependency_graph(fst, None, 0));
                 }
 
                 res.push(construct_definition_for_dependency_graph(
                     snd,
                     Some(fst.to_string()),
+                    pos + 1,
                 ));
 
                 return res;
@@ -2669,7 +2701,7 @@ mod tests {
         test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
             platform_id: None,
             project: None,
             environment: None,
@@ -2687,6 +2719,7 @@ mod tests {
             },
             disabled: false,
             filename: "/a/path.jkt".to_string(),
+            index: 0,
         }
     }
 
