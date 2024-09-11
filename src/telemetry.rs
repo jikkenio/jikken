@@ -521,7 +521,7 @@ pub fn validate_platform_ids(
             continue;
         };
 
-        let Ok(id) = Ulid::from_string(&id_raw) else {
+        let Ok(id) = Ulid::from_string(id_raw) else {
             failures.push((definition, PlatformIdFailure::Invalid));
             continue;
         };
@@ -533,7 +533,7 @@ pub fn validate_platform_ids(
         duplicate_check.insert(id);
     }
 
-    if failures.len() > 0 {
+    if !failures.is_empty() {
         return Err(failures);
     }
 

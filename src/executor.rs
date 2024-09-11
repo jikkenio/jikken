@@ -1043,10 +1043,8 @@ pub async fn execute_tests(
                         return Report::default();
                     }
                 }
-            } else {
-                if let Err(failures) = validation_results {
-                    print_validation_failures(failures, false);
-                }
+            } else if let Err(failures) = validation_results {
+                print_validation_failures(failures, false);
             }
         } else {
             debug!("invalid api token: {}", &token);
