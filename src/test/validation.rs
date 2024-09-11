@@ -72,8 +72,6 @@ pub fn validate_file(
         Vec::new()
     };
 
-    let generated_id = file.generate_id();
-
     let variables = test::Variable::validate_variables_opt(
         file.variables,
         PathBuf::from(&file.filename)
@@ -85,7 +83,7 @@ pub fn validate_file(
     let td = test::Definition {
         name: file.name,
         description: file.description,
-        id: file.id.unwrap_or(generated_id).to_lowercase(),
+        id: file.id,
         platform_id: file.platform_id,
         project: file.project.or(project),
         environment: file.env.or(environment),

@@ -22,7 +22,6 @@ use log::{debug, error, trace};
 use regex::Regex;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fmt::{self};
@@ -359,14 +358,6 @@ impl Default for File {
             disabled: None,
             description: None,
         }
-    }
-}
-
-impl File {
-    pub fn generate_id(&self) -> String {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        format!("{}", s.finish())
     }
 }
 
