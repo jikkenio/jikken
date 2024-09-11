@@ -1,7 +1,9 @@
 use crate::test;
 use crate::test::definition;
+use crate::test::validation;
 use crate::test::variable;
 use log::warn;
+use regex::Regex;
 use std::fmt;
 use std::path::PathBuf;
 use ulid::Ulid;
@@ -34,6 +36,20 @@ fn validate_test_file(
         .unwrap_or(true)
     {
         warn!("Test file ({}) has invalid platform identifier ({}). PlatformId must be empty or a valid ULID.", file.filename, file.platform_id.clone().unwrap_or("".to_string()));
+    }
+
+    let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();
+    if !file
+        .id
+        .clone()
+        .map(|id| regex.is_match(id.as_str()))
+        .unwrap_or(true)
+    {
+        return Err(validation::Error {
+            reason:
+                format!("id '{}' is invalid - may only contain alphanumeric characters, hyphens, and underscores", file.id.clone().unwrap())
+                    .to_string(),
+        });
     }
 
     Ok(true)
