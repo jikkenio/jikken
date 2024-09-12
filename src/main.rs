@@ -336,11 +336,12 @@ async fn get_files(
     Ok(results)
 }
 
-fn print_test_info(tests: Vec<test::Definition>) {
+fn print_test_info(mut tests: Vec<test::Definition>) {
     let mut path_column = vec!["PATH".to_string()];
     let mut name_column = vec!["TEST NAME".to_string()];
     let mut tags_column = vec!["TAGS".to_string()];
 
+    tests.sort_by_key(|td| td.filename.clone());
     tests.into_iter().for_each(|td| {
         name_column.push(td.name.unwrap_or("<none>".to_string()));
         tags_column.push(if td.tags.is_empty() {
