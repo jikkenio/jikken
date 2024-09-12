@@ -347,7 +347,7 @@ fn print_test_info(mut tests: Vec<test::Definition>) {
         tags_column.push(if td.tags.is_empty() {
             "<none>".to_string()
         } else {
-            td.tags.join(",")
+            td.tags.join(", ")
         });
         path_column.push(td.filename)
     });
