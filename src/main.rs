@@ -18,7 +18,10 @@ use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use tokio::fs;
+use telemetry::PlatformIdFailure;
+use tokio::fs::{self, OpenOptions};
+use tokio::io::AsyncWriteExt;
+use ulid::Ulid;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const IGNORE_FILE: &str = ".jikkenignore";
@@ -28,6 +31,7 @@ pub enum ExecutionMode {
     Run,
     Dryrun,
     List,
+    Validate(bool),
 }
 
 pub enum TagMode {
@@ -98,7 +102,7 @@ pub enum Commands {
         junit: Option<String>,
     },
 
-    /// Process tests without calling API endpoints
+    /// Execute tests without calling API endpoints
     #[command(name = "dryrun")]
     DryRun {
         /// The path(s) to search for test files
@@ -124,7 +128,7 @@ pub enum Commands {
         junit: Option<String>,
     },
 
-    /// Lists tests at the given path(s)
+    /// List test files
     #[command(name = "list")]
     List {
         /// The path(s) to search for test files
@@ -144,6 +148,31 @@ pub enum Commands {
         /// Toggle tag matching logic to select tests matching any of the given tags
         #[arg(long, default_value_t = false)]
         tags_or: bool,
+    },
+
+    /// Validate test files
+    Validate {
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
+
+        /// Recursively search for test files
+        #[arg(short)]
+        recursive: bool,
+
+        /// Select tests to validate based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+
+        /// Automatically generate and insert platform IDs in tests that don't have one
+        #[arg(long, default_value_t = false)]
+        generate_platform_ids: bool,
     },
 
     /// Create a new test
@@ -168,7 +197,7 @@ pub enum Commands {
         output: bool,
     },
 
-    /// Update Jikken, if a newer version exists
+    /// Update Jikken (if a newer version exists)
     Update,
 }
 
@@ -425,6 +454,47 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
+    if let ExecutionMode::Validate(generate) = execution_mode {
+        if let Some(token) = &config.settings.api_key {
+            if uuid::Uuid::parse_str(token).is_ok() {
+                let validation_results =
+                    telemetry::validate_platform_ids(tests_to_run.iter().collect());
+                let mut has_missing = false;
+
+                if let Err(failures) = validation_results {
+                    for failure in failures {
+                        if generate && failure.1 == PlatformIdFailure::Missing {
+                            let platform_id = Ulid::new().to_string();
+                            let test = tests_to_run[failure.0.index].clone();
+
+                            let line = format!("platformId: {}\n", platform_id);
+                            let mut file =
+                                OpenOptions::new().append(true).open(&test.filename).await?;
+                            file.write_all(line.as_bytes()).await?;
+                            info!(
+                                "Successfully updated test at path \"{}\" with platform ID {}.\n",
+                                test.filename, platform_id
+                            );
+                        } else {
+                            if !has_missing && failure.1 == PlatformIdFailure::Missing {
+                                has_missing = true;
+                            }
+                            executor::print_validation_failures(vec![failure], true);
+                        }
+                    }
+
+                    if has_missing {
+                        warn!("\nRun the validate command with the --generate-platform-ids option to automatically generate and insert missing platform IDs.");
+                    }
+                }
+            } else {
+                error!("API Key {} is invalid", &token);
+            }
+        }
+
+        return Ok(executor::Report::default());
+    }
+
     let report = executor::execute_tests(
         config,
         tests_to_run,
@@ -533,28 +603,31 @@ async fn main() -> std::process::ExitCode {
     let cli_environment = cli.environment;
 
     let exit_code: std::process::ExitCode = match cli.command {
-        Commands::Update => {
-            updater::try_updating().await;
-            std::process::ExitCode::SUCCESS
-        }
-        Commands::New {
-            full,
-            openapi_spec_path,
-            multistage,
-            output,
-            name,
+        Commands::Run {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+            junit,
         } => {
             updater::check_for_updates().await;
-            match openapi_spec_path {
-                Some(path) => result_to_exit_code(
-                    new::create_tests_from_openapi_spec(path.as_str(), full, multistage, name),
-                    false,
-                ),
-                None => result_to_exit_code(
-                    new::create_test_template(full, multistage, output, name).await,
-                    false,
-                ),
-            }
+            log::logger().flush();
+            check_supplied_config_file_existence(&cli.config_file);
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Run,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    junit,
+                    cli_args,
+                )
+                .await,
+            )
         }
         Commands::DryRun {
             tags,
@@ -584,32 +657,6 @@ async fn main() -> std::process::ExitCode {
                 .await,
             )
         }
-        Commands::Run {
-            tags,
-            tags_or,
-            recursive,
-            paths,
-            junit,
-        } => {
-            updater::check_for_updates().await;
-            log::logger().flush();
-            check_supplied_config_file_existence(&cli.config_file);
-            result_report_to_exit_code(
-                run_tests(
-                    paths,
-                    tags,
-                    tags_or,
-                    ExecutionMode::Run,
-                    recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    junit,
-                    cli_args,
-                )
-                .await,
-            )
-        }
         Commands::List {
             tags,
             tags_or,
@@ -633,6 +680,54 @@ async fn main() -> std::process::ExitCode {
                 )
                 .await,
             )
+        }
+        Commands::Validate {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+            generate_platform_ids,
+        } => {
+            updater::check_for_updates().await;
+            check_supplied_config_file_existence(&cli.config_file);
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Validate(generate_platform_ids),
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    None,
+                    cli_args,
+                )
+                .await,
+            )
+        }
+        Commands::New {
+            full,
+            openapi_spec_path,
+            multistage,
+            output,
+            name,
+        } => {
+            updater::check_for_updates().await;
+            match openapi_spec_path {
+                Some(path) => result_to_exit_code(
+                    new::create_tests_from_openapi_spec(path.as_str(), full, multistage, name),
+                    false,
+                ),
+                None => result_to_exit_code(
+                    new::create_test_template(full, multistage, output, name).await,
+                    false,
+                ),
+            }
+        }
+        Commands::Update => {
+            updater::try_updating().await;
+            std::process::ExitCode::SUCCESS
         }
     };
 
