@@ -503,6 +503,7 @@ pub async fn complete_session(
     Ok(())
 }
 
+#[derive(PartialEq, Eq)]
 pub enum PlatformIdFailure {
     Missing,
     Invalid,

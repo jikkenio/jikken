@@ -976,20 +976,20 @@ pub fn tests_from_files(
     (tests_to_run, tests_to_ignore)
 }
 
-fn print_validation_failures(
+pub fn print_validation_failures(
     failures: Vec<(&Definition, telemetry::PlatformIdFailure)>,
     as_errors: bool,
 ) {
     let messages: Vec<String> = failures.iter().map(|(definition, failure)| {
         match failure {
             telemetry::PlatformIdFailure::Missing => {
-                format!("Test ({}) is missing a PlatformId. This field is required when streaming telemetry.", definition.filename)
+                format!("Test at path \"{}\" does not have a platformId. This field is required to stream telemetry data.", definition.filename)
             },
             telemetry::PlatformIdFailure::Invalid => {
-                format!("Test ({}) has an invalid PlatformId ({}). This field must be a valid Ulid when streaming telemetry.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+                format!("Test at path \"{}\" has an invalid platformId ({}). This field must be a valid ULID.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
             },
             telemetry::PlatformIdFailure::Duplicate => {
-                format!("Test ({}) has a duplicate PlatformId ({}). This field must be a valid Ulid and unique across files when streaming telemetry.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+                format!("Test at path \"{}\" has a duplicate platformId ({}). This field must be a valid ULID and unique across all files.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
             },
         }
    }).collect();
