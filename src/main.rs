@@ -370,7 +370,7 @@ fn print_test_info(mut tests: Vec<test::Definition>) {
     let mut name_column = vec!["TEST NAME".to_string()];
     let mut tags_column = vec!["TAGS".to_string()];
 
-    tests.sort_by_key(|td| td.filename.clone());
+    tests.sort_by_key(|td| td.file_data.filename.clone());
     tests.into_iter().for_each(|td| {
         name_column.push(td.name.unwrap_or("<none>".to_string()));
         tags_column.push(if td.tags.is_empty() {
@@ -378,7 +378,7 @@ fn print_test_info(mut tests: Vec<test::Definition>) {
         } else {
             td.tags.join(", ")
         });
-        path_column.push(td.filename)
+        path_column.push(td.file_data.filename)
     });
 
     let get_column_width = |v: &Vec<String>| v.iter().fold(0, |max, s| std::cmp::max(max, s.len()));
@@ -465,15 +465,19 @@ async fn run_tests(
                     for failure in failures {
                         if generate && failure.1 == PlatformIdFailure::Missing {
                             let platform_id = Ulid::new().to_string();
-                            let test = tests_to_run[failure.0.index].clone();
+                            let mut test = tests_to_run[failure.0.index].clone();
 
-                            let line = format!("platformId: {}\n", platform_id);
                             let mut file =
-                                OpenOptions::new().append(true).open(&test.filename).await?;
-                            file.write_all(line.as_bytes()).await?;
+                                OpenOptions::new().write(true).truncate(true).open(&test.file_data.filename).await?;
+
+                            test.file_data.platform_id = Some(platform_id.clone());
+
+                            let file_data = serde_yaml::to_string(&test.file_data).unwrap();
+                            file.write_all(file_data.as_bytes()).await?;
+
                             info!(
                                 "Successfully updated test at path \"{}\" with platform ID {}.\n",
-                                test.filename, platform_id
+                                test.file_data.filename, platform_id
                             );
                         } else {
                             if !has_missing && failure.1 == PlatformIdFailure::Missing {
@@ -732,7 +736,7 @@ async fn main() -> std::process::ExitCode {
     };
 
     log::logger().flush();
-    return exit_code;
+    exit_code
 }
 
 //------------------TESTS---------------------------------

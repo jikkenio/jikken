@@ -110,7 +110,7 @@ impl<'de> Deserialize<'de> for VariableName {
 }
 
 //aka RefOrT , where Ref should refer to a variable
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum UnvalidatedVariableNameOrComponent<T> {
     VariableName(VariableName),
@@ -238,12 +238,15 @@ pub struct DateSpecification {
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateTimeSpecification {
     #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub specification: Option<Specification<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub modifier: Option<variable::Modifier>,
 }
 
@@ -1923,9 +1926,10 @@ impl DatumSchema {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<http::Verb>,
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1963,16 +1967,23 @@ impl Hash for UnvalidatedRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedCompareRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<http::Verb>,
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Vec<http::Parameter>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub add_params: Option<Vec<http::Parameter>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore_params: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub add_headers: Option<Vec<http::Header>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore_headers: Option<Vec<String>>,
     //Requests can only contain a body OR a body_schema
     //We used to signify this using (serde-flattened)enums, but its
@@ -2235,7 +2246,7 @@ impl<'a> Checker for BodyOrSchemaChecker<'a> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2295,9 +2306,11 @@ pub struct UnvalidatedVariable {
     pub value: ValueOrDatumOrFile,
 }
 
-#[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct UnvalidatedStage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub request: UnvalidatedRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compare: Option<UnvalidatedCompareRequest>,
@@ -2306,19 +2319,17 @@ pub struct UnvalidatedStage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub delay: Option<u64>,
 }
 
-#[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct UnvalidatedRequestResponse {
     pub request: UnvalidatedRequest,
     pub response: Option<UnvalidatedResponse>,
 }
 
-#[derive(Hash, Debug, Clone, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct UnvalidatedCleanup {
     pub onsuccess: Option<UnvalidatedRequest>,

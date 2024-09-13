@@ -294,9 +294,10 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct File {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -305,6 +306,8 @@ pub struct File {
     pub platform_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -329,9 +332,7 @@ pub struct File {
     pub cleanup: Option<file::UnvalidatedCleanup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-
+    
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
 }
@@ -535,7 +536,7 @@ pub struct Definition {
     pub disabled: bool,
 
     #[serde(skip_serializing, skip_deserializing)]
-    pub filename: String,
+    pub file_data: File,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub index: usize,
