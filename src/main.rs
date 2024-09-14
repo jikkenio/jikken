@@ -79,6 +79,7 @@ pub struct Cli {
 #[derive(Subcommand, Serialize, Deserialize)]
 pub enum Commands {
     /// Execute tests
+    #[command(name = "run", alias = "r")]
     Run {
         /// The path(s) to search for test files
         /// {n}By default, the current path is used
@@ -104,7 +105,7 @@ pub enum Commands {
     },
 
     /// Execute tests without calling API endpoints
-    #[command(name = "dryrun")]
+    #[command(name = "dryrun", alias = "dr")]
     DryRun {
         /// The path(s) to search for test files
         /// {n}By default, the current path is used
@@ -152,7 +153,7 @@ pub enum Commands {
     },
 
     /// Format test files
-    #[command(name = "format")]
+    #[command(name = "format", alias = "fmt")]
     Format {
         /// The path(s) to search for test files
         /// {n}By default, the current path is used
