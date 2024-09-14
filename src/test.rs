@@ -332,7 +332,7 @@ pub struct File {
     pub cleanup: Option<file::UnvalidatedCleanup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
-    
+
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
 }
@@ -1279,7 +1279,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
         assert_eq!(
@@ -1317,7 +1317,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
 
@@ -1380,7 +1380,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
 

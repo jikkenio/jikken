@@ -2235,6 +2235,7 @@ mod tests {
     use self::test::definition::ResolvedRequest;
     use hyper::Response;
     use std::any::Any;
+    use test::File;
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
@@ -2622,7 +2623,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index,
         }
     }
@@ -2718,7 +2719,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         }
     }
