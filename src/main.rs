@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use telemetry::PlatformIdFailure;
-use tokio::fs::{self, OpenOptions};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use ulid::Ulid;
 
@@ -503,12 +503,9 @@ async fn run_tests(
                         if generate && failure.1 == PlatformIdFailure::Missing {
                             let platform_id = Ulid::new().to_string();
                             let mut test = tests_to_run[failure.0.index].clone();
-
-                            let mut file =
-                                OpenOptions::new().write(true).truncate(true).open(&test.file_data.filename).await?;
-
                             test.file_data.platform_id = Some(platform_id.clone());
 
+                            let mut file = fs::File::create(&test.file_data.filename).await?;
                             let file_data = serde_yaml::to_string(&test.file_data).unwrap();
                             file.write_all(file_data.as_bytes()).await?;
 

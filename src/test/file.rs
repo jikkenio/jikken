@@ -212,13 +212,13 @@ impl ValuesOrSchema {
 #[serde(rename_all = "camelCase")]
 pub struct SequenceSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema: Option<ValuesOrSchema>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_length: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<ValuesOrSchema>,
 }
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
@@ -1992,6 +1992,7 @@ pub struct UnvalidatedCompareRequest {
     //in the (Validated)CompareDescriptor struct
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<UnvalidatedVariableNameOrValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
 }
 
