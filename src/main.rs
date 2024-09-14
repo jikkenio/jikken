@@ -31,6 +31,7 @@ pub enum ExecutionMode {
     Run,
     Dryrun,
     List,
+    Format,
     Validate(bool),
 }
 
@@ -141,6 +142,28 @@ pub enum Commands {
         recursive: bool,
 
         /// Select tests to list based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+
+    /// Format test files
+    #[command(name = "format")]
+    Format {
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
+
+        /// Recursively search for test files
+        #[arg(short)]
+        recursive: bool,
+
+        /// Select tests to format based on tags
         /// {n}By default, tests must match all given tags to be selected
         #[arg(short, long = "tag", name = "tag")]
         tags: Vec<String>,
@@ -454,6 +477,20 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
+    if execution_mode == ExecutionMode::Format {
+        for td in &tests_to_run {
+            let mut file = fs::File::create(&td.file_data.filename).await?;
+            let file_data = serde_yaml::to_string(&td.file_data).unwrap();
+            file.write_all(file_data.as_bytes()).await?;
+        }
+
+        info!(
+            "Successfully formatted {} test files.\n",
+            &tests_to_run.len()
+        );
+        return Ok(executor::Report::default());
+    }
+
     if let ExecutionMode::Validate(generate) = execution_mode {
         if let Some(token) = &config.settings.api_key {
             if uuid::Uuid::parse_str(token).is_ok() {
@@ -675,6 +712,30 @@ async fn main() -> std::process::ExitCode {
                     tags,
                     tags_or,
                     ExecutionMode::List,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    None,
+                    cli_args,
+                )
+                .await,
+            )
+        }
+        Commands::Format {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+        } => {
+            updater::check_for_updates().await;
+            check_supplied_config_file_existence(&cli.config_file);
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Format,
                     recursive,
                     cli_project,
                     cli_environment,
