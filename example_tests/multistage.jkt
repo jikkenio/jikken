@@ -1,35 +1,34 @@
 name: Multistage Test
-tags: multi
 platformId: 01HWK3VEVVRN9CSTH9HG8WKW47
+tags: multi
 setup:
   request:
     method: Post
     url: https://api.jikken.io/api/v1/examples/login
-    body: {
-      "username": "testuser",
-      "password": "password"
-    }
+    body:
+      password: password
+      username: testuser
   response:
     status: 200
     extract:
-      - name: auth
-        field: auth.token
+    - name: auth
+      field: auth.token
 stages:
-  - request:
-      url: https://api.jikken.io/api/v1/examples/status
-      headers:
-        - header: Authorization
-          value: ${auth}
-    response:
-      status: 200
-  - request:
-      url: https://api.jikken.io/api/v2/examples/status
-      headers:
-        - header: Authorization
-          value: ${auth}
-    compare:
-      url: https://api.jikken.io/api/v1/examples/status
-    response:
-      status: 200
-      ignore:
-        - user.lastActivity
+- request:
+    url: https://api.jikken.io/api/v1/examples/status
+    headers:
+    - header: Authorization
+      value: ${auth}
+  response:
+    status: 200
+- request:
+    url: https://api.jikken.io/api/v2/examples/status
+    headers:
+    - header: Authorization
+      value: ${auth}
+  compare:
+    url: https://api.jikken.io/api/v1/examples/status
+  response:
+    status: 200
+    ignore:
+    - user.lastActivity

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use telemetry::PlatformIdFailure;
-use tokio::fs::{self, OpenOptions};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use ulid::Ulid;
 
@@ -31,6 +31,7 @@ pub enum ExecutionMode {
     Run,
     Dryrun,
     List,
+    Format,
     Validate(bool),
 }
 
@@ -141,6 +142,28 @@ pub enum Commands {
         recursive: bool,
 
         /// Select tests to list based on tags
+        /// {n}By default, tests must match all given tags to be selected
+        #[arg(short, long = "tag", name = "tag")]
+        tags: Vec<String>,
+
+        /// Toggle tag matching logic to select tests matching any of the given tags
+        #[arg(long, default_value_t = false)]
+        tags_or: bool,
+    },
+
+    /// Format test files
+    #[command(name = "format")]
+    Format {
+        /// The path(s) to search for test files
+        /// {n}By default, the current path is used
+        #[arg(name = "path")]
+        paths: Vec<String>,
+
+        /// Recursively search for test files
+        #[arg(short)]
+        recursive: bool,
+
+        /// Select tests to format based on tags
         /// {n}By default, tests must match all given tags to be selected
         #[arg(short, long = "tag", name = "tag")]
         tags: Vec<String>,
@@ -370,7 +393,7 @@ fn print_test_info(mut tests: Vec<test::Definition>) {
     let mut name_column = vec!["TEST NAME".to_string()];
     let mut tags_column = vec!["TAGS".to_string()];
 
-    tests.sort_by_key(|td| td.filename.clone());
+    tests.sort_by_key(|td| td.file_data.filename.clone());
     tests.into_iter().for_each(|td| {
         name_column.push(td.name.unwrap_or("<none>".to_string()));
         tags_column.push(if td.tags.is_empty() {
@@ -378,7 +401,7 @@ fn print_test_info(mut tests: Vec<test::Definition>) {
         } else {
             td.tags.join(", ")
         });
-        path_column.push(td.filename)
+        path_column.push(td.file_data.filename)
     });
 
     let get_column_width = |v: &Vec<String>| v.iter().fold(0, |max, s| std::cmp::max(max, s.len()));
@@ -454,6 +477,20 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
+    if execution_mode == ExecutionMode::Format {
+        for td in &tests_to_run {
+            let mut file = fs::File::create(&td.file_data.filename).await?;
+            let file_data = serde_yaml::to_string(&td.file_data).unwrap();
+            file.write_all(file_data.as_bytes()).await?;
+        }
+
+        info!(
+            "Successfully formatted {} test files.\n",
+            &tests_to_run.len()
+        );
+        return Ok(executor::Report::default());
+    }
+
     if let ExecutionMode::Validate(generate) = execution_mode {
         if let Some(token) = &config.settings.api_key {
             if uuid::Uuid::parse_str(token).is_ok() {
@@ -465,15 +502,16 @@ async fn run_tests(
                     for failure in failures {
                         if generate && failure.1 == PlatformIdFailure::Missing {
                             let platform_id = Ulid::new().to_string();
-                            let test = tests_to_run[failure.0.index].clone();
+                            let mut test = tests_to_run[failure.0.index].clone();
+                            test.file_data.platform_id = Some(platform_id.clone());
 
-                            let line = format!("platformId: {}\n", platform_id);
-                            let mut file =
-                                OpenOptions::new().append(true).open(&test.filename).await?;
-                            file.write_all(line.as_bytes()).await?;
+                            let mut file = fs::File::create(&test.file_data.filename).await?;
+                            let file_data = serde_yaml::to_string(&test.file_data).unwrap();
+                            file.write_all(file_data.as_bytes()).await?;
+
                             info!(
                                 "Successfully updated test at path \"{}\" with platform ID {}.\n",
-                                test.filename, platform_id
+                                test.file_data.filename, platform_id
                             );
                         } else {
                             if !has_missing && failure.1 == PlatformIdFailure::Missing {
@@ -681,6 +719,30 @@ async fn main() -> std::process::ExitCode {
                 .await,
             )
         }
+        Commands::Format {
+            tags,
+            tags_or,
+            recursive,
+            paths,
+        } => {
+            updater::check_for_updates().await;
+            check_supplied_config_file_existence(&cli.config_file);
+            result_report_to_exit_code(
+                run_tests(
+                    paths,
+                    tags,
+                    tags_or,
+                    ExecutionMode::Format,
+                    recursive,
+                    cli_project,
+                    cli_environment,
+                    cli.config_file,
+                    None,
+                    cli_args,
+                )
+                .await,
+            )
+        }
         Commands::Validate {
             tags,
             tags_or,
@@ -732,7 +794,7 @@ async fn main() -> std::process::ExitCode {
     };
 
     log::logger().flush();
-    return exit_code;
+    exit_code
 }
 
 //------------------TESTS---------------------------------

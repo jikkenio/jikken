@@ -544,7 +544,7 @@ pub fn validate_platform_ids(
 #[cfg(test)]
 mod tests {
 
-    use test::Variable;
+    use test::{File, Variable};
 
     use crate::{
         executor::ExpectedResultData,
@@ -634,7 +634,7 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
 
@@ -762,7 +762,7 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
         let before = td.clone();
@@ -828,7 +828,7 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         };
         let before = td.clone();

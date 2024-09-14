@@ -983,13 +983,13 @@ pub fn print_validation_failures(
     let messages: Vec<String> = failures.iter().map(|(definition, failure)| {
         match failure {
             telemetry::PlatformIdFailure::Missing => {
-                format!("Test at path \"{}\" does not have a platformId. This field is required to stream telemetry data.", definition.filename)
+                format!("Test at path \"{}\" does not have a platformId. This field is required to stream telemetry data.", definition.file_data.filename)
             },
             telemetry::PlatformIdFailure::Invalid => {
-                format!("Test at path \"{}\" has an invalid platformId ({}). This field must be a valid ULID.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+                format!("Test at path \"{}\" has an invalid platformId ({}). This field must be a valid ULID.", definition.file_data.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
             },
             telemetry::PlatformIdFailure::Duplicate => {
-                format!("Test at path \"{}\" has a duplicate platformId ({}). This field must be a valid ULID and unique across all files.", definition.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
+                format!("Test at path \"{}\" has a duplicate platformId ({}). This field must be a valid ULID and unique across all files.", definition.file_data.filename, definition.platform_id.clone().expect("PlatformId should have a value"))
             },
         }
    }).collect();
@@ -2235,6 +2235,7 @@ mod tests {
     use self::test::definition::ResolvedRequest;
     use hyper::Response;
     use std::any::Any;
+    use test::File;
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
@@ -2622,7 +2623,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index,
         }
     }
@@ -2718,7 +2719,7 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
             index: 0,
         }
     }

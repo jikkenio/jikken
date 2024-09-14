@@ -1,17 +1,17 @@
 name: List Body Generation
-tags: variables generation
 platformId: 01J6SPMR2XE5Y7A1Q590ST1VAJ
+tags: variables generation
 request:
   method: Post
   url: https://api.postcodes.io/postcodes
-  body: 
+  body:
     postcodes: ${postcodes}
 response:
   status: 200
 variables:
-  - name: postcodes
-    type: List
-    minLength: 1
-    maxLength: 5
-    schema:
-      type: String
+- name: postcodes
+  type: List
+  minLength: 1
+  maxLength: 5
+  schema:
+    type: String

@@ -74,7 +74,7 @@ pub fn validate_file(
     };
 
     let variables = test::Variable::validate_variables_opt(
-        file.variables,
+        file.clone().variables,
         PathBuf::from(&file.filename)
             .parent()
             .and_then(|p| p.to_str())
@@ -82,6 +82,7 @@ pub fn validate_file(
     )?;
 
     let td = test::Definition {
+        file_data: file.clone(),
         name: file.name,
         description: file.description,
         id: file.id.map(|i| i.to_lowercase()),
@@ -104,7 +105,6 @@ pub fn validate_file(
         setup: definition::RequestResponseDescriptor::new_opt(file.setup, &variables)?,
         cleanup: definition::CleanupDescriptor::new(file.cleanup, &variables)?,
         disabled: file.disabled.unwrap_or_default(),
-        filename: file.filename,
         index,
     };
 

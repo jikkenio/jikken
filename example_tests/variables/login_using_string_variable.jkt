@@ -1,18 +1,17 @@
 name: Using Simple Variable
-tags: variables 
 platformId: 01HX74ECN3K3QNK7A5AE7NGRK8
+tags: variables
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
-  body: {
-    "username": "testuser",
-    "password": "${password_val}"
-}
+  body:
+    password: ${password_val}
+    username: testuser
 response:
   status: 200
   extract:
-    - name: token
-      field: auth.token
+  - name: token
+    field: auth.token
 variables:
-  - name: password_val
-    value: password
+- name: password_val
+  value: password
