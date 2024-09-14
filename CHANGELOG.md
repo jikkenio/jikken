@@ -19,6 +19,8 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - OpenApi test generation can now produce variable definitions for generating test data
 - Stages in multi-stage tests can now have names via the `name` field
 - New `NOW` and `NOW_UTC` built-in global variables, which contain the current timestamp in local and UTC time
+- New `format` command which auto-formats your test files
+- New `validate` command for basic test file validation, which provides a mechanism to generate Platform IDs
 
 # Changes
 
