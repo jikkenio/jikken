@@ -1,15 +1,14 @@
 id: auth
-tags: extract
 platformId: 01HW114Y5763WPCQ4GAWW1XVZT
+tags: extract
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
-  body: {
-    "username": "testuser",
-    "password": "password"
-  }
+  body:
+    password: password
+    username: testuser
 response:
   status: 200
   extract:
-    - name: token
-      field: auth.token
+  - name: token
+    field: auth.token

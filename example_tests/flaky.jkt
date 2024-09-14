@@ -1,12 +1,12 @@
 name: Simulate Flaky Test You Wish to Disable
-requires: auth
+platformId: 01HY4DRG6ZKTT793EYF84T2CW7
 disabled: true
 tags: regression flaky triaged
-platformId: 01HY4DRG6ZKTT793EYF84T2CW7
+requires: auth
 request:
   url: https://api.jikken.io/v2/fix_me
   headers:
-    - header: Authorization
-      value: ${token}
+  - header: Authorization
+    value: ${token}
 response:
   status: 200
