@@ -1,14 +1,17 @@
-id: auth
-platformId: 01HW114Y5763WPCQ4GAWW1XVZT
-tags: extract
+name: Using Simple Variable
+platformId: 01HX74ECN3K3QNK7A5AE7NGRK8
+tags: variables
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
   body:
-    password: password
+    password: ${password_val}
     username: testuser
 response:
   status: 200
   extract:
   - name: token
     field: auth.token
+variables:
+- name: password_val
+  value: password

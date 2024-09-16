@@ -1,8 +1,8 @@
 use crate::test;
-use crate::test::{definition, file, http, variable};
+use crate::test::{definition, file, http};
 use std::cell::Cell;
 use std::error::Error;
-use uuid::Uuid;
+use ulid::Ulid;
 
 use super::File;
 
@@ -26,7 +26,8 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
     Ok(test::File {
         filename: "".to_string(),
         name: Some("".to_string()),
-        id: Some(Uuid::new_v4().to_string()),
+        id: Some("".to_string()),
+        platform_id: Some(Ulid::new().to_string()),
         project: Some("".to_string()),
         env: Some("".to_string()),
         tags: Some("".to_string()),
@@ -38,7 +39,7 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         response: Some(new_full_response()?),
         stages: Some(vec![new_full_stage()?]),
         cleanup: Some(new_full_cleanup()?),
-        variables: Some(vec![new_full_variable()?]),
+        variables: Some(vec![new_full_variables()?]),
         disabled: Some(false),
         description: Some("".to_string()),
     })
@@ -76,20 +77,19 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
         request: new_full_request()?,
         compare: Some(new_full_compare()?),
         response: Some(new_full_response()?),
-        variables: Some(vec![new_full_variable()?]),
+        variables: Some(vec![new_full_variables()?]),
         name: None,
         delay: None,
     })
 }
 
-fn new_full_variable() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
+//Do we want to create a variable of every type as part of the full template?
+fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedVariable {
         name: "".to_string(),
-        data_type: Some(variable::Type::String),
-        value: Some(serde_json::from_str("{}")?),
-        modifier: Some(variable::Modifier::new()),
-        format: Some("".to_string()),
-        file: Some("".to_string()),
+        value: file::ValueOrDatumOrFile::Value {
+            value: serde_json::Value::from("".to_string()),
+        },
     })
 }
 
@@ -99,11 +99,13 @@ fn new_response() -> file::UnvalidatedResponse {
 
 fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedResponse {
-        status: Some(200),
+        status: Some(test::file::ValueOrNumericSpecification::Value(200)),
         headers: Some(vec![new_header()]),
         body: Some(serde_json::from_str("{}")?),
         ignore: Some(vec!["".to_string()]),
         extract: Some(vec![definition::ResponseExtraction::new()]),
+        strict: Some(true),
+        body_schema: None,
     })
 }
 
@@ -118,6 +120,7 @@ fn new_full_compare() -> Result<file::UnvalidatedCompareRequest, Box<dyn Error +
         add_headers: Some(vec![new_header()]),
         ignore_headers: Some(vec!["".to_string()]),
         body: Some(serde_json::from_str("{}")?),
+        strict: Some(true),
     })
 }
 

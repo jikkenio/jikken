@@ -1,18 +1,23 @@
 use crate::test;
+use crate::test::file::ValueOrNumericSpecification;
 use crate::test::{file, http, validation};
+use log::trace;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+use super::file::BodyOrSchema;
+use crate::test::Variable;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestBody {
-    pub data: serde_json::Value,
+    pub data: BodyOrSchema,
 
     #[serde(skip_serializing, skip_deserializing)]
     pub matches_variable: Cell<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequestDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -21,9 +26,12 @@ pub struct RequestDescriptor {
     pub body: Option<RequestBody>,
 }
 
-// TODO: add validation logic to verify the descriptor is valid
 impl RequestDescriptor {
-    pub fn new(request: file::UnvalidatedRequest) -> Result<RequestDescriptor, validation::Error> {
+    pub fn new(
+        request: file::UnvalidatedRequest,
+        variables: &[Variable],
+    ) -> Result<RequestDescriptor, validation::Error> {
+        trace!("RequestDescriptor::new({:?})", request);
         let validated_params = match request.params {
             Some(params) => params
                 .iter()
@@ -48,10 +56,27 @@ impl RequestDescriptor {
             None => Vec::new(),
         };
 
-        let request_body = request.body.map(|b| RequestBody {
-            data: b,
-            matches_variable: Cell::from(false),
-        });
+        let request_body = request
+            .body
+            .and_then(|variable_name_or_value| match variable_name_or_value {
+                file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                    Some(BodyOrSchema::Body(v))
+                }
+                file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                    .iter()
+                    .find(|v| name == format!("${{{}}}", v.name))
+                    .and_then(|v| match &v.value {
+                        test::ValueOrDatumOrFileOrSecret::Value { value: v } => {
+                            Some(BodyOrSchema::Body(v.clone()))
+                        }
+                        _ => None,
+                    })
+                    .or_else(|| Some(BodyOrSchema::Body(serde_json::Value::from(name.val())))),
+            })
+            .map(|b| RequestBody {
+                data: b,
+                matches_variable: Cell::from(false),
+            });
 
         Ok(RequestDescriptor {
             method: request.method.unwrap_or(http::Verb::Get),
@@ -64,15 +89,16 @@ impl RequestDescriptor {
 
     pub fn new_opt(
         request_opt: Option<file::UnvalidatedRequest>,
+        variables: &[Variable],
     ) -> Result<Option<RequestDescriptor>, validation::Error> {
         match request_opt {
-            Some(request) => Ok(Some(RequestDescriptor::new(request)?)),
+            Some(request) => Ok(Some(RequestDescriptor::new(request, variables)?)),
             None => Ok(None),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CompareDescriptor {
     pub method: http::Verb,
     pub url: String,
@@ -83,11 +109,13 @@ pub struct CompareDescriptor {
     pub add_headers: Vec<http::Header>,
     pub ignore_headers: Vec<String>,
     pub body: Option<RequestBody>,
+    pub strict: bool,
 }
 
 impl CompareDescriptor {
     pub fn new_opt(
         request_opt: Option<file::UnvalidatedCompareRequest>,
+        variables: &[Variable],
     ) -> Result<Option<CompareDescriptor>, validation::Error> {
         match request_opt {
             Some(request) => {
@@ -159,10 +187,29 @@ impl CompareDescriptor {
                     };
                 }
 
-                let compare_body = request.body.map(|b| RequestBody {
-                    data: b,
-                    matches_variable: Cell::from(false),
-                });
+                let compare_body = request
+                    .body
+                    .and_then(|variable_name_or_value| match variable_name_or_value {
+                        file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                            Some(BodyOrSchema::Body(v))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| name == format!("${{{}}}", v.name))
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Value { value: v } => {
+                                    Some(BodyOrSchema::Body(v.clone()))
+                                }
+                                _ => None,
+                            })
+                            .or_else(|| {
+                                Some(BodyOrSchema::Body(serde_json::Value::from(name.val())))
+                            }),
+                    })
+                    .map(|b| RequestBody {
+                        data: b,
+                        matches_variable: Cell::from(false),
+                    });
 
                 Ok(Some(CompareDescriptor {
                     method: request.method.unwrap_or(http::Verb::Get),
@@ -174,6 +221,7 @@ impl CompareDescriptor {
                     add_headers: validated_add_headers,
                     ignore_headers: validated_ignore_headers,
                     body: compare_body,
+                    strict: request.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),
@@ -182,6 +230,7 @@ impl CompareDescriptor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct ResponseExtraction {
     pub name: String,
     pub field: String,
@@ -196,19 +245,22 @@ impl ResponseExtraction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ResponseDescriptor {
-    pub status: Option<u16>,
+    pub status: Option<ValueOrNumericSpecification<u16>>,
     pub headers: Vec<http::Header>,
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,
     pub extract: Vec<ResponseExtraction>,
+    pub strict: bool,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
 impl ResponseDescriptor {
     pub fn new_opt(
         response: Option<file::UnvalidatedResponse>,
+        variables: &[Variable],
     ) -> Result<Option<ResponseDescriptor>, validation::Error> {
         match response {
             Some(res) => {
@@ -225,9 +277,49 @@ impl ResponseDescriptor {
                 };
 
                 let validated_ignore = res.ignore.unwrap_or_default();
-                let validated_extraction = res.extract.unwrap_or_default();
+                let validated_extraction: Vec<ResponseExtraction> = res.extract.unwrap_or_default();
 
-                let response_body = res.body.map(|b| RequestBody {
+                if res.body.is_some() && res.body_schema.is_some() {
+                    return Err(validation::Error {
+                        reason: "Responses can contain a body OR a bodySchema. Not both"
+                            .to_string(),
+                    });
+                }
+
+                let maybe_body_or_schema = res
+                    .body
+                    .and_then(|variable_name_or_value| match variable_name_or_value {
+                        file::UnvalidatedVariableNameOrComponent::Component(v) => {
+                            Some(BodyOrSchema::Body(v))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| name == format!("${{{}}}", v.name))
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Value { value: v } => {
+                                    Some(BodyOrSchema::Body(v.clone()))
+                                }
+                                //In theory, we could try to read from a file variable and
+                                //inject the contents... \todo
+                                _ => None,
+                            }),
+                    })
+                    .or(res.body_schema.and_then(|s| match s {
+                        file::UnvalidatedVariableNameOrComponent::Component(ds) => {
+                            Some(BodyOrSchema::Schema(ds))
+                        }
+                        file::UnvalidatedVariableNameOrComponent::VariableName(name) => variables
+                            .iter()
+                            .find(|v| name == format!("${{{}}}", v.name))
+                            .and_then(|v| match &v.value {
+                                test::ValueOrDatumOrFileOrSecret::Schema { value: ds } => {
+                                    Some(BodyOrSchema::Schema(ds.clone()))
+                                }
+                                _ => None,
+                            }),
+                    }));
+
+                let response_body = maybe_body_or_schema.map(|b| RequestBody {
                     data: b,
                     matches_variable: Cell::from(false),
                 });
@@ -238,6 +330,7 @@ impl ResponseDescriptor {
                     body: response_body,
                     ignore: validated_ignore,
                     extract: validated_extraction,
+                    strict: res.strict.unwrap_or(true),
                 }))
             }
             None => Ok(None),
@@ -245,7 +338,7 @@ impl ResponseDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StageDescriptor {
     pub request: RequestDescriptor,
     pub compare: Option<CompareDescriptor>,
@@ -263,11 +356,12 @@ impl StageDescriptor {
     pub fn new(
         stage: file::UnvalidatedStage,
         source_path: &str,
+        variables: &[Variable],
     ) -> Result<StageDescriptor, validation::Error> {
         Ok(StageDescriptor {
-            request: RequestDescriptor::new(stage.request)?,
-            compare: CompareDescriptor::new_opt(stage.compare)?,
-            response: ResponseDescriptor::new_opt(stage.response)?,
+            request: RequestDescriptor::new(stage.request, variables)?,
+            compare: CompareDescriptor::new_opt(stage.compare, variables)?,
+            response: ResponseDescriptor::new_opt(stage.response, variables)?,
             variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             // source_path: source_path.to_string(),
             name: stage.name,
@@ -281,18 +375,19 @@ impl StageDescriptor {
         response_opt: Option<file::UnvalidatedResponse>,
         stages_opt: Option<Vec<file::UnvalidatedStage>>,
         source_path: &str,
+        variables: &[Variable],
     ) -> Result<Vec<StageDescriptor>, validation::Error> {
         let mut results = Vec::new();
         let mut count = 0;
 
         if let Some(request) = request_opt {
             results.push(StageDescriptor {
-                request: RequestDescriptor::new(request)?,
-                compare: CompareDescriptor::new_opt(compare_opt)?,
-                response: ResponseDescriptor::new_opt(response_opt)?,
+                request: RequestDescriptor::new(request, variables)?,
+                compare: CompareDescriptor::new_opt(compare_opt, variables)?,
+                response: ResponseDescriptor::new_opt(response_opt, variables)?,
                 variables: Vec::new(),
                 // source_path: source_path.to_string(),
-                name: Some("request".to_string()),
+                name: None,
                 delay: None,
             });
             count += 1;
@@ -305,7 +400,7 @@ impl StageDescriptor {
                 results.append(
                     &mut stages
                         .into_iter()
-                        .map(|s| StageDescriptor::new(s, source_path))
+                        .map(|s| StageDescriptor::new(s, source_path, variables))
                         .filter_map(|v| match v {
                             Ok(x) => Some(x),
                             Err(_) => None,
@@ -344,7 +439,7 @@ impl StageDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequestResponseDescriptor {
     pub request: RequestDescriptor,
     pub response: Option<ResponseDescriptor>,
@@ -353,11 +448,12 @@ pub struct RequestResponseDescriptor {
 impl RequestResponseDescriptor {
     pub fn new_opt(
         reqresp_opt: Option<file::UnvalidatedRequestResponse>,
+        variables: &[Variable],
     ) -> Result<Option<RequestResponseDescriptor>, validation::Error> {
         match reqresp_opt {
             Some(reqresp) => Ok(Some(RequestResponseDescriptor {
-                request: RequestDescriptor::new(reqresp.request)?,
-                response: ResponseDescriptor::new_opt(reqresp.response)?,
+                request: RequestDescriptor::new(reqresp.request, variables)?,
+                response: ResponseDescriptor::new_opt(reqresp.response, variables)?,
             })),
             None => Ok(None),
         }
@@ -365,7 +461,6 @@ impl RequestResponseDescriptor {
 }
 
 pub struct ResolvedRequest {
-    // pub req_resp: RequestResponseDescriptor,
     pub url: String,
     pub method: http::Method,
     pub headers: Vec<(String, String)>,
@@ -388,7 +483,7 @@ impl ResolvedRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CleanupDescriptor {
     pub onsuccess: Option<RequestDescriptor>,
     pub onfailure: Option<RequestDescriptor>,
@@ -398,12 +493,13 @@ pub struct CleanupDescriptor {
 impl CleanupDescriptor {
     pub fn new(
         cleanup_opt: Option<file::UnvalidatedCleanup>,
+        variables: &[Variable],
     ) -> Result<CleanupDescriptor, validation::Error> {
         match cleanup_opt {
             Some(cleanup) => Ok(CleanupDescriptor {
-                onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess)?,
-                onfailure: RequestDescriptor::new_opt(cleanup.onfailure)?,
-                always: RequestDescriptor::new_opt(cleanup.always)?,
+                onsuccess: RequestDescriptor::new_opt(cleanup.onsuccess, variables)?,
+                onfailure: RequestDescriptor::new_opt(cleanup.onfailure, variables)?,
+                always: RequestDescriptor::new_opt(cleanup.always, variables)?,
             }),
             None => Ok(CleanupDescriptor {
                 onsuccess: None,

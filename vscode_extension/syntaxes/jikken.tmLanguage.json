@@ -11,6 +11,9 @@
 			"include": "#property"
 		},
 		{
+			"include": "#embedded-variable"
+		},
+		{
 			"include": "#directive"
 		},
 		{
@@ -33,7 +36,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|description|id|env|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
+					"match": "\\b(name|description|id|platformId|env|project|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
 				},
 				{
 					"include": "#request-keywords"
@@ -59,7 +62,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|type|value|file|format|modifier|dataType|operation|unit)\\b"
+					"match": "\\b(name|type|value|valueSet|file|min|max|pattern|oneOf|noneOf|anyOf|length|minLength|maxLength|schema|modifier|format)\\b"
 				},
 				{
 					"include": "#modifier-keywords"
@@ -86,13 +89,13 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(method|url|body|params|headers)\\b"
+					"match": "\\b(method|url|params)\\b"
 				},
 				{
 					"include": "#params-keywords"
 				},
 				{
-					"include": "#headers-keywords"
+					"include": "#http-keywords"
 				}
 			]
 		},
@@ -124,7 +127,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(body)\\b"
+					"match": "\\b(body|headers)\\b"
 				},
 				{
 					"include": "#headers-keywords"
@@ -143,7 +146,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(status|body|ignore|extract|headers)\\b"
+					"match": "\\b(status|ignore|extract|strict|bodySchema)\\b"
 				},
 				{
 					"include": "#http-keywords"
@@ -179,16 +182,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(ignoreParams|ignoreHeaders)\\b"
-				},
-				{
-					"include": "#http-keywords"
-				},
-				{
-					"include": "#headers-keywords"
-				},
-				{
-					"include": "#params-keywords"
+					"match": "\\b(ignoreParams|ignoreHeaders|strict)\\b"
 				},
 				{
 					"include": "#addheaders-keywords"
@@ -338,6 +332,10 @@
 		"block-sequence": {
 			"match": "(-)( |\\t|$)",
 			"name": "punctuation.definition.block.sequence.item.yaml"
+		},
+		"embedded-variable": {
+			"match": "(\\${.*?})",
+			"name": "variable.other"
 		},
 		"comment": {
 			"begin": "(?:(^[ \\t]*)|[ \\t]+)(?=#\\p{Print}*$)",
@@ -651,7 +649,12 @@
 				{
 					"begin": "(?x)\n                          [^\\s[-?:,\\[\\]{}#&*!|>'\"%@`]]\n                        | [?:-] \\S\n                    ",
 					"end": "(?x)\n                        (?=\n                              \\s* $\n                            | \\s+ \\#\n                            | \\s* : \\s\n                        )\n                    ",
-					"name": "string.unquoted.plain.out.yaml"
+					"name": "string.unquoted.plain.out.yaml",
+					"patterns": [
+						{
+							"include": "#embedded-variable"
+						}
+					]
 				}
 			]
 		},

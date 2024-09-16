@@ -4,6 +4,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct Header {
     pub header: String,
     pub value: String,
@@ -38,7 +39,8 @@ impl Hash for Header {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Parameter {
     pub param: String,
     pub value: String,

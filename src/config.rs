@@ -1,5 +1,5 @@
-use crate::test;
-use chrono::{Local, Utc};
+use crate::test::{self, SecretValue};
+use chrono::Local;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -11,6 +11,8 @@ use std::path::Path;
 pub struct Config {
     pub settings: Settings,
     pub globals: BTreeMap<String, String>,
+    #[serde(skip_serializing)]
+    pub secrets: BTreeMap<String, String>,
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -29,6 +31,8 @@ pub struct Settings {
 struct File {
     pub settings: Option<FileSettings>,
     pub globals: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing)]
+    pub secrets: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Deserialize)]
@@ -43,15 +47,25 @@ struct FileSettings {
 
 impl Config {
     pub fn generate_global_variables(&self) -> Vec<test::Variable> {
+        let now = Local::now();
+        let now_utc = now.to_utc();
         let mut global_variables = BTreeMap::new();
-        global_variables.insert(
-            "TODAY".to_string(),
-            format!("{}", Local::now().format("%Y-%m-%d")),
-        );
+
+        global_variables.insert("TODAY".to_string(), format!("{}", now.format("%Y-%m-%d")));
 
         global_variables.insert(
             "TODAY_UTC".to_string(),
-            format!("{}", Utc::now().format("%Y-%m-%d")),
+            format!("{}", now_utc.format("%Y-%m-%d")),
+        );
+
+        global_variables.insert(
+            "NOW".to_string(),
+            format!("{}", now.format("%Y-%m-%d %H:%M:%S.%3f")),
+        );
+
+        global_variables.insert(
+            "NOW_UTC".to_string(),
+            format!("{}", now_utc.format("%Y-%m-%d %H:%M:%S.%3f")),
         );
 
         global_variables
@@ -59,13 +73,22 @@ impl Config {
             .chain(self.globals.iter())
             .map(|i| test::Variable {
                 name: i.0.to_string(),
-                value: serde_yaml::Value::String(i.1.to_string()),
-                data_type: test::variable::Type::String,
-                modifier: None,
-                format: None,
-                file: None,
+                value: test::ValueOrDatumOrFileOrSecret::Value {
+                    value: serde_json::Value::from(i.1.to_string()),
+                },
                 source_path: "./".to_string(),
             })
+            .chain(
+                self.secrets
+                    .iter()
+                    .map(|(secret_name, secret_val)| test::Variable {
+                        name: secret_name.clone(),
+                        value: test::ValueOrDatumOrFileOrSecret::Secret {
+                            value: SecretValue::new(secret_val),
+                        },
+                        source_path: "/".to_string(),
+                    }),
+            )
             .collect()
     }
 }
@@ -81,6 +104,7 @@ impl Default for Config {
                 environment: None,
             },
             globals: BTreeMap::new(),
+            secrets: BTreeMap::new(),
         }
     }
 }
@@ -130,6 +154,15 @@ async fn load_home_file() -> Option<File> {
     load_config_file(cfg_file?.as_path().to_str()?).await
 }
 
+fn gather_env_vars_with_prefix(prefix: &str) -> BTreeMap<String, String> {
+    env::vars().fold(BTreeMap::new(), |mut acc, (key, value)| {
+        if let Some(stripped) = key.strip_prefix(prefix) {
+            acc.insert(stripped.to_string(), value);
+        }
+        acc
+    })
+}
+
 fn load_config_from_environment_variables_as_file() -> File {
     let envvar_cof = env::var("JIKKEN_CONTINUE_ON_FAILURE")
         .ok()
@@ -143,14 +176,6 @@ fn load_config_from_environment_variables_as_file() -> File {
     let envvar_project = env::var("JIKKEN_PROJECT").ok();
     let envvar_env = env::var("JIKKEN_ENVIRONMENT").ok();
 
-    let mut global_variables = BTreeMap::new();
-
-    for (key, value) in env::vars() {
-        if let Some(stripped) = key.strip_prefix("JIKKEN_GLOBAL_") {
-            global_variables.insert(stripped.to_string(), value);
-        }
-    }
-
     File {
         settings: Some(FileSettings {
             api_key: envvar_apikey,
@@ -159,17 +184,22 @@ fn load_config_from_environment_variables_as_file() -> File {
             project: envvar_project,
             environment: envvar_env,
         }),
-        globals: Some(global_variables),
+        globals: Some(gather_env_vars_with_prefix("JIKKEN_GLOBAL_")),
+        secrets: Some(gather_env_vars_with_prefix("JIKKEN_SECRET_")),
     }
+}
+
+fn merge_btrees(
+    lhs: BTreeMap<String, String>,
+    rhs: Option<BTreeMap<String, String>>,
+) -> BTreeMap<String, String> {
+    lhs.into_iter().chain(rhs.unwrap_or_default()).collect()
 }
 
 fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
     if let Some(file) = file_opt {
-        let merged_globals: BTreeMap<String, String> = config
-            .globals
-            .into_iter()
-            .chain(file.globals.unwrap_or_default())
-            .collect();
+        let merged_globals = merge_btrees(config.globals, file.globals);
+        let merged_secrets = merge_btrees(config.secrets, file.secrets);
 
         if let Some(settings) = file.settings {
             return Config {
@@ -183,12 +213,14 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                     environment: settings.environment.or(config.settings.environment),
                 },
                 globals: merged_globals,
+                secrets: merged_secrets,
             };
         }
 
         return Config {
             settings: config.settings,
             globals: merged_globals,
+            secrets: merged_secrets,
         };
     }
 
@@ -202,12 +234,15 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
         (Some(x), None) => Some(x),
         (None, Some(x)) => Some(x),
         (Some(existing_file), Some(file_to_apply)) => {
-            let merged_globals: BTreeMap<String, String> = existing_file
-                .globals
-                .unwrap_or_default()
-                .into_iter()
-                .chain(file_to_apply.globals.unwrap_or_default())
-                .collect();
+            let merged_globals = merge_btrees(
+                existing_file.globals.unwrap_or_default(),
+                file_to_apply.globals,
+            );
+
+            let merged_secrets = merge_btrees(
+                existing_file.secrets.unwrap_or_default(),
+                file_to_apply.secrets,
+            );
 
             if let Some(settings) = file_to_apply.settings {
                 return Some(File {
@@ -233,12 +268,14 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
                             .and_then(|s| s.environment.clone())),
                     }),
                     globals: Some(merged_globals),
+                    secrets: Some(merged_secrets),
                 });
             }
 
             Some(File {
                 settings: existing_file.settings,
                 globals: Some(merged_globals),
+                secrets: None,
             })
         }
     }
@@ -274,6 +311,9 @@ mod tests {
             
             [globals]
             my_override_global="foo"
+
+            [secrets]
+            my_override_secret="bar"
             "#
             .as_bytes(),
         )
@@ -295,7 +335,11 @@ mod tests {
                 globals: BTreeMap::from([(
                     String::from("my_override_global"),
                     String::from("foo")
-                )])
+                )]),
+                secrets: BTreeMap::from([(
+                    String::from("my_override_secret"),
+                    String::from("bar")
+                )]),
             },
             actual
         );
@@ -325,6 +369,10 @@ mod tests {
             [globals]
             my_override_global="foo"
             my_override_global2="bar"
+
+            [secrets]
+            my_override_secret="foo2"
+            my_override_secret2="bar2"
             "#
             .as_bytes(),
         )
@@ -345,6 +393,10 @@ mod tests {
             [globals]
             my_override_global="bar"
             my_override_global3="car"
+
+            [secrets]
+            my_override_secret="bar2"
+            my_override_secret3="car"
             "#
             .as_bytes(),
         )
@@ -369,6 +421,11 @@ mod tests {
                     (String::from("my_override_global2"), String::from("bar")),
                     (String::from("my_override_global3"), String::from("car"))
                 ]),
+                secrets: BTreeMap::from([
+                    (String::from("my_override_secret"), String::from("bar2")),
+                    (String::from("my_override_secret2"), String::from("bar2")),
+                    (String::from("my_override_secret3"), String::from("car"))
+                ])
             },
             actual
         );

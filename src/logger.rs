@@ -1,5 +1,8 @@
 use log::{Level, Log, Metadata, Record};
-use std::sync::Mutex;
+use std::{
+    io::{self, Write},
+    sync::Mutex,
+};
 
 pub struct SimpleLogger {
     pub level: Level,
@@ -22,6 +25,7 @@ impl SimpleLogger {
         match level {
             Level::Info => {
                 print!("{}", message);
+                _ = io::stdout().flush();
             }
             Level::Warn => {
                 println!("\x1b[33m{}\x1b[0m", message);

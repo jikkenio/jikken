@@ -1,36 +1,35 @@
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum Type {
-    #[serde(alias = "int", alias = "INT")]
-    Int,
-    #[serde(alias = "string", alias = "STRING")]
-    String,
-    #[serde(alias = "date", alias = "DATE")]
-    Date,
-    #[serde(alias = "datetime", alias = "DATETIME")]
-    Datetime,
-}
+use serde_json::Value;
+use std::hash::Hash;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Range {
-    pub min: String,
-    pub max: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Modifier {
     pub operation: String,
-    pub value: String,
+    pub value: Value,
     pub unit: String,
 }
 
+impl Hash for Modifier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state);
+    }
+}
+
 impl Modifier {
-    pub fn new() -> Modifier {
-        Modifier {
-            operation: "".to_string(),
-            value: "".to_string(),
-            unit: "".to_string(),
+    //We need an enum for modifier
+    pub fn get_inverse(&self) -> Modifier {
+        match self.operation.as_str() {
+            "add" => Self {
+                operation: "subtract".to_string(),
+                value: self.value.clone(),
+                unit: self.unit.clone(),
+            },
+            "subtract" => Self {
+                operation: "add".to_string(),
+                value: self.value.clone(),
+                unit: self.unit.clone(),
+            },
+            _ => self.clone(),
         }
     }
 }
