@@ -60,6 +60,7 @@ mod openapi_legacy {
     use crate::test::file::DatumSchema;
     use crate::test::file::FloatSpecification;
     use crate::test::file::IntegerSpecification;
+    use crate::test::file::SimpleValueVariable;
     use crate::test::file::Specification;
     use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedRequest;
@@ -360,6 +361,33 @@ mod openapi_legacy {
         }
     }
 
+    fn create_variables2(
+        op: &openapiv3::Operation,
+        spec: &OpenAPI,
+    ) -> Option<Vec<test::file::UnvalidatedVariable3>> {
+        let ret = op
+            .parameters
+            .iter()
+            .filter_map(|p_or_ref| {
+                p_or_ref
+                    .resolve(spec)
+                    .map(|t| {
+                        test::file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+                            name: t.name.clone(),
+                            value: serde_json::Value::from("value".to_string()),
+                        })
+                    })
+                    .ok()
+            })
+            .collect::<Vec<file::UnvalidatedVariable3>>();
+
+        if ret.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
+    }
+
     fn create_test(
         path: &str,
         op: &openapiv3::Operation,
@@ -382,7 +410,7 @@ mod openapi_legacy {
         let response =
             create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
         let variables = create_variables(op, spec);
-
+        let variables2 = create_variables2(op, spec);
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
@@ -394,6 +422,7 @@ mod openapi_legacy {
                     compare: None,
                     response,
                     variables,
+                    variables2,
                     name: None,
                     delay: None,
                 }]),
@@ -477,6 +506,7 @@ mod openapi_v31 {
     use crate::test::file::EmailSpecification;
     use crate::test::file::FloatSpecification;
     use crate::test::file::IntegerSpecification;
+    use crate::test::file::SimpleValueVariable;
     use crate::test::file::Specification;
     use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedRequest;
@@ -750,6 +780,22 @@ mod openapi_v31 {
             .unwrap_or_default()
     }
 
+    fn create_variables2(op: &Operation, spec: &Spec) -> Vec<test::file::UnvalidatedVariable3> {
+        op.parameters
+            .iter()
+            .map(|p_or_ref| {
+                p_or_ref.resolve(spec).ok().map(|t| {
+                    test::file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+                        name: t.name.clone(),
+                        value: serde_json::Value::from("".to_string()),
+                    })
+                })
+            })
+            .filter(Option::is_some)
+            .collect::<Option<Vec<test::file::UnvalidatedVariable3>>>()
+            .unwrap_or_default()
+    }
+
     fn create_test(
         path: &str,
         op: &oas3::spec::Operation,
@@ -772,13 +818,19 @@ mod openapi_v31 {
         //and create jikken variables for each
         let resolved_path = path.replace('{', "${").to_string();
         let mut variables = create_variables(op, spec);
-
+        let mut variables2 = create_variables2(op, spec);
         let (request, request_var) = create_request(resolved_path.as_str(), verb, op, spec);
         if let Some(v) = request_var {
             variables.push(v)
         }
         let maybe_vars = if !variables.is_empty() {
             Some(variables)
+        } else {
+            None
+        };
+
+        let maybe_vars2 = if !variables2.is_empty() {
+            Some(variables2)
         } else {
             None
         };
@@ -797,6 +849,7 @@ mod openapi_v31 {
                     compare: None,
                     response,
                     variables: maybe_vars,
+                    variables2: maybe_vars2,
                     name: None,
                     delay: None,
                 }]),

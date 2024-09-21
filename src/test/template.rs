@@ -4,6 +4,7 @@ use std::cell::Cell;
 use std::error::Error;
 use uuid::Uuid;
 
+use super::file::SimpleValueVariable;
 use super::File;
 
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
@@ -66,6 +67,7 @@ fn new_stage() -> file::UnvalidatedStage {
         compare: None,
         response: Some(new_response()),
         variables: None,
+        variables2: None,
         name: None,
         delay: None,
     }
@@ -77,6 +79,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
         compare: Some(new_full_compare()?),
         response: Some(new_full_response()?),
         variables: Some(vec![new_full_variables()?]),
+        variables2: Some(vec![new_full_variables2()?]),
         name: None,
         delay: None,
     })
@@ -90,6 +93,13 @@ fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Sen
             value: serde_json::Value::from("".to_string()),
         },
     })
+}
+
+fn new_full_variables2() -> Result<file::UnvalidatedVariable3, Box<dyn Error + Send + Sync>> {
+    Ok(file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+        name: "".to_string(),
+        value: serde_json::Value::from("".to_string()),
+    }))
 }
 
 fn new_response() -> file::UnvalidatedResponse {
