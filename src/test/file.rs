@@ -24,7 +24,6 @@ use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use serde_json::Value;
-use std::any::TypeId;
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -206,6 +205,17 @@ impl Hash for ValueOrDatumSchema {
         serde_json::to_string(self).unwrap().hash(state)
     }
 }
+/*
+impl TryFrom<UnvalidatedValueOrDatumSchema> for ValueOrDatumSchema {
+    type Error = String;
+    fn try_from(unvalidated: UnvalidatedValueOrDatumSchema) -> Result<Self, Self::Error> {
+        match unvalidated{
+            UnvalidatedValueOrDatumSchema::Datum(d) =>
+                TryInto::<DatumSchema>::try_into(d).,
+            UnvalidatedValueOrDatumSchema::Values()=>
+        }
+    }
+}*/
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
@@ -250,6 +260,27 @@ pub struct SequenceSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<i64>,
 }
+/*
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValuesOrSchema {
+    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
+    Values(UnvalidatedSpecification<Vec<Value>>),
+}
+
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedSequenceSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<UnvalidatedValuesOrSchema>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+}
+ */
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
@@ -721,7 +752,7 @@ fn validate1<T: Copy>(
     })
     .unwrap_or(Validated::Good(None))
 }
-
+/*
 fn validate1_with_projection<T: Clone>(
     pred: &impl Fn(&T) -> bool,
     val: Option<T>,
@@ -737,7 +768,7 @@ fn validate1_with_projection<T: Clone>(
         })
         .unwrap_or(Validated::Good(None))
 }
-
+*/
 fn validate2<T>(
     pred: &impl Fn(&T, &T) -> bool,
     val: &Option<T>,
@@ -766,7 +797,7 @@ fn non_negative_validator<T: Signed + Copy>(
         format!("negative value provided for {variable_name}"),
     )
 }
-
+/*
 fn is_expected_type<T: 'static>(
     num: &Option<Value>,
     type_name: &str,
@@ -797,7 +828,7 @@ fn is_expected_type<T: 'static>(
         format!("{type_name} not provided for {variable_name}"),
     )
 }
-
+*/
 fn less_than_or_equal_validator<T: PartialOrd>(
     lhs: &Option<T>,
     rhs: &Option<T>,
@@ -2135,6 +2166,143 @@ impl DatumSchema {
     }
 }
 
+impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
+    type Error = String;
+    fn try_from(unvalidated: UnvalidatedDatumSchemaVariable2) -> Result<Self, Self::Error> {
+        match unvalidated {
+            UnvalidatedDatumSchemaVariable2::Boolean(specification) => {
+                TryInto::<Option<BooleanSpecification>>::try_into(specification).map(|spec| {
+                    DatumSchema::Boolean {
+                        specification: spec,
+                    }
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Email(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Email {
+                    specification: Some(EmailSpecification { specification: s }),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Name(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Name {
+                    specification: Some(NameSpecification { specification: s }),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::String(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::String {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Float(spec) => {
+                TryInto::<FloatSpecification>::try_into(spec).map(|s| DatumSchema::Float {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Integer(spec) => {
+                TryInto::<IntegerSpecification>::try_into(spec).map(|s| DatumSchema::Integer {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::DateTime(spec) => {
+                TryInto::<DateTimeSpecification>::try_into(spec).map(|s| DatumSchema::DateTime {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Date(spec) => {
+                TryInto::<DateSpecification>::try_into(spec).map(|s| DatumSchema::Date {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable2::Object { schema } => {
+                let f = schema
+                    .into_iter()
+                    .map(|(k, v)| match v {
+                        UnvalidatedValueOrDatumSchema::Datum(ud) => {
+                            TryInto::<DatumSchema>::try_into(ud)
+                                .map(|ds| (k, ValueOrDatumSchema::Datum(ds)))
+                        }
+                        UnvalidatedValueOrDatumSchema::Values(v) => {
+                            Ok((k, ValueOrDatumSchema::Values(v)))
+                        }
+                    })
+                    .collect::<Result<BTreeMap<String, ValueOrDatumSchema>, String>>();
+                f.map(|tree| DatumSchema::Object { schema: Some(tree) })
+            }
+            UnvalidatedDatumSchemaVariable2::List(unvalidated) => {
+                let blah = match unvalidated.schema {
+                    None => Ok(None),
+                    Some(values_or_schema) => match values_or_schema {
+                        UnvalidatedValuesOrSchema::Schemas(s) => {
+                            let any_of = match s.any_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+                            let one_of = match s.one_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+                            let none_of = match s.none_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+                            let value = match s.value {
+                                None => Ok(None),
+                                Some(v) => {
+                                    TryInto::<DatumSchema>::try_into(*v).map(Box::new).map(Some)
+                                }
+                            };
+                            match (any_of, none_of, one_of, value) {
+                                (Ok(anys), Ok(nones), Ok(ones), Ok(val)) => {
+                                    TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
+                                        UnvalidatedSpecification::<Box<DatumSchema>> {
+                                            any_of: anys,
+                                            none_of: nones,
+                                            one_of: ones,
+                                            value: val,
+                                        },
+                                    )
+                                    .map(|a| a.map(ValuesOrSchema::Schemas))
+                                }
+                                //I lose error info here.
+                                _ => Err("Foo".to_string()),
+                            }
+                        }
+                        UnvalidatedValuesOrSchema::Values(v) => {
+                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(v)
+                                .map(|a| a.map(ValuesOrSchema::Values))
+                        }
+                    },
+                };
+                blah.and_then(|schema| {
+                    SequenceSpecification::new(
+                        schema,
+                        unvalidated.length,
+                        unvalidated.min_length,
+                        unvalidated.max_length,
+                    )
+                    .map(|s| DatumSchema::List {
+                        specification: Some(s),
+                    })
+                })
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedRequest {
@@ -2626,6 +2794,47 @@ pub struct UnvalidatedDateSpecification {
 pub type UnvalidatedFloatSpecification = UnvalidatedNumericSpecification<f64>;
 pub type UnvalidatedIntegerSpecification = UnvalidatedNumericSpecification<i64>;
 
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValueOrDatumSchema {
+    Datum(UnvalidatedDatumSchemaVariable2),
+    Values(Value),
+}
+
+impl Hash for UnvalidatedValueOrDatumSchema {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValuesOrSchema {
+    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
+    Values(UnvalidatedSpecification<Vec<Value>>),
+}
+
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedSequenceSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<UnvalidatedValuesOrSchema>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+}
+
+impl Hash for UnvalidatedSequenceSpecification {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+//How can I support the loosely typed object without making stuff blow up
+//Untagged Value at this level perhaps?
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum UnvalidatedDatumSchemaVariable2 {
@@ -2651,14 +2860,17 @@ pub enum UnvalidatedDatumSchemaVariable2 {
     #[serde(alias = "email")]
     Email(UnvalidatedStringSpecification),
     #[serde(alias = "list")]
-    List(SequenceSpecification),
+    List(UnvalidatedSequenceSpecification),
     #[serde(alias = "object")]
     Object {
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
         //I think this should probably be an enum
         //UnvalidatedDatumSchemaVariableORObject ;
         //this is what untagged object in Spec is for
-        schema: Option<BTreeMap<String, UnvalidatedDatumSchemaVariable2>>,
+        //The problem is any badly defined thing in the schema will
+        //be interpreted as an object which negates our checks
+        //maybe we should have used jk_type instead of type
+        schema: BTreeMap<String, UnvalidatedValueOrDatumSchema>,
     },
 }
 

@@ -8,12 +8,10 @@ use crate::test::file::BodyOrSchema;
 
 use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 use crate::test::definition::RequestBody;
-use crate::test::file::BooleanSpecification;
 use crate::test::file::DatumSchema;
 use crate::test::file::FloatSpecification;
 use crate::test::file::IntegerSpecification;
 use crate::test::file::NameSpecification;
-use crate::test::file::UnvalidatedVariable2;
 use crate::test::file::UnvalidatedVariable3;
 use crate::test::file::ValueOrDatumOrFile;
 use file::DateSpecification;
@@ -102,25 +100,6 @@ pub enum ValueOrDatumOrFileOrSecret {
     Value { value: serde_json::Value },
 }
 
-impl TryFrom<UnvalidatedVariable2> for ValueOrDatumOrFileOrSecret {
-    type Error = String;
-
-    fn try_from(value: UnvalidatedVariable2) -> Result<Self, Self::Error> {
-        match value {
-            UnvalidatedVariable2::Simple(simple_var) => Ok(ValueOrDatumOrFileOrSecret::Value {
-                value: simple_var.value,
-            }),
-            // \todo : check if file is valid?
-            //         we could, but will we ever store responses to file?
-            //         basically a TOCTOU question
-            UnvalidatedVariable2::File(file_var) => Ok(ValueOrDatumOrFileOrSecret::File {
-                value: file_var.file,
-            }),
-            _ => Err("bad".to_string()),
-        }
-    }
-}
-
 impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 
@@ -133,87 +112,8 @@ impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
             UnvalidatedVariable3::Simple(s) => {
                 Ok(ValueOrDatumOrFileOrSecret::Value { value: s.value })
             }
-            UnvalidatedVariable3::Datum(ds) => match ds {
-                file::UnvalidatedDatumSchemaVariable2::Boolean(specification) => {
-                    TryInto::<Option<BooleanSpecification>>::try_into(specification).map(|spec| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Boolean {
-                                specification: spec,
-                            },
-                        }
-                    })
-                }
-                file::UnvalidatedDatumSchemaVariable2::Email(spec) => {
-                    TryInto::<StringSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Email {
-                                specification: Some(EmailSpecification { specification: s }),
-                            },
-                        }
-                    })
-                }
-
-                file::UnvalidatedDatumSchemaVariable2::Name(spec) => {
-                    TryInto::<StringSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Name {
-                                specification: Some(NameSpecification { specification: s }),
-                            },
-                        }
-                    })
-                }
-
-                file::UnvalidatedDatumSchemaVariable2::String(spec) => {
-                    TryInto::<StringSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::String {
-                                specification: Some(s),
-                            },
-                        }
-                    })
-                }
-
-                file::UnvalidatedDatumSchemaVariable2::Float(spec) => {
-                    TryInto::<FloatSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Float {
-                                specification: Some(s),
-                            },
-                        }
-                    })
-                }
-                file::UnvalidatedDatumSchemaVariable2::Integer(spec) => {
-                    TryInto::<IntegerSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Integer {
-                                specification: Some(s),
-                            },
-                        }
-                    })
-                }
-                file::UnvalidatedDatumSchemaVariable2::DateTime(spec) => {
-                    TryInto::<DateTimeSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::DateTime {
-                                specification: Some(s),
-                            },
-                        }
-                    })
-                }
-                file::UnvalidatedDatumSchemaVariable2::Date(spec) => {
-                    TryInto::<DateSpecification>::try_into(spec).map(|s| {
-                        ValueOrDatumOrFileOrSecret::Schema {
-                            value: DatumSchema::Date {
-                                specification: Some(s),
-                            },
-                        }
-                    })
-                }
-                file::UnvalidatedDatumSchemaVariable2::Object { schema } => {
-                    Err("Not supported".to_string())
-                }
-                file::UnvalidatedDatumSchemaVariable2::List(_) => Err("Not supported".to_string()),
-            },
+            UnvalidatedVariable3::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
+                .map(|a| ValueOrDatumOrFileOrSecret::Schema { value: a }),
         }
     }
 }
