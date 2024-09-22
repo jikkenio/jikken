@@ -735,6 +735,10 @@ fn validate_test_file(
     project: Option<String>,
     environment: Option<String>,
 ) -> Option<test::Definition> {
+    println!(
+        "Variables: {:?}\nVariables2:{:?}",
+        &test_file.variables, &test_file.variables2
+    );
     let name = test_file
         .name
         .clone()

@@ -135,6 +135,35 @@ impl<T> Default for Specification<T> {
     }
 }
 
+impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
+    type Error = String;
+    fn try_from(unvalidated: UnvalidatedSpecification<T>) -> Result<Self, Self::Error> {
+        let specified = vec![
+            &unvalidated.any_of,
+            &unvalidated.one_of,
+            &unvalidated.none_of,
+        ]
+        .into_iter()
+        .filter(|o| o.is_some())
+        .count();
+        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
+            return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
+        }
+        return match (
+            unvalidated.value,
+            unvalidated.any_of,
+            unvalidated.one_of,
+            unvalidated.none_of,
+        ) {
+            (Some(v), _, _, _) => Ok(Some(Specification::Value(v))),
+            (_, Some(vs), _, _) => Ok(Some(Specification::AnyOf(vs))),
+            (_, _, Some(vs), _) => Ok(Some(Specification::OneOf((vs)))),
+            (_, _, _, Some(vs)) => Ok(Some(Specification::NoneOf(vs))),
+            _ => Ok(None),
+        };
+    }
+}
+
 #[derive(Serialize, Debug, Clone, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
@@ -1018,11 +1047,23 @@ where
 {
     type Error = String;
 
-    fn try_from(value: UnvalidatedNumericSpecification<T>) -> Result<Self, Self::Error> {
-        match value {
+    fn try_from(
+        unvalidated_numeric: UnvalidatedNumericSpecification<T>,
+    ) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<T> {
+            value: unvalidated_numeric.value,
+            any_of: unvalidated_numeric.any_of,
+            one_of: unvalidated_numeric.one_of,
+            none_of: unvalidated_numeric.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<T>>>::try_into(unvalidated_spec);
+        maybe_spec
+            .and_then(|spec| Self::new(spec, unvalidated_numeric.min, unvalidated_numeric.max))
+        /*match value {
             UnvalidatedNumericSpecification::Base(b) => Self::new(Some(b), None, None),
             UnvalidatedNumericSpecification::Numeric { min, max } => Self::new(None, min, max),
-        }
+        }*/
     }
 }
 
@@ -1220,7 +1261,26 @@ impl StringSpecification {
 impl TryFrom<UnvalidatedStringSpecification> for StringSpecification {
     type Error = String;
 
-    fn try_from(value: UnvalidatedStringSpecification) -> Result<Self, Self::Error> {
+    fn try_from(unvalidated_string: UnvalidatedStringSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            value: unvalidated_string.value,
+            any_of: unvalidated_string.any_of,
+            one_of: unvalidated_string.one_of,
+            none_of: unvalidated_string.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_string.length,
+                unvalidated_string.min_length,
+                unvalidated_string.max_length,
+                unvalidated_string.pattern,
+            )
+        })
+
+        /*
         match value {
             UnvalidatedStringSpecification::Base(b) => Self::new(Some(b), None, None, None, None),
             UnvalidatedStringSpecification::String {
@@ -1229,7 +1289,7 @@ impl TryFrom<UnvalidatedStringSpecification> for StringSpecification {
                 max_length,
                 pattern,
             } => Self::new(None, length, min_length, max_length, pattern),
-        }
+        }*/
     }
 }
 
@@ -1607,7 +1667,17 @@ impl DateSpecification {
 impl TryFrom<UnvalidatedDateSpecification> for DateSpecification {
     type Error = String;
 
-    fn try_from(unvalidated: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+    fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            value: unvalidated_date.value,
+            any_of: unvalidated_date.any_of,
+            one_of: unvalidated_date.one_of,
+            none_of: unvalidated_date.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+
+        /*
         let specified = vec![
             &unvalidated.any_of,
             &unvalidated.one_of,
@@ -1630,14 +1700,16 @@ impl TryFrom<UnvalidatedDateSpecification> for DateSpecification {
             (_, _, Some(vs), _) => Some(Specification::OneOf((vs))),
             (_, _, _, Some(vs)) => Some(Specification::NoneOf(vs)),
             _ => None,
-        };
-        DateSpecification::new(
-            spec,
-            unvalidated.min,
-            unvalidated.max,
-            unvalidated.format,
-            unvalidated.modifier,
-        )
+        };*/
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_date.min,
+                unvalidated_date.max,
+                unvalidated_date.format,
+                unvalidated_date.modifier,
+            )
+        })
     }
 }
 
@@ -1876,7 +1948,17 @@ impl DateTimeSpecification {
 impl TryFrom<UnvalidatedDateSpecification> for DateTimeSpecification {
     type Error = String;
 
-    fn try_from(unvalidated: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+    fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            value: unvalidated_date.value,
+            any_of: unvalidated_date.any_of,
+            one_of: unvalidated_date.one_of,
+            none_of: unvalidated_date.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+
+        /*
         let specified = vec![
             &unvalidated.any_of,
             &unvalidated.one_of,
@@ -1899,14 +1981,16 @@ impl TryFrom<UnvalidatedDateSpecification> for DateTimeSpecification {
             (_, _, Some(vs), _) => Some(Specification::OneOf((vs))),
             (_, _, _, Some(vs)) => Some(Specification::NoneOf(vs)),
             _ => None,
-        };
-        DateTimeSpecification::new(
-            spec,
-            unvalidated.min,
-            unvalidated.max,
-            unvalidated.format,
-            unvalidated.modifier,
-        )
+        };*/
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_date.min,
+                unvalidated_date.max,
+                unvalidated_date.format,
+                unvalidated_date.modifier,
+            )
+        })
     }
 }
 
@@ -2649,7 +2733,7 @@ pub enum UnvalidatedVariable2 {
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(untagged, rename_all = "camelCase")]
 pub enum UnvalidatedVariable3 {
     File(UnvalidatedFileVariable),
     Datum(UnvalidatedDatumSchemaVariable2),
@@ -2688,21 +2772,88 @@ pub struct UnvalidatedDatumSchemaVariable {
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedSpecification<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<T>>,
+}
+
+impl<T> Hash for UnvalidatedSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Display,
+    T: Serialize,
+    T: Clone,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<T>,
+}
+
+/*
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged, rename_all = "camelCase")]
 pub enum UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
-    Base(Specification<T>),
+    Base(UnvalidatedSpecification<T>),
     Numeric { min: Option<T>, max: Option<T> }, //#[serde(flatten, skip_serializing_if = "Option::is_none")]
                                                 //pub specification: Option<Specification<T>>,
                                                 //#[serde(skip_serializing_if = "Option::is_none")]
                                                 //pub min: Option<T>,
                                                 //#[serde(skip_serializing_if = "Option::is_none")]
                                                 //pub max: Option<T>,
-}
+}*/
 
+#[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedStringSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+}
+/*
 #[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged, rename_all = "camelCase")]
 pub enum UnvalidatedStringSpecification {
-    Base(Specification<String>),
+    Base(UnvalidatedSpecification<String>),
     String {
         length: Option<i64>,
         min_length: Option<i64>,
@@ -2714,7 +2865,7 @@ pub enum UnvalidatedStringSpecification {
        //pub min: Option<T>,
        //#[serde(skip_serializing_if = "Option::is_none")]
        //pub max: Option<T>,
-}
+}*/
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -2745,7 +2896,7 @@ pub type UnvalidatedIntegerSpecification = UnvalidatedNumericSpecification<i64>;
 #[serde(tag = "type")]
 pub enum UnvalidatedDatumSchemaVariable2 {
     #[serde(alias = "Boolean", alias = "boolean", alias = "Bool", alias = "bool")]
-    Boolean(Option<BooleanSpecification>),
+    Boolean(UnvalidatedSpecification<bool>),
     #[serde(alias = "float")]
     Float(Option<UnvalidatedFloatSpecification>),
     #[serde(alias = "Integer", alias = "integer", alias = "Int", alias = "int")]

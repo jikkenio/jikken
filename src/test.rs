@@ -8,6 +8,7 @@ use crate::test::file::BodyOrSchema;
 
 use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
 use crate::test::definition::RequestBody;
+use crate::test::file::BooleanSpecification;
 use crate::test::file::DatumSchema;
 use crate::test::file::FloatSpecification;
 use crate::test::file::IntegerSpecification;
@@ -134,8 +135,12 @@ impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
             }
             UnvalidatedVariable3::Datum(ds) => match ds {
                 file::UnvalidatedDatumSchemaVariable2::Boolean(specification) => {
-                    Ok(ValueOrDatumOrFileOrSecret::Schema {
-                        value: DatumSchema::Boolean { specification },
+                    TryInto::<Option<BooleanSpecification>>::try_into(specification).map(|spec| {
+                        ValueOrDatumOrFileOrSecret::Schema {
+                            value: DatumSchema::Boolean {
+                                specification: spec,
+                            },
+                        }
                     })
                 }
                 file::UnvalidatedDatumSchemaVariable2::Email(maybeSpec) => maybeSpec
@@ -464,6 +469,8 @@ pub struct File {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub variables2: Option<Vec<file::UnvalidatedVariable3>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
 
     #[serde(skip_serializing, skip_deserializing)]
@@ -488,6 +495,7 @@ impl Default for File {
             stages: None,
             cleanup: None,
             variables: None,
+            variables2: None,
             disabled: None,
             description: None,
         }
