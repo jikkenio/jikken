@@ -157,7 +157,7 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
         ) {
             (Some(v), _, _, _) => Ok(Some(Specification::Value(v))),
             (_, Some(vs), _, _) => Ok(Some(Specification::AnyOf(vs))),
-            (_, _, Some(vs), _) => Ok(Some(Specification::OneOf((vs)))),
+            (_, _, Some(vs), _) => Ok(Some(Specification::OneOf(vs))),
             (_, _, _, Some(vs)) => Ok(Some(Specification::NoneOf(vs))),
             _ => Ok(None),
         };
@@ -178,84 +178,6 @@ pub struct NumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
 pub type BooleanSpecification = Specification<bool>;
 pub type FloatSpecification = NumericSpecification<f64>;
 pub type IntegerSpecification = NumericSpecification<i64>;
-
-pub fn new_integer_spec(
-    any_of: Option<Vec<serde_json::Value>>,
-    one_of: Option<Vec<serde_json::Value>>,
-    none_of: Option<Vec<serde_json::Value>>,
-    value: Option<serde_json::Value>,
-) -> Result<Option<Specification<i64>>, String> {
-    let specified = vec![&any_of, &one_of, &none_of]
-        .into_iter()
-        .filter(|o| o.is_some())
-        .count();
-    if specified > 1 || (specified == 1 && value.is_some()) {
-        return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
-    }
-    is_int(&value, "value")
-        .map4(
-            all_ints(&any_of, "anyOf"),
-            all_ints(&one_of, "oneOf"),
-            all_ints(&none_of, "noneOf"),
-            |val, any, one, none| match (val, any, one, none) {
-                (Some(b), _, _, _) => Some(Specification::<i64>::Value(b.as_i64().unwrap())),
-                (_, Some(bs), _, _) => Some(Specification::<i64>::AnyOf(
-                    bs.into_iter().flat_map(|b| b.as_i64()).collect(),
-                )),
-                (_, _, Some(bs), _) => Some(Specification::<i64>::OneOf(
-                    bs.into_iter().flat_map(|b| b.as_i64()).collect(),
-                )),
-                (_, _, _, Some(bs)) => Some(Specification::<i64>::NoneOf(
-                    bs.into_iter().flat_map(|b| b.as_i64()).collect(),
-                )),
-                (_, _, _, _) => None,
-            },
-        )
-        .ok()
-        .map_err(|ers| {
-            ers.into_nonempty_iter()
-                .reduce(|acc, e| format!("{},{}", acc, e))
-        })
-}
-
-pub fn new_boolean_spec(
-    any_of: Option<Vec<serde_json::Value>>,
-    one_of: Option<Vec<serde_json::Value>>,
-    none_of: Option<Vec<serde_json::Value>>,
-    value: Option<serde_json::Value>,
-) -> Result<Option<BooleanSpecification>, String> {
-    let specified = vec![&any_of, &one_of, &none_of]
-        .into_iter()
-        .filter(|o| o.is_some())
-        .count();
-    if specified > 1 || (specified == 1 && value.is_some()) {
-        return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
-    }
-    is_bool(&value, "value")
-        .map4(
-            all_bools(&any_of, "anyOf"),
-            all_bools(&one_of, "oneOf"),
-            all_bools(&none_of, "noneOf"),
-            |val, any, one, none| match (val, any, one, none) {
-                (Some(b), _, _, _) => Some(BooleanSpecification::Value(b.as_bool().unwrap())),
-                (_, Some(bs), _, _) => Some(BooleanSpecification::AnyOf(
-                    bs.into_iter().flat_map(|b| b.as_bool()).collect(),
-                )),
-                (_, _, Some(bs), _) => Some(BooleanSpecification::OneOf(
-                    bs.into_iter().flat_map(|b| b.as_bool()).collect(),
-                )),
-                (_, _, _, Some(bs)) => Some(BooleanSpecification::NoneOf(
-                    bs.into_iter().flat_map(|b| b.as_bool()).collect(),
-                )),
-                (_, _, _, _) => None,
-            },
-        )
-        .ok()
-        .map_err(|ers| {
-            ers.into_nonempty_iter()
-                .reduce(|acc, e| format!("{},{}", acc, e))
-        })
-}
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -874,86 +796,6 @@ fn is_expected_type<T: 'static>(
         num.clone(),
         format!("{type_name} not provided for {variable_name}"),
     )
-}
-
-fn is_bool(num: &Option<Value>, variable_name: &str) -> Validated<Option<Value>, String> {
-    is_expected_type::<bool>(num, "boolean", variable_name)
-}
-
-fn all_bools(
-    num: &Option<Vec<Value>>,
-    variable_name: &str,
-) -> Validated<Option<Vec<Value>>, String> {
-    //how do I do this
-    num.iter()
-        .flatten()
-        .map(|b| {
-            is_bool(
-                &Some(b.clone()),
-                format!("list member of {variable_name}").as_str(),
-            )
-        })
-        .collect()
-}
-
-fn is_string(num: &Option<Value>, variable_name: &str) -> Validated<Option<Value>, String> {
-    is_expected_type::<String>(num, "string", variable_name)
-}
-
-fn all_strings(
-    num: &Option<Vec<Value>>,
-    variable_name: &str,
-) -> Validated<Option<Vec<Value>>, String> {
-    //how do I do this
-    num.iter()
-        .flatten()
-        .map(|b| {
-            is_string(
-                &Some(b.clone()),
-                format!("list member of {variable_name}").as_str(),
-            )
-        })
-        .collect()
-}
-
-fn is_int(num: &Option<Value>, variable_name: &str) -> Validated<Option<Value>, String> {
-    is_expected_type::<i64>(num, "int", variable_name)
-}
-
-fn all_ints(
-    num: &Option<Vec<Value>>,
-    variable_name: &str,
-) -> Validated<Option<Vec<Value>>, String> {
-    //how do I do this
-    num.iter()
-        .flatten()
-        .map(|b| {
-            is_int(
-                &Some(b.clone()),
-                format!("list member of {variable_name}").as_str(),
-            )
-        })
-        .collect()
-}
-
-fn is_float(num: &Option<Value>, variable_name: &str) -> Validated<Option<Value>, String> {
-    is_expected_type::<f64>(num, "float", variable_name)
-}
-
-fn all_floats(
-    num: &Option<Vec<Value>>,
-    variable_name: &str,
-) -> Validated<Option<Vec<Value>>, String> {
-    //how do I do this
-    num.iter()
-        .flatten()
-        .map(|b| {
-            is_float(
-                &Some(b.clone()),
-                format!("list member of {variable_name}").as_str(),
-            )
-        })
-        .collect()
 }
 
 fn less_than_or_equal_validator<T: PartialOrd>(
@@ -2356,21 +2198,6 @@ impl DatumSchema {
     }
 }
 
-impl TryFrom<UnvalidatedDatumSchemaVariable> for DatumSchema {
-    type Error = String;
-
-    fn try_from(value: UnvalidatedDatumSchemaVariable) -> Result<Self, Self::Error> {
-        match value.type_name.as_str() {
-            "bool" | "boolean" | "Bool" | "Boolean" => {
-                new_boolean_spec(value.any_of, value.one_of, value.none_of, value.value)
-                    .map(|bs| DatumSchema::Boolean { specification: bs })
-                //Err("Unimplemented".to_string())
-            }
-            _ => Err("Unimplemented".to_string()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedRequest {
@@ -2898,26 +2725,26 @@ pub enum UnvalidatedDatumSchemaVariable2 {
     #[serde(alias = "Boolean", alias = "boolean", alias = "Bool", alias = "bool")]
     Boolean(UnvalidatedSpecification<bool>),
     #[serde(alias = "float")]
-    Float(Option<UnvalidatedFloatSpecification>),
+    Float(UnvalidatedFloatSpecification),
     #[serde(alias = "Integer", alias = "integer", alias = "Int", alias = "int")]
-    Integer(Option<UnvalidatedIntegerSpecification>),
+    Integer(UnvalidatedIntegerSpecification),
     #[serde(alias = "string")]
-    String(Option<UnvalidatedStringSpecification>),
+    String(UnvalidatedStringSpecification),
     #[serde(alias = "date")]
-    Date(Option<UnvalidatedDateSpecification>),
+    Date(UnvalidatedDateSpecification),
     #[serde(
         alias = "DateTime",
         alias = "dateTime",
         alias = "Datetime",
         alias = "datetime"
     )]
-    DateTime(Option<UnvalidatedDateSpecification>),
+    DateTime(UnvalidatedDateSpecification),
     #[serde(alias = "name")]
-    Name(Option<UnvalidatedStringSpecification>),
+    Name(UnvalidatedStringSpecification),
     #[serde(alias = "email")]
-    Email(Option<UnvalidatedStringSpecification>),
+    Email(UnvalidatedStringSpecification),
     #[serde(alias = "list")]
-    List(Option<SequenceSpecification>),
+    List(SequenceSpecification),
     #[serde(alias = "object")]
     Object {
         #[serde(skip_serializing_if = "Option::is_none")]
