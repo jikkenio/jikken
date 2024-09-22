@@ -902,10 +902,6 @@ where
         let maybe_spec = TryInto::<Option<Specification<T>>>::try_into(unvalidated_spec);
         maybe_spec
             .and_then(|spec| Self::new(spec, unvalidated_numeric.min, unvalidated_numeric.max))
-        /*match value {
-            UnvalidatedNumericSpecification::Base(b) => Self::new(Some(b), None, None),
-            UnvalidatedNumericSpecification::Numeric { min, max } => Self::new(None, min, max),
-        }*/
     }
 }
 
@@ -1121,17 +1117,6 @@ impl TryFrom<UnvalidatedStringSpecification> for StringSpecification {
                 unvalidated_string.pattern,
             )
         })
-
-        /*
-        match value {
-            UnvalidatedStringSpecification::Base(b) => Self::new(Some(b), None, None, None, None),
-            UnvalidatedStringSpecification::String {
-                length,
-                min_length,
-                max_length,
-                pattern,
-            } => Self::new(None, length, min_length, max_length, pattern),
-        }*/
     }
 }
 
@@ -1519,30 +1504,6 @@ impl TryFrom<UnvalidatedDateSpecification> for DateSpecification {
 
         let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
 
-        /*
-        let specified = vec![
-            &unvalidated.any_of,
-            &unvalidated.one_of,
-            &unvalidated.none_of,
-        ]
-        .into_iter()
-        .filter(|o| o.is_some())
-        .count();
-        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
-            return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
-        }
-        let spec = match (
-            unvalidated.value,
-            unvalidated.any_of,
-            unvalidated.one_of,
-            unvalidated.none_of,
-        ) {
-            (Some(v), _, _, _) => Some(Specification::Value(v)),
-            (_, Some(vs), _, _) => Some(Specification::AnyOf(vs)),
-            (_, _, Some(vs), _) => Some(Specification::OneOf((vs))),
-            (_, _, _, Some(vs)) => Some(Specification::NoneOf(vs)),
-            _ => None,
-        };*/
         maybe_spec.and_then(|spec| {
             Self::new(
                 spec,
@@ -1800,30 +1761,6 @@ impl TryFrom<UnvalidatedDateSpecification> for DateTimeSpecification {
 
         let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
 
-        /*
-        let specified = vec![
-            &unvalidated.any_of,
-            &unvalidated.one_of,
-            &unvalidated.none_of,
-        ]
-        .into_iter()
-        .filter(|o| o.is_some())
-        .count();
-        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
-            return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
-        }
-        let spec = match (
-            unvalidated.value,
-            unvalidated.any_of,
-            unvalidated.one_of,
-            unvalidated.none_of,
-        ) {
-            (Some(v), _, _, _) => Some(Specification::Value(v)),
-            (_, Some(vs), _, _) => Some(Specification::AnyOf(vs)),
-            (_, _, Some(vs), _) => Some(Specification::OneOf((vs))),
-            (_, _, _, Some(vs)) => Some(Specification::NoneOf(vs)),
-            _ => None,
-        };*/
         maybe_spec.and_then(|spec| {
             Self::new(
                 spec,
@@ -2643,19 +2580,6 @@ pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + Partia
     pub max: Option<T>,
 }
 
-/*
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(untagged, rename_all = "camelCase")]
-pub enum UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
-    Base(UnvalidatedSpecification<T>),
-    Numeric { min: Option<T>, max: Option<T> }, //#[serde(flatten, skip_serializing_if = "Option::is_none")]
-                                                //pub specification: Option<Specification<T>>,
-                                                //#[serde(skip_serializing_if = "Option::is_none")]
-                                                //pub min: Option<T>,
-                                                //#[serde(skip_serializing_if = "Option::is_none")]
-                                                //pub max: Option<T>,
-}*/
-
 #[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UnvalidatedStringSpecification {
@@ -2676,23 +2600,6 @@ pub struct UnvalidatedStringSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
 }
-/*
-#[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
-#[serde(untagged, rename_all = "camelCase")]
-pub enum UnvalidatedStringSpecification {
-    Base(UnvalidatedSpecification<String>),
-    String {
-        length: Option<i64>,
-        min_length: Option<i64>,
-        max_length: Option<i64>,
-        pattern: Option<String>,
-    }, //#[serde(flatten, skip_serializing_if = "Option::is_none")]
-       //pub specification: Option<Specification<T>>,
-       //#[serde(skip_serializing_if = "Option::is_none")]
-       //pub min: Option<T>,
-       //#[serde(skip_serializing_if = "Option::is_none")]
-       //pub max: Option<T>,
-}*/
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
