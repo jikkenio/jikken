@@ -924,6 +924,7 @@ where
         unvalidated_numeric: UnvalidatedNumericSpecification<T>,
     ) -> Result<Self, Self::Error> {
         let unvalidated_spec = UnvalidatedSpecification::<T> {
+            name: unvalidated_numeric.name,
             value: unvalidated_numeric.value,
             any_of: unvalidated_numeric.any_of,
             one_of: unvalidated_numeric.one_of,
@@ -1132,6 +1133,7 @@ impl TryFrom<UnvalidatedStringSpecification> for StringSpecification {
 
     fn try_from(unvalidated_string: UnvalidatedStringSpecification) -> Result<Self, Self::Error> {
         let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_string.name,
             value: unvalidated_string.value,
             any_of: unvalidated_string.any_of,
             one_of: unvalidated_string.one_of,
@@ -1527,6 +1529,7 @@ impl TryFrom<UnvalidatedDateSpecification> for DateSpecification {
 
     fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
         let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_date.name,
             value: unvalidated_date.value,
             any_of: unvalidated_date.any_of,
             one_of: unvalidated_date.one_of,
@@ -1784,6 +1787,7 @@ impl TryFrom<UnvalidatedDateSpecification> for DateTimeSpecification {
 
     fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
         let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_date.name,
             value: unvalidated_date.value,
             any_of: unvalidated_date.any_of,
             one_of: unvalidated_date.one_of,
@@ -2212,7 +2216,7 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Object { schema } => {
+            UnvalidatedDatumSchemaVariable2::Object { name: _, schema } => {
                 let f = schema
                     .into_iter()
                     .map(|(k, v)| match v {
@@ -2269,6 +2273,7 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                                 (Ok(anys), Ok(nones), Ok(ones), Ok(val)) => {
                                     TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
                                         UnvalidatedSpecification::<Box<DatumSchema>> {
+                                            name: None,
                                             any_of: anys,
                                             none_of: nones,
                                             one_of: ones,
@@ -2704,8 +2709,10 @@ pub struct UnvalidatedDatumSchemaVariable {
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedSpecification<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2732,8 +2739,10 @@ where
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2749,8 +2758,10 @@ pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + Partia
 }
 
 #[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedStringSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2770,15 +2781,17 @@ pub struct UnvalidatedStringSpecification {
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedDateSpecification {
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub any_of: Option<Vec<String>>,
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub one_of: Option<Vec<String>>,
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub none_of: Option<Vec<String>>,
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2795,7 +2808,7 @@ pub type UnvalidatedFloatSpecification = UnvalidatedNumericSpecification<f64>;
 pub type UnvalidatedIntegerSpecification = UnvalidatedNumericSpecification<i64>;
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-#[serde(untagged)]
+#[serde(deny_unknown_fields, untagged)]
 pub enum UnvalidatedValueOrDatumSchema {
     Datum(UnvalidatedDatumSchemaVariable2),
     Values(Value),
@@ -2815,8 +2828,10 @@ pub enum UnvalidatedValuesOrSchema {
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedSequenceSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<UnvalidatedValuesOrSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2833,10 +2848,10 @@ impl Hash for UnvalidatedSequenceSpecification {
     }
 }
 
-//How can I support the loosely typed object without making stuff blow up
-//Untagged Value at this level perhaps?
+//You forgot name, it exists in file and simple
+//but is missing here
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum UnvalidatedDatumSchemaVariable2 {
     #[serde(alias = "Boolean", alias = "boolean", alias = "Bool", alias = "bool")]
     Boolean(UnvalidatedSpecification<bool>),
@@ -2863,13 +2878,10 @@ pub enum UnvalidatedDatumSchemaVariable2 {
     List(UnvalidatedSequenceSpecification),
     #[serde(alias = "object")]
     Object {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
         #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-        //I think this should probably be an enum
-        //UnvalidatedDatumSchemaVariableORObject ;
-        //this is what untagged object in Spec is for
-        //The problem is any badly defined thing in the schema will
-        //be interpreted as an object which negates our checks
-        //maybe we should have used jk_type instead of type
+        //Supports not having to explicitly specify type for every object member
         schema: BTreeMap<String, UnvalidatedValueOrDatumSchema>,
     },
 }

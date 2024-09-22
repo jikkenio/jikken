@@ -19,6 +19,7 @@ use file::DateTimeSpecification;
 use file::EmailSpecification;
 use file::SequenceSpecification;
 use file::StringSpecification;
+use file::UnvalidatedDatumSchemaVariable2;
 use log::{debug, error, trace};
 use regex::Regex;
 use serde::Serializer;
@@ -99,6 +100,28 @@ pub enum ValueOrDatumOrFileOrSecret {
     Schema { value: DatumSchema },
     Value { value: serde_json::Value },
 }
+
+/*
+impl TryFrom<UnvalidatedVariable3> for Variable {
+    type Error = String;
+
+    fn try_from(value: UnvalidatedVariable3) -> Result<Self, Self::Error> {
+        match value {
+            // \todo : check if file is valid?
+            //         we could, but will we ever store responses to file?
+            //         basically a TOCTOU question
+            UnvalidatedVariable3::File(f) => Ok(
+                Variable{
+                    name: f.name,
+                     ValueOrDatumOrFileOrSecret::File { value: f.file }),
+            UnvalidatedVariable3::Simple(s) => {
+                Ok(ValueOrDatumOrFileOrSecret::Value { value: s.value })
+            }
+            UnvalidatedVariable3::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
+                .map(|a| ValueOrDatumOrFileOrSecret::Schema { value: a }),
+        }
+    }
+}*/
 
 impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
     type Error = String;
@@ -404,6 +427,48 @@ impl Variable {
             .map_err(|e| validation::Error { reason: e })
     }
 
+    pub fn new2(
+        variable: file::UnvalidatedVariable3,
+        source_path: &str,
+    ) -> Result<Variable, validation::Error> {
+        let name = match &variable {
+            UnvalidatedVariable3::File(f) => Some(f.name.clone()),
+            UnvalidatedVariable3::Simple(s) => Some(s.name.clone()),
+            UnvalidatedVariable3::Datum(d) => match d {
+                UnvalidatedDatumSchemaVariable2::Boolean(b) => b.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Date(d) => d.name.clone(),
+                UnvalidatedDatumSchemaVariable2::DateTime(d) => d.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Email(e) => e.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Float(f) => f.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Integer(i) => i.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Name(n) => n.name.clone(),
+                UnvalidatedDatumSchemaVariable2::String(s) => s.name.clone(),
+                UnvalidatedDatumSchemaVariable2::List(l) => l.name.clone(),
+                UnvalidatedDatumSchemaVariable2::Object { name, schema: _ } => name.clone(),
+            },
+        };
+
+        return match name {
+            None => Err(validation::Error {
+                reason: "Name must be provided for variables".to_string(),
+            }),
+            Some(n) => {
+                let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();
+                if !regex.is_match(n.as_str()) {
+                    debug!("variable name '{}' is invalid", n);
+                    return Err(validation::Error{reason: "name is invalid - may only contain alphanumeric characters, hyphens, and underscores".to_string()});
+                }
+                TryInto::<ValueOrDatumOrFileOrSecret>::try_into(variable)
+                    .map(|vdfs| Variable {
+                        name: n,
+                        source_path: source_path.to_string(),
+                        value: vdfs,
+                    })
+                    .map_err(|e| validation::Error { reason: e })
+            }
+        };
+    }
+
     pub fn validate_variables_opt(
         variables: Option<Vec<file::UnvalidatedVariable>>,
         source_path: &str,
@@ -418,6 +483,36 @@ impl Variable {
                         Ok(x) => Some(x),
                         Err(e) => {
                             errors.push(format!("variable \"{}\" {}", name, e));
+                            None
+                        }
+                    })
+                    .collect::<Vec<Variable>>()
+            })
+            .unwrap_or_default();
+
+        if !errors.is_empty() {
+            return Err(validation::Error {
+                reason: errors.join(","),
+            });
+        }
+
+        Ok(ret)
+    }
+
+    pub fn validate_variables_opt2(
+        variables: Option<Vec<file::UnvalidatedVariable3>>,
+        source_path: &str,
+    ) -> Result<Vec<Variable>, validation::Error> {
+        let mut errors: Vec<String> = vec![];
+
+        let ret = variables
+            .map(|vars| {
+                vars.into_iter()
+                    .map(|f| Variable::new2(f, source_path))
+                    .filter_map(|v| match v {
+                        Ok(x) => Some(x),
+                        Err(e) => {
+                            errors.push(format!("variable error: {}", e));
                             None
                         }
                     })
@@ -512,6 +607,7 @@ pub struct Definition {
     pub tags: Vec<String>,
     pub iterate: u32,
     pub variables: Vec<Variable>,
+    pub variables2: Vec<Variable>,
     pub global_variables: Vec<Variable>,
     pub stages: Vec<definition::StageDescriptor>,
     pub setup: Option<definition::RequestResponseDescriptor>,

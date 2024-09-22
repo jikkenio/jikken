@@ -55,6 +55,14 @@ pub fn validate_file(
             .unwrap_or(&file.filename),
     )?;
 
+    let variables2 = test::Variable::validate_variables_opt2(
+        file.variables2,
+        PathBuf::from(&file.filename)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(&file.filename),
+    )?;
+
     let td = test::Definition {
         name: file.name,
         description: file.description,
@@ -65,6 +73,7 @@ pub fn validate_file(
         tags: new_tags,
         iterate: file.iterate.unwrap_or(1),
         variables: variables.clone(),
+        variables2,
         global_variables: global_variables.to_vec(),
         stages: definition::StageDescriptor::validate_stages_opt(
             file.request,
