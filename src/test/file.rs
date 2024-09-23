@@ -146,7 +146,10 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
         .filter(|o| o.is_some())
         .count();
         if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
-            return Err("can only specify one of anyOf, oneOf, noneOf, and value".to_string());
+            return Err(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value"
+                    .to_string(),
+            );
         }
         return match (
             unvalidated.value,
@@ -205,17 +208,6 @@ impl Hash for ValueOrDatumSchema {
         serde_json::to_string(self).unwrap().hash(state)
     }
 }
-/*
-impl TryFrom<UnvalidatedValueOrDatumSchema> for ValueOrDatumSchema {
-    type Error = String;
-    fn try_from(unvalidated: UnvalidatedValueOrDatumSchema) -> Result<Self, Self::Error> {
-        match unvalidated{
-            UnvalidatedValueOrDatumSchema::Datum(d) =>
-                TryInto::<DatumSchema>::try_into(d).,
-            UnvalidatedValueOrDatumSchema::Values()=>
-        }
-    }
-}*/
 
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
@@ -260,27 +252,6 @@ pub struct SequenceSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<i64>,
 }
-/*
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum UnvalidatedValuesOrSchema {
-    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
-    Values(UnvalidatedSpecification<Vec<Value>>),
-}
-
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct UnvalidatedSequenceSpecification {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema: Option<UnvalidatedValuesOrSchema>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub length: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub min_length: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_length: Option<i64>,
-}
- */
 
 #[derive(Hash, Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 pub struct DateSpecification {
@@ -752,23 +723,7 @@ fn validate1<T: Copy>(
     })
     .unwrap_or(Validated::Good(None))
 }
-/*
-fn validate1_with_projection<T: Clone>(
-    pred: &impl Fn(&T) -> bool,
-    val: Option<T>,
-    message: String,
-) -> Validated<Option<T>, String> {
-    val.clone()
-        .map(|v| {
-            if !pred(&v) {
-                Validated::fail(message)
-            } else {
-                Good(val)
-            }
-        })
-        .unwrap_or(Validated::Good(None))
-}
-*/
+
 fn validate2<T>(
     pred: &impl Fn(&T, &T) -> bool,
     val: &Option<T>,
@@ -797,38 +752,7 @@ fn non_negative_validator<T: Signed + Copy>(
         format!("negative value provided for {variable_name}"),
     )
 }
-/*
-fn is_expected_type<T: 'static>(
-    num: &Option<Value>,
-    type_name: &str,
-    variable_name: &str,
-) -> Validated<Option<Value>, String> {
-    validate1_with_projection::<Value>(
-        &|val| {
-            let bool_typeid = TypeId::of::<bool>();
-            let string_typeid = TypeId::of::<String>();
-            let int_typeid = TypeId::of::<i64>();
-            let float_typeid = TypeId::of::<f64>();
-            let supplied_typeid = TypeId::of::<T>();
-            if bool_typeid == supplied_typeid {
-                return val.is_boolean();
-            } else if string_typeid == supplied_typeid {
-                return val.is_string();
-            } else if string_typeid == supplied_typeid {
-                return val.is_string();
-            } else if int_typeid == supplied_typeid {
-                return val.is_i64();
-            } else if float_typeid == supplied_typeid {
-                return val.is_number();
-            } else {
-                return false;
-            }
-        },
-        num.clone(),
-        format!("{type_name} not provided for {variable_name}"),
-    )
-}
-*/
+
 fn less_than_or_equal_validator<T: PartialOrd>(
     lhs: &Option<T>,
     rhs: &Option<T>,
@@ -843,6 +767,8 @@ fn less_than_or_equal_validator<T: PartialOrd>(
     )
 }
 
+//Once new approach is vetted, we can make this a proper sum
+//type
 impl<T> NumericSpecification<T>
 where
     T: PartialEq,
@@ -856,6 +782,10 @@ where
         min: Option<T>,
         max: Option<T>,
     ) -> Result<Self, String> {
+        let violation = specification.is_some() && min.as_ref().or(max.as_ref()).is_some();
+        if violation {
+            return Err("Cannot specify min or max alongside either of oneOf anyOf, oneOf, noneOf, and value".to_string());
+        }
         less_than_or_equal_validator(&min, &max, "min", "max")
             .map(|_| Self {
                 specification,
@@ -1000,6 +930,18 @@ impl StringSpecification {
         max_length: Option<i64>,
         pattern: Option<String>,
     ) -> Result<Self, String> {
+        let violation = specification.is_some()
+            && length
+                .as_ref()
+                .or(min_length.as_ref())
+                .or(max_length.as_ref())
+                .or(pattern.as_ref().map(|_| &25)) //random value to make iti64
+                .is_some();
+
+        if violation {
+            return Err("Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, noneOf, or value".to_string());
+        }
+
         let negative_validation_length = non_negative_validator(&length, "length");
         let negative_validation_max = non_negative_validator(&max_length, "maxLength");
         let negative_validation_min = non_negative_validator(&min_length, "minLength");
@@ -2848,8 +2790,6 @@ impl Hash for UnvalidatedSequenceSpecification {
     }
 }
 
-//You forgot name, it exists in file and simple
-//but is missing here
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum UnvalidatedDatumSchemaVariable2 {
