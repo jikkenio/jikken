@@ -2158,21 +2158,24 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Object { name: _, schema } => {
-                let f = schema
-                    .into_iter()
-                    .map(|(k, v)| match v {
-                        UnvalidatedValueOrDatumSchema::Datum(ud) => {
-                            TryInto::<DatumSchema>::try_into(ud)
-                                .map(|ds| (k, ValueOrDatumSchema::Datum(ds)))
-                        }
-                        UnvalidatedValueOrDatumSchema::Values(v) => {
-                            Ok((k, ValueOrDatumSchema::Values(v)))
-                        }
-                    })
-                    .collect::<Result<BTreeMap<String, ValueOrDatumSchema>, String>>();
-                f.map(|tree| DatumSchema::Object { schema: Some(tree) })
-            }
+            UnvalidatedDatumSchemaVariable2::Object { name: _, schema } => match schema {
+                None => Ok(DatumSchema::Object { schema: None }),
+                Some(schema_val) => {
+                    let f = schema_val
+                        .into_iter()
+                        .map(|(k, v)| match v {
+                            UnvalidatedValueOrDatumSchema::Datum(ud) => {
+                                TryInto::<DatumSchema>::try_into(ud)
+                                    .map(|ds| (k, ValueOrDatumSchema::Datum(ds)))
+                            }
+                            UnvalidatedValueOrDatumSchema::Values(v) => {
+                                Ok((k, ValueOrDatumSchema::Values(v)))
+                            }
+                        })
+                        .collect::<Result<BTreeMap<String, ValueOrDatumSchema>, String>>();
+                    f.map(|tree| DatumSchema::Object { schema: Some(tree) })
+                }
+            },
             UnvalidatedDatumSchemaVariable2::List(unvalidated) => {
                 let blah = match unvalidated.schema {
                     None => Ok(None),
@@ -2604,14 +2607,6 @@ impl Default for UnvalidatedResponse {
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum UnvalidatedVariable2 {
-    File(UnvalidatedFileVariable),
-    Datum(UnvalidatedDatumSchemaVariable),
-    Simple(SimpleValueVariable),
-}
-
-#[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "camelCase")]
 pub enum UnvalidatedVariable3 {
     File(UnvalidatedFileVariable),
@@ -2810,19 +2805,20 @@ pub enum UnvalidatedDatumSchemaVariable2 {
         alias = "datetime"
     )]
     DateTime(UnvalidatedDateSpecification),
-    #[serde(alias = "name")]
+    #[serde(alias = "name", alias = "Name")]
     Name(UnvalidatedStringSpecification),
-    #[serde(alias = "email")]
+    #[serde(alias = "email", alias = "Email")]
     Email(UnvalidatedStringSpecification),
-    #[serde(alias = "list")]
+    #[serde(alias = "list", alias = "List")]
     List(UnvalidatedSequenceSpecification),
-    #[serde(alias = "object")]
+    #[serde(alias = "object", alias = "Object")]
     Object {
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        //Unfortunately, this has#[serde(default)]
+        #[serde(skip_serializing_if = "Option::is_none")]
         //Supports not having to explicitly specify type for every object member
-        schema: BTreeMap<String, UnvalidatedValueOrDatumSchema>,
+        schema: Option<BTreeMap<String, UnvalidatedValueOrDatumSchema>>,
     },
 }
 
