@@ -2208,12 +2208,14 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                                     .collect::<Result<Vec<Box<DatumSchema>>, String>>()
                                     .map(Some),
                             };
+
                             let value = match s.value {
                                 None => Ok(None),
                                 Some(v) => {
                                     TryInto::<DatumSchema>::try_into(*v).map(Box::new).map(Some)
                                 }
                             };
+
                             match (any_of, none_of, one_of, value) {
                                 (Ok(anys), Ok(nones), Ok(ones), Ok(val)) => {
                                     TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
@@ -2231,8 +2233,37 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                                 _ => Err("Foo".to_string()),
                             }
                         }
+                        //Simply treat it as a Tagged schema that only has value specified.
+                        UnvalidatedValuesOrSchema::UntaggedSchema(schema) => {
+                            TryInto::<DatumSchema>::try_into(*schema)
+                                .map(Box::new)
+                                .and_then(|ds| {
+                                    TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
+                                        UnvalidatedSpecification::<Box<DatumSchema>> {
+                                            name: None,
+                                            any_of: None,
+                                            none_of: None,
+                                            one_of: None,
+                                            value: Some(ds),
+                                        },
+                                    )
+                                })
+                                .map(|a| a.map(ValuesOrSchema::Schemas))
+                        }
                         UnvalidatedValuesOrSchema::Values(v) => {
                             TryInto::<Option<Specification<Vec<Value>>>>::try_into(v)
+                                .map(|a| a.map(ValuesOrSchema::Values))
+                        }
+                        //Simply make it a tagged variant and reapply simple transformation from above
+                        UnvalidatedValuesOrSchema::UntaggedLiterals(literals) => {
+                            let foo = UnvalidatedSpecification::<Vec<Value>> {
+                                value: Some(literals),
+                                any_of: None,
+                                name: None,
+                                none_of: None,
+                                one_of: None,
+                            };
+                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(foo)
                                 .map(|a| a.map(ValuesOrSchema::Values))
                         }
                     },
@@ -2757,13 +2788,52 @@ impl Hash for UnvalidatedValueOrDatumSchema {
     }
 }
 
+//Current issue is the inability to specify raw values
+//without preceding them with value: X
+//We could put that in here...
+/*
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum UnvalidatedValuesOrSchema {
     Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
     Values(UnvalidatedSpecification<Vec<Value>>),
+}*/
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValuesOrSchema {
+    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
+    Values(UnvalidatedSpecification<Vec<Value>>),
+    //I don't know if we advertise untagged schemas
+    //There are use cases but... its a stretch
+    UntaggedSchema(Box<UnvalidatedDatumSchemaVariable2>),
+    UntaggedLiterals(Vec<Value>),
 }
-
+//We should use a custom deserializer for these 2 types
+//So that we can detect errors while still allowing the flexibility
+//of untyped value
+/*
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValuesOrSchema {
+    Schemas(UnvalidatedSequenceSchema<Box<UnvalidatedDatumSchemaVariable2>>),
+    Values(UnvalidatedSequenceSchema<Vec<Value>>),
+}*/
+/*
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedSequenceSchema<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<T>>,
+}
+*/
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedSequenceSpecification {
