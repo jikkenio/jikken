@@ -782,9 +782,16 @@ where
         min: Option<T>,
         max: Option<T>,
     ) -> Result<Self, String> {
-        let violation = specification.is_some() && min.as_ref().or(max.as_ref()).is_some();
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
         if violation {
-            return Err("Cannot specify min or max alongside either of oneOf anyOf, oneOf, noneOf, and value".to_string());
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
         }
         less_than_or_equal_validator(&min, &max, "min", "max")
             .map(|_| Self {
@@ -930,7 +937,12 @@ impl StringSpecification {
         max_length: Option<i64>,
         pattern: Option<String>,
     ) -> Result<Self, String> {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
         let violation = specification.is_some()
+            && !is_none_of
             && length
                 .as_ref()
                 .or(min_length.as_ref())
@@ -939,7 +951,7 @@ impl StringSpecification {
                 .is_some();
 
         if violation {
-            return Err("Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, noneOf, or value".to_string());
+            return Err("Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value".to_string());
         }
 
         let negative_validation_length = non_negative_validator(&length, "length");
@@ -1280,6 +1292,20 @@ impl DateSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
+
+        if violation {
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
+        }
+
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
@@ -1543,6 +1569,20 @@ impl DateTimeSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
+
+        if violation {
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
+        }
+
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
@@ -2177,7 +2217,18 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                 }
             },
             UnvalidatedDatumSchemaVariable2::List(unvalidated) => {
-                let blah = match unvalidated.schema {
+                let violation = unvalidated.length.is_some()
+                    && unvalidated
+                        .max_length
+                        .as_ref()
+                        .or(unvalidated.min_length.as_ref())
+                        .is_some();
+                if violation {
+                    return Err(
+                        "Cannot specify minLength or maxLength alongside length".to_string()
+                    );
+                }
+                let values_or_schema = match unvalidated.schema {
                     None => Ok(None),
                     Some(values_or_schema) => match values_or_schema {
                         UnvalidatedValuesOrSchema::Schemas(s) => {
@@ -2268,7 +2319,7 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                         }
                     },
                 };
-                blah.and_then(|schema| {
+                values_or_schema.and_then(|schema| {
                     SequenceSpecification::new(
                         schema,
                         unvalidated.length,
