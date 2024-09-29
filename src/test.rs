@@ -101,28 +101,6 @@ pub enum ValueOrDatumOrFileOrSecret {
     Value { value: serde_json::Value },
 }
 
-/*
-impl TryFrom<UnvalidatedVariable3> for Variable {
-    type Error = String;
-
-    fn try_from(value: UnvalidatedVariable3) -> Result<Self, Self::Error> {
-        match value {
-            // \todo : check if file is valid?
-            //         we could, but will we ever store responses to file?
-            //         basically a TOCTOU question
-            UnvalidatedVariable3::File(f) => Ok(
-                Variable{
-                    name: f.name,
-                     ValueOrDatumOrFileOrSecret::File { value: f.file }),
-            UnvalidatedVariable3::Simple(s) => {
-                Ok(ValueOrDatumOrFileOrSecret::Value { value: s.value })
-            }
-            UnvalidatedVariable3::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
-                .map(|a| ValueOrDatumOrFileOrSecret::Schema { value: a }),
-        }
-    }
-}*/
-
 impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 

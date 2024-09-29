@@ -2849,7 +2849,6 @@ pub enum UnvalidatedDatumSchemaVariable2 {
     Object {
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        //Unfortunately, this has#[serde(default)]
         #[serde(skip_serializing_if = "Option::is_none")]
         //Supports not having to explicitly specify type for every object member
         schema: Option<BTreeMap<String, UnvalidatedValueOrDatumSchema>>,
