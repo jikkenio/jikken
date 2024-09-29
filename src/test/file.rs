@@ -2722,6 +2722,14 @@ pub enum UnvalidatedVariable3 {
     File(UnvalidatedFileVariable),
     Datum(UnvalidatedDatumSchemaVariable2),
     Simple(SimpleValueVariable),
+    ValueSet(UnvalidatedValueSet),
+}
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnvalidatedValueSet {
+    pub name: String,
+    pub value_set: Vec<Value>,
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]

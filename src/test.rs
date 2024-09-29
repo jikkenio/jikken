@@ -126,6 +126,9 @@ impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
             }
             UnvalidatedVariable3::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
                 .map(|a| ValueOrDatumOrFileOrSecret::Schema { value: a }),
+            UnvalidatedVariable3::ValueSet(vs) => Ok(ValueOrDatumOrFileOrSecret::ValueSet {
+                value_set: serde_json::Value::Array(vs.value_set),
+            }),
         }
     }
 }
@@ -437,6 +440,7 @@ impl Variable {
                 UnvalidatedDatumSchemaVariable2::List(l) => l.name.clone(),
                 UnvalidatedDatumSchemaVariable2::Object { name, schema: _ } => name.clone(),
             },
+            UnvalidatedVariable3::ValueSet(vs) => Some(vs.name.clone()),
         };
 
         return match name {
