@@ -2788,16 +2788,6 @@ impl Hash for UnvalidatedValueOrDatumSchema {
     }
 }
 
-//Current issue is the inability to specify raw values
-//without preceding them with value: X
-//We could put that in here...
-/*
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum UnvalidatedValuesOrSchema {
-    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
-    Values(UnvalidatedSpecification<Vec<Value>>),
-}*/
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum UnvalidatedValuesOrSchema {
@@ -2808,32 +2798,6 @@ pub enum UnvalidatedValuesOrSchema {
     UntaggedSchema(Box<UnvalidatedDatumSchemaVariable2>),
     UntaggedLiterals(Vec<Value>),
 }
-//We should use a custom deserializer for these 2 types
-//So that we can detect errors while still allowing the flexibility
-//of untyped value
-/*
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum UnvalidatedValuesOrSchema {
-    Schemas(UnvalidatedSequenceSchema<Box<UnvalidatedDatumSchemaVariable2>>),
-    Values(UnvalidatedSequenceSchema<Vec<Value>>),
-}*/
-/*
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct UnvalidatedSequenceSchema<T> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub any_of: Option<Vec<T>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub one_of: Option<Vec<T>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub none_of: Option<Vec<T>>,
-}
-*/
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedSequenceSpecification {
