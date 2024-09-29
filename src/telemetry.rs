@@ -603,6 +603,7 @@ mod tests {
             tags: Vec::new(),
             iterate: 0,
             variables: Vec::new(),
+            variables2: Vec::new(),
             global_variables: Vec::new(),
             stages: vec![StageDescriptor {
                 name: None,
@@ -725,6 +726,7 @@ mod tests {
             tags: Vec::new(),
             iterate: 0,
             variables: Vec::new(),
+            variables2: Vec::new(),
             global_variables: vec![Variable {
                 name: "my_global".to_string(),
                 source_path: "".to_string(),
@@ -797,6 +799,7 @@ mod tests {
             tags: Vec::new(),
             iterate: 0,
             variables: Vec::new(),
+            variables2: Vec::new(),
             global_variables: Vec::new(),
             stages: vec![StageDescriptor {
                 name: None,

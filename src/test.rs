@@ -1370,6 +1370,7 @@ mod tests {
             tags: vec![],
             iterate: 0,
             variables: vec![],
+            variables2: vec![],
             global_variables: vec![],
             stages: vec![],
             setup: None,
@@ -1402,6 +1403,13 @@ mod tests {
             tags: vec![],
             iterate: 0,
             variables: vec![Variable {
+                name: "my_var".to_string(),
+                value: ValueOrDatumOrFileOrSecret::Value {
+                    value: serde_json::Value::from("my_val".to_string()),
+                },
+                source_path: "path".to_string(),
+            }],
+            variables2: vec![Variable {
                 name: "my_var".to_string(),
                 value: ValueOrDatumOrFileOrSecret::Value {
                     value: serde_json::Value::from("my_val".to_string()),
@@ -1459,6 +1467,13 @@ mod tests {
             tags: vec![],
             iterate: 0,
             variables: vec![Variable {
+                name: "my_var".to_string(),
+                value: ValueOrDatumOrFileOrSecret::Value {
+                    value: serde_json::Value::from("my_val".to_string()),
+                },
+                source_path: "path".to_string(),
+            }],
+            variables2: vec![Variable {
                 name: "my_var".to_string(),
                 value: ValueOrDatumOrFileOrSecret::Value {
                     value: serde_json::Value::from("my_val".to_string()),
