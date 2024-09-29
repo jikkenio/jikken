@@ -1,21 +1,22 @@
 name: Response Schema Validation
+platformId: 01J6SPMTQRMAJXN157EM7B6SNQ
 tags: validation
 requires: auth
 request:
   url: https://api.jikken.io/api/v2/examples/status
   headers:
-    - header: Authorization
-      value: ${token}
+  - header: Authorization
+    value: ${token}
 response:
   status: 200
   bodySchema:
     type: Object
     schema:
-      "status": "Active"
-      "user":
+      status: Active
+      user:
         type: Object
-        schema: 
-          "username": "testuser"
-          "lastActivity":
+        schema:
+          lastActivity:
             type: Date
-            format: "%Y-%m-%d %H:%M:%S%.f %Z"
+            format: '%Y-%m-%d %H:%M:%S%.f %Z'
+          username: testuser

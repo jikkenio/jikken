@@ -1,4 +1,5 @@
 name: Using Variable to Inject File Json Contents
+platformId: 01HX74ED1BD1D3FASWC72997V1
 tags: variables files extract
 request:
   method: Post
@@ -7,8 +8,8 @@ request:
 response:
   status: 200
   extract:
-    - name: token
-      field: auth.token
+  - name: token
+    field: auth.token
 variables:
-  - name: body
-    file: login_data.json
+- name: body
+  file: login_data.json

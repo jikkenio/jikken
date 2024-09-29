@@ -24,13 +24,12 @@ use log::{debug, error, trace};
 use regex::Regex;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fmt::{self};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
-use uuid::Uuid;
+use ulid::Ulid;
 
 #[derive(Deserialize, PartialEq)]
 pub struct SecretValue(String);
@@ -95,10 +94,22 @@ impl Clone for SecretValue {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ValueOrDatumOrFileOrSecret {
-    File { value: String },
-    Secret { value: SecretValue },
-    Schema { value: DatumSchema },
-    Value { value: serde_json::Value },
+    File {
+        value: String,
+    },
+    Secret {
+        value: SecretValue,
+    },
+    Schema {
+        value: DatumSchema,
+    },
+    Value {
+        value: serde_json::Value,
+    },
+    #[serde(rename_all = "camelCase")]
+    ValueSet {
+        value_set: serde_json::Value,
+    },
 }
 
 impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
@@ -132,6 +143,11 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
             // \todo : check if file is valid?
             //         we could, but will we ever store responses to file?
             //         basically a TOCTOU question
+            ValueOrDatumOrFile::ValueSet { value_set } => {
+                Ok(ValueOrDatumOrFileOrSecret::ValueSet {
+                    value_set: serde_json::Value::Array(value_set),
+                })
+            }
             ValueOrDatumOrFile::File { file } => {
                 Ok(ValueOrDatumOrFileOrSecret::File { value: file })
             }
@@ -299,13 +315,20 @@ impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct File {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(rename = "platformId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -332,9 +355,6 @@ pub struct File {
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables2: Option<Vec<file::UnvalidatedVariable3>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
 }
@@ -344,7 +364,8 @@ impl Default for File {
         Self {
             filename: "".to_string(),
             name: Some("".to_string()),
-            id: Some(Uuid::new_v4().to_string()),
+            id: None,
+            platform_id: Some(Ulid::new().to_string()),
             project: None,
             env: None,
             tags: None,
@@ -361,14 +382,6 @@ impl Default for File {
             disabled: None,
             description: None,
         }
-    }
-}
-
-impl File {
-    pub fn generate_id(&self) -> String {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        format!("{}", s.finish())
     }
 }
 
@@ -554,6 +567,30 @@ impl Variable {
                 .unwrap_or_default()
                 .trim_matches('"')
                 .to_string(),
+            ValueOrDatumOrFileOrSecret::ValueSet { value_set: v } => {
+                let length = v.as_array().unwrap_or(&Vec::new()).len();
+                if length == 0 {
+                    // divide by zero
+                    return "".to_string();
+                }
+                let index = iteration % length as u32;
+                serde_json::to_string(
+                    v.get(index as usize)
+                        .unwrap_or(&serde_json::Value::from("")),
+                )
+                .map(|jv| {
+                    let ret = definition.resolve_variables(
+                        jv.as_str(),
+                        &HashMap::new(),
+                        global_variables,
+                        iteration,
+                    );
+                    ret
+                })
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string()
+            }
             ValueOrDatumOrFileOrSecret::Schema { value: d } => serde_json::to_string(d)
                 .map(|jv| {
                     definition.resolve_variables(
@@ -575,10 +612,12 @@ impl Variable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Definition {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub id: String,
+    pub id: Option<String>,
+    pub platform_id: Option<String>,
     pub project: Option<String>,
     pub environment: Option<String>,
     pub requires: Option<String>,
@@ -593,7 +632,10 @@ pub struct Definition {
     pub disabled: bool,
 
     #[serde(skip_serializing, skip_deserializing)]
-    pub filename: String,
+    pub file_data: File,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub index: usize,
 }
 
 // TODO: add validation logic to verify the descriptor is valid
@@ -1316,7 +1358,8 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -1332,7 +1375,8 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
         assert_eq!(
             None,
@@ -1346,7 +1390,8 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -1368,7 +1413,8 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
 
         let body = RequestBody {
@@ -1401,7 +1447,8 @@ mod tests {
         let td = Definition {
             name: None,
             description: None,
-            id: "id".to_string(),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -1429,7 +1476,8 @@ mod tests {
                 always: None,
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
 
         let body = RequestBody {

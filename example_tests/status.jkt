@@ -1,9 +1,10 @@
 name: Check Status
+platformId: 01HWK6J4SSBZED9R4P79P0C8VT
 requires: auth
 request:
   url: https://api.jikken.io/api/v1/examples/status
   headers:
-    - header: Authorization
-      value: ${token}
+  - header: Authorization
+    value: ${token}
 response:
   status: 200

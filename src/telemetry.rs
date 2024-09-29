@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
+use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;
 
@@ -53,6 +54,7 @@ struct SessionCompletedPost {
 #[serde(rename_all = "camelCase")]
 struct SessionResponse {
     pub session_id: String,
+    pub identifier: Option<ulid::Ulid>,
 }
 
 #[derive(Clone)]
@@ -66,7 +68,8 @@ pub struct Test {
 #[serde(rename_all = "camelCase")]
 struct TestPost {
     pub session_id: String,
-    pub identifier: String,
+    pub identifier: Option<String>,
+    pub platform_id: ulid::Ulid,
     pub definition: serde_json::Value,
 }
 
@@ -280,13 +283,17 @@ pub async fn create_test(
         }
     }
 
-    let redacted_definition = redact_definition(definition);
+    let redacted_definition = redact_definition(definition.clone());
     let pruned_definition = prune_definition(redacted_definition);
     let definition_json = serde_json::to_value(&pruned_definition)?;
 
+    let ulid = Ulid::from_string(&definition.platform_id.expect("Platform ID is required"))
+        .expect("Platform ID must be valid");
+
     let post_body = TestPost {
         session_id: session.session_id.to_string(),
-        identifier: pruned_definition.id.clone(),
+        identifier: pruned_definition.id,
+        platform_id: ulid,
         definition: definition_json,
     };
 
@@ -496,10 +503,48 @@ pub async fn complete_session(
     Ok(())
 }
 
+#[derive(PartialEq, Eq)]
+pub enum PlatformIdFailure {
+    Missing,
+    Invalid,
+    Duplicate,
+}
+
+pub fn validate_platform_ids(
+    definitions: Vec<&Definition>,
+) -> Result<(), Vec<(&Definition, PlatformIdFailure)>> {
+    let mut failures: Vec<(&Definition, PlatformIdFailure)> = Vec::new();
+    let mut duplicate_check: HashSet<Ulid> = HashSet::new();
+
+    for definition in definitions {
+        let Some(id_raw) = definition.platform_id.as_ref() else {
+            failures.push((definition, PlatformIdFailure::Missing));
+            continue;
+        };
+
+        let Ok(id) = Ulid::from_string(id_raw) else {
+            failures.push((definition, PlatformIdFailure::Invalid));
+            continue;
+        };
+
+        if duplicate_check.contains(&id) {
+            failures.push((definition, PlatformIdFailure::Duplicate));
+        }
+
+        duplicate_check.insert(id);
+    }
+
+    if !failures.is_empty() {
+        return Err(failures);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
 
-    use test::Variable;
+    use test::{File, Variable};
 
     use crate::{
         executor::ExpectedResultData,
@@ -550,7 +595,8 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -588,7 +634,8 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
 
         let get_all_headers = |td: test::Definition| -> Vec<Header> {
@@ -670,7 +717,8 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -714,7 +762,8 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);
@@ -740,7 +789,8 @@ mod tests {
         let td = test::Definition {
             name: None,
             description: None,
-            id: String::from("id"),
+            id: None,
+            platform_id: None,
             project: None,
             environment: None,
             requires: None,
@@ -778,7 +828,8 @@ mod tests {
                 always: Some(request.clone()),
             },
             disabled: false,
-            filename: "/a/path.jkt".to_string(),
+            file_data: File::default(),
+            index: 0,
         };
         let before = td.clone();
         let pruned = remove_temporal_values(td);

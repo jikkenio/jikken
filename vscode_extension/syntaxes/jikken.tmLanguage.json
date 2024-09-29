@@ -36,7 +36,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|description|id|env|project|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
+					"match": "\\b(name|description|id|platformId|env|project|tags|requires|iterate|setup|request|response|compare|variables|stages|cleanup|disabled)\\b"
 				},
 				{
 					"include": "#request-keywords"
@@ -62,7 +62,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(name|type|value|file|min|max|pattern|oneOf|noneOf|anyOf|length|minLength|maxLength|schema|modifier|format)\\b"
+					"match": "\\b(name|type|value|valueSet|file|min|max|pattern|oneOf|noneOf|anyOf|length|minLength|maxLength|schema|modifier|format)\\b"
 				},
 				{
 					"include": "#modifier-keywords"

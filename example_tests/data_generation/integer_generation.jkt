@@ -1,10 +1,16 @@
-name: A cat for every status code  
+name: A cat for every status code
+platformId: 01HX74EC429N5NBWVKGGQ0E4WV
 tags: variables generation
 request:
   url: https://http.cat/${status_val}
 response:
   status: 200
 variables:
-  - name: status_val
-    type: Integer
-    oneOf: [200, 201, 202, 400, 500]
+- name: status_val
+  type: Integer
+  oneOf:
+  - 200
+  - 201
+  - 202
+  - 400
+  - 500

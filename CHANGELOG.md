@@ -12,24 +12,30 @@ As always, check the [docs](https://www.jikken.io/docs/) for more details.
 - Added support for variable embedding in `setup`, `clean-up`, and multi-stage response bodies
 - Added support for secrets as a secure alternative to global variables
 - New `bodySchema` field, which allows more descriptive response validation
+- New `platformId` field, to assist in tracking test versions over time (as part of our SaaS platform offering)
 - Body comparison now supports strict and non-strict modes
 - Improved error messaging around invalid JSON bodies
 - OpenApi test generation now supports ref links
 - OpenApi test generation can now produce variable definitions for generating test data
 - Stages in multi-stage tests can now have names via the `name` field
 - New `NOW` and `NOW_UTC` built-in global variables, which contain the current timestamp in local and UTC time
+- New `format` command which auto-formats your test files
+- New `validate` command for basic test file validation, which provides a mechanism to generate Platform IDs
 
 # Changes
 
 - Displays an error and skips test if test definition contains unknown fields
 - Displays a warning when user specified config file is not found
 - Some example test API URIs have changed, and the associated tests have been updated
-- VSCode extension now recognizes the `project` keyword
+- Split definition for iterative array variables to use a new `valueSet` keyword
+- VSCode extension now recognizes the `project` and `valueSet` keywords
 - VSCode extension has better support for embedded variables
 - Telemetry now includes test stage names
 - Telemetry now receives skipped tests information
 - Telemetry now receives projects and environments on session create to support alert filtering
+- Telemetry now leverages the `platformId` field for tracking test versions over time
 - Telemetry no longer sends global variables attached to test data, but instead sends them as part of the session
+- Telemetry no longer uses the ID field, which is now reserved for referencing tests as requires
 - Test iterations now count as distinct test runs for telemetry data
 - Updated Example tests to better showcase tag usage
 - Added test execution runtimes to CLI output

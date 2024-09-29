@@ -1,17 +1,17 @@
-name: Using Variable to Inject File String Values  
+name: Using Variable to Inject File String Values
+platformId: 01J3QN53Y9JSTKJQ24ES576PXN
 tags: extract variables files
 request:
   method: Post
   url: https://api.jikken.io/api/v1/examples/login
-  body: {
-    "username": "testuser",
-    "password": "${password_val}"
-  }
+  body:
+    password: ${password_val}
+    username: testuser
 response:
   status: 200
   extract:
-    - name: token
-      field: auth.token
+  - name: token
+    field: auth.token
 variables:
-  - name: password_val
-    file: login_password
+- name: password_val
+  file: login_password
