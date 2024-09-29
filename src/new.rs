@@ -126,6 +126,7 @@ mod openapi_legacy {
                         strict: None,
                         body: body_stuff.clone().and_then(|(v, _)| v),
                         body_schema: None, //body_stuff.map(|(_, ds)| ds),
+                        body_schema2: None,
                     }
                 })
             })
@@ -588,6 +589,7 @@ mod openapi_v31 {
                                 .map(UnvalidatedVariableNameOrDatumSchema::Component)
                         })
                     }),
+                    body_schema2: None,
                 })
             })
             .last()

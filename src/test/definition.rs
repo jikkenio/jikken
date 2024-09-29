@@ -286,6 +286,11 @@ impl ResponseDescriptor {
                     });
                 }
 
+                println!(
+                    "BodySchema : {:?} \n BodySchema2: {:?}",
+                    res.body_schema, res.body_schema2
+                );
+
                 let maybe_body_or_schema = res
                     .body
                     .and_then(|variable_name_or_value| match variable_name_or_value {

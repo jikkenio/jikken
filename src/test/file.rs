@@ -2470,6 +2470,8 @@ impl Hash for BodyOrSchema {
 pub type UnvalidatedVariableNameOrValue = UnvalidatedVariableNameOrComponent<serde_json::Value>;
 
 pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrComponent<DatumSchema>;
+pub type UnvalidatedVariableNameOrDatumSchema2 =
+    UnvalidatedVariableNameOrComponent<UnvalidatedDatumSchemaVariable2>;
 
 /**
     We expose variables to the user as things
@@ -2653,6 +2655,8 @@ pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_schema2: Option<UnvalidatedVariableNameOrDatumSchema2>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
@@ -2684,6 +2688,7 @@ impl Default for UnvalidatedResponse {
             extract: None,
             strict: None,
             body_schema: None,
+            body_schema2: None,
         }
     }
 }

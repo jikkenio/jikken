@@ -116,6 +116,7 @@ fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send
         extract: Some(vec![definition::ResponseExtraction::new()]),
         strict: Some(true),
         body_schema: None,
+        body_schema2: None,
     })
 }
 
