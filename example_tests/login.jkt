@@ -9,6 +9,6 @@ request:
     username: testuser
 response:
   status: 200
-  extract:
+  extract: # save the token into a variable
   - name: token
     field: auth.token
