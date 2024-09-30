@@ -3,11 +3,11 @@
 [![Chocolatey](https://img.shields.io/chocolatey/v/jikken)](https://community.chocolatey.org/packages/jikken/)
 [![Homebrew Formula](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Version.toml&query=$.package.version&prefix=v&label=homebrew)](https://raw.githubusercontent.com/jikkenio/homebrew-jikken/main/Formula/jikken.rb)
 
-jikken (jk)
------------
-Jikken is a powerful REST API testing toolkit that is source control friendly. This project is currently in early beta.
+## jikken (jk)
 
-The goal of this project is to provide a CLI tool that can be used for automated API testing. The tests are defined in a YAML/JSON format. The design is intended to be simple for common scenarios, but provide a rich featureset to enable complex ones. The current focus is to enable smoke and regression testing (data validation), but in time we plan to add features to enable performance testing as well.
+What is Jikken? [Jikken](https://www.jikken.io) is an open source CLI tool for automated API testing, built in Rust! The tool was originally developed to help validate complex data APIs used for analytics dashboards, while integrating well with source control and CI/CD platforms.
+
+The tests are defined in a YAML/JSON format. The design is intended to be simple for common scenarios, but provide a rich featureset to enable complex ones.
 
 ### CHANGELOG
 
@@ -15,14 +15,14 @@ Release history can be viewed in the [CHANGELOG](CHANGELOG.md).
 
 ### Documentation
 
-For more complete documentation checkout our website: [Jikken.io](https://www.jikken.io/).
+For more complete documentation checkout our website's [documentation page](https://www.jikken.io/docs/).
 
-* [Installation](#installation)
-* [User Guide](#user-guide)
-* [Test Definition Format](#test-definition-format)
-  * [Test Examples](example_tests)
-* [Config File Format](#config-file-format)
-* [Environment Variables](#environment-variables)
+- [Installation](#installation)
+- [User Guide](#user-guide)
+- [Test Definition Format](#test-definition-format)
+  - [Test Examples](example_tests)
+- [Config File Format](#config-file-format)
+- [Environment Variables](#environment-variables)
 
 ### Installation
 
@@ -70,21 +70,21 @@ Once you've installed jikken, using the tool is as simple as running the `jk run
 ```
 $ jk run
 Jikken found 2 tests.
-Running Test (1/2) `Test 1` Iteration(1/1)...PASSED!
-Running Test (2/2) `Test 2` Iteration(1/2)...PASSED!
-Running Test (2/2) `Test 2` Iteration(2/2)...PASSED!
+Running Test (1/2) `Test 1` Iteration(1/1) Runtime(5ms) ... PASSED!
+Running Test (2/2) `Test 2` Iteration(1/2) Runtime(102ms) ... PASSED!
+Running Test (2/2) `Test 2` Iteration(2/2) Runtime(80ms) ... PASSED!
 ```
 
-Tests are defined with the Test Definition Format. The convention is they are saved as `.jkt` files. Jikken will scan for `jkt` files in the current directory and recurse through child directories looking for all test definitions it can find. If tests are provided a name, the output will use the name when executing. If no name is given it will simply give the name `Test #`.
+Tests are defined with the Test Definition Format. The convention is they are saved as `.jkt` files. Jikken will scan for `jkt` files in the current directory. You can pass the `-r` flag to have it recurse through child directories looking for all test definitions it can find. If tests are provided a name, the output will use the name when executing. If no name is given it will simply give the name `Test #`.
 
 The following output shows an example where there are two JKT files located describing tests to execute. The first test is used to authenticate with a system and receive an auth token. It then extracts and embeds that token into the subsequent tests. In this case the second test has two iterations (it runs twice calling the same endpoints, but each time it runs it passes in different variables).
 
 ```
 $ jk run
 Jikken found 2 tests.
-Running Test (1/2) `Fetch Auth Credentials` Iteration(1/1)...PASSED!
-Running Test (2/2) `My API Test` Iteration(1/2)...PASSED!
-Running Test (2/2) `My API Test` Iteration(2/2)...PASSED!
+Running Test (1/2) `Fetch Auth Credentials` Iteration(1/1) Runtime(5) ... PASSED!
+Running Test (2/2) `My API Test` Iteration(1/2) Runtime(103ms) ... PASSED!
+Running Test (2/2) `My API Test` Iteration(2/2) Runtime(75ms) ... PASSED!
 ```
 
 If you are working on developing new tests, or if you'd like to see what will run without actually running it, Jikken supports a `dryrun` command. This will print out a report of steps that would occur under a normal run.
@@ -128,7 +128,7 @@ $ jk run -t regression
 Jikken found 5 tests.
 ```
 
-You can also provide multiple tags to control which tests run even further. Providing multiple tags by default will only execute tests that contain all of the tags provided. 
+You can also provide multiple tags to control which tests run even further. Providing multiple tags by default will only execute tests that contain all of the tags provided.
 
 ```
 $ jk run -t foo -t bar
@@ -144,7 +144,9 @@ Jikken found 8 tests
 
 ### Test Definition Format
 
-For more information on our test definition format please check out our website: [Jikken.io](https://www.jikken.io).
+We have a [Basic Format](https://www.jikken.io/docs/test-format/basic-format/) section and a [Full Format](https://www.jikken.io/docs/test-format/full-format/) section in our website's documentation page.
+
+If you'd prefer to not read documentation, you can start by looking at some [Test Examples](example_tests).
 
 ### Config File Format
 
@@ -161,11 +163,11 @@ newUrl="https://localhost:5001"
 oldUrl="https://localhost:5002"
 ```
 
-| Setting | Default | Description |
-| ------- | ------- | ----------- |
-| continueOnFailure | false | When running jikken, by default, it will stop execution as soon as it encounters it's first test failure. The `continueOnFailure` setting allows you to execute all tests regardless of prior test execution. It is possible some test failures may cause other tests to fail, but for independent tests it can be useful to get a full picture of the pass/fail state for everything. |
-| environment | | Jikken provides multiple ways to provide an environment label. This setting provides a label at the configuration file level, which will apply it to all tests which do not themselves have an env associated. This value will be overridden by the environment variable if it is provided. |
-| apiKey | | The apiKey setting is used to provide a key for reporting test runs and status with the jikken.io webapp. This key is associated with your account and can be obtained from inside the webapp. |
+| Setting           | Default | Description                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| continueOnFailure | false   | When running jikken, by default, it will stop execution as soon as it encounters it's first test failure. The `continueOnFailure` setting allows you to execute all tests regardless of prior test execution. It is possible some test failures may cause other tests to fail, but for independent tests it can be useful to get a full picture of the pass/fail state for everything. |
+| environment       |         | Jikken provides multiple ways to provide an environment label. This setting provides a label at the configuration file level, which will apply it to all tests which do not themselves have an env associated. This value will be overridden by the environment variable if it is provided.                                                                                            |
+| apiKey            |         | The apiKey setting is used to provide a key for reporting test runs and status with the jikken.io webapp. This key is associated with your account and can be obtained from inside the webapp.                                                                                                                                                                                         |
 
 Globals are a way to define global variables which are used across all of your tests. This is useful for things such as base urls for API endpoints, environment variables, or auth credentials.
 It is important to note that currently variables (both global and locally defined in JKT files) are case sensitive. The variables can be whatever case you prefer as long as it matches the case of the variable definitions in the test files.
@@ -174,11 +176,11 @@ It is important to note that currently variables (both global and locally define
 
 Jikken supports environment variables as overrides to the `.jikken` configuration file.
 
-| EnvVar | Value | Description |
-| ------ | ----- | ----------- |
-| JIKKEN_CONTINUE_ON_FAILURE | true | this environment variable will override the setting `continueOnFailure` as defined in the `.jikken` configuration file. |
-| JIKKEN_ENVIRONMENT | <string> | this environment variable will override the setting `environment` as defined in the `.jikken` configuration file. |
-| JIKKEN_API_KEY | <string> | this environment variable will override the setting `apiKey` as defined in the `.jikken` configuration file. |
+| EnvVar                     | Value    | Description                                                                                                             |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| JIKKEN_CONTINUE_ON_FAILURE | true     | this environment variable will override the setting `continueOnFailure` as defined in the `.jikken` configuration file. |
+| JIKKEN_ENVIRONMENT         | <string> | this environment variable will override the setting `environment` as defined in the `.jikken` configuration file.       |
+| JIKKEN_API_KEY             | <string> | this environment variable will override the setting `apiKey` as defined in the `.jikken` configuration file.            |
 
 Jikken also supports global variable definition as Environment Variables. These may overwrite values which are in the `.jikken` file or simply define new ones that are not contained the file. The pattern for these definitions are a prefix of `JIKKEN_GLOBAL_`. An example of defining these in the same way as the above `.jikken` definition would be:
 
