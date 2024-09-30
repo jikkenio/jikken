@@ -2726,41 +2726,24 @@ pub enum UnvalidatedVariable3 {
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UnvalidatedValueSet {
     pub name: String,
     pub value_set: Vec<Value>,
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UnvalidatedFileVariable {
     pub name: String,
     pub file: String,
 }
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SimpleValueVariable {
     pub name: String,
     pub value: serde_json::Value,
-}
-
-#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
-pub struct UnvalidatedDatumSchemaVariable {
-    pub name: String,
-    //rename as type
-    pub type_name: String,
-    pub value: Option<serde_json::Value>,
-    pub any_of: Option<Vec<serde_json::Value>>,
-    pub one_of: Option<Vec<serde_json::Value>>,
-    pub none_of: Option<Vec<serde_json::Value>>,
-    pub min: Option<serde_json::Value>,
-    pub max: Option<serde_json::Value>,
-    pub min_length: Option<i64>,
-    pub max_length: Option<i64>,
-    pub pattern: Option<String>,
-    pub format: Option<String>,
-    pub modifier: Option<variable::Modifier>,
-    pub schema: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
