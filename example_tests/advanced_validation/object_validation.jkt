@@ -20,3 +20,14 @@ response:
             type: Date
             format: '%Y-%m-%d %H:%M:%S%.f %Z'
           username: testuser
+  #bodySchema2:
+  #  type: Object
+  #  schema:
+  #    "status": "Active"
+  #    "user":
+  #      type: Object
+  #      schema: 
+  #        "username": "testuser"
+  #        "lastActivity":
+  #          type: Date
+  #          format: "%Y-%m-%d %H:%M:%S%.f %Z"

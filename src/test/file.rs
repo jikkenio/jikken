@@ -145,9 +145,11 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
         .into_iter()
         .filter(|o| o.is_some())
         .count();
-        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
+        if specified > 1
+            || (specified == 1 && unvalidated.none_of.is_none() && unvalidated.value.is_some())
+        {
             return Err(
-                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value"
+                "can only specify one of the following constraints: oneOf, anyOf, or value"
                     .to_string(),
             );
         }
@@ -2678,8 +2680,6 @@ pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_schema: Option<UnvalidatedVariableNameOrDatumSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body_schema2: Option<UnvalidatedVariableNameOrDatumSchema2>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Vec<definition::ResponseExtraction>>,
@@ -2711,7 +2711,6 @@ impl Default for UnvalidatedResponse {
             extract: None,
             strict: None,
             body_schema: None,
-            body_schema2: None,
         }
     }
 }
@@ -2746,7 +2745,7 @@ pub struct SimpleValueVariable {
     pub value: serde_json::Value,
 }
 
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedSpecification<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2776,7 +2775,7 @@ where
     }
 }
 
-#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2795,7 +2794,7 @@ pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + Partia
     pub max: Option<T>,
 }
 
-#[derive(Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default, Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedStringSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2818,7 +2817,7 @@ pub struct UnvalidatedStringSpecification {
     pub pattern: Option<String>,
 }
 
-#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[derive(Default, Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedDateSpecification {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2944,9 +2943,10 @@ pub struct UnvalidatedStage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<UnvalidatedResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<Vec<UnvalidatedVariable>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables2: Option<Vec<UnvalidatedVariable3>>,
+    pub variables: Option<Vec<UnvalidatedVariable3>>,
+    //pub variables: Option<Vec<UnvalidatedVariable>>,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    //pub variables2: Option<Vec<UnvalidatedVariable3>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delay: Option<u64>,
 }
@@ -3372,6 +3372,375 @@ mod tests {
     use variable::Modifier;
 
     use super::*;
+    #[test]
+    fn unvalidated_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedSpecification<bool>>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            any_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            one_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_allow_value_and_none_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            none_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(false),
+            Ok(_) => assert!(true),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedFloatSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            any_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            one_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_allow_value_and_none_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            none_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(false),
+            Ok(_) => assert!(true),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_any_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            any_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            one_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_max() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            min_length: Some(24),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "length cannot be specified alongside minLength or maxLength",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedStringSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            any_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            one_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_allow_value_and_none_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            none_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(false),
+            Ok(_) => assert!(true),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedDateSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            any_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            one_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_allow_value_and_none_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            none_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(false),
+            Ok(_) => assert!(true),
+        };
+    }
 
     #[test]
     fn specification_none_of_checker() {

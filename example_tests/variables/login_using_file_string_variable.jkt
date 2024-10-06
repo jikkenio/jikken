@@ -13,5 +13,8 @@ response:
   - name: token
     field: auth.token
 variables:
-- name: password_val
-  file: login_password
+  - name: password_val
+    file: login_password
+#variables2:
+#  - name: password_val
+#    file: login_password

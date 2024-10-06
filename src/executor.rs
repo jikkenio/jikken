@@ -736,10 +736,10 @@ fn validate_test_file(
     environment: Option<String>,
     index: usize,
 ) -> Option<test::Definition> {
-    println!(
+    /*println!(
         "Variables: {:?}\nVariables2:{:?}",
         &test_file.variables, &test_file.variables2
-    );
+    );*/
     let name = test_file
         .name
         .clone()
@@ -2618,7 +2618,6 @@ mod tests {
             tags: vec![String::from("myTag"), String::from("myTag2")],
             iterate: 0,
             variables: Vec::new(),
-            variables2: Vec::new(),
             global_variables: Vec::new(),
             stages: Vec::new(),
             setup: None,
@@ -2715,7 +2714,6 @@ mod tests {
             tags: vec![String::from("myTag"), String::from("myTag2")],
             iterate: 0,
             variables: Vec::new(),
-            variables2: Vec::new(),
             global_variables: Vec::new(),
             stages: Vec::new(),
             setup: None,

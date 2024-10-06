@@ -286,11 +286,6 @@ impl ResponseDescriptor {
                     });
                 }
 
-                println!(
-                    "BodySchema : {:?} \n BodySchema2: {:?}",
-                    res.body_schema, res.body_schema2
-                );
-
                 let maybe_body_or_schema = res
                     .body
                     .and_then(|variable_name_or_value| match variable_name_or_value {
@@ -367,7 +362,7 @@ impl StageDescriptor {
             request: RequestDescriptor::new(stage.request, variables)?,
             compare: CompareDescriptor::new_opt(stage.compare, variables)?,
             response: ResponseDescriptor::new_opt(stage.response, variables)?,
-            variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
+            variables: test::Variable::validate_variables_opt2(stage.variables, source_path)?,
             // source_path: source_path.to_string(),
             name: stage.name,
             delay: stage.delay,
