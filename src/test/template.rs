@@ -40,7 +40,7 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         response: Some(new_full_response()?),
         stages: Some(vec![new_full_stage()?]),
         cleanup: Some(new_full_cleanup()?),
-        variables: Some(vec![new_full_variables2()?]),
+        variables: Some(vec![new_full_variables()?]),
         //variables: Some(vec![new_full_variables()?]),
         //variables2: Some(vec![new_full_variables2()?]),
         disabled: Some(false),
@@ -80,9 +80,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
         request: new_full_request()?,
         compare: Some(new_full_compare()?),
         response: Some(new_full_response()?),
-        variables: Some(vec![new_full_variables2()?]),
-        //variables: Some(vec![new_full_variables()?]),
-        //variables2: Some(vec![new_full_variables2()?]),
+        variables: Some(vec![new_full_variables()?]),
         name: None,
         delay: None,
     })
@@ -90,16 +88,7 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
 
 //Do we want to create a variable of every type as part of the full template?
 fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
-    Ok(file::UnvalidatedVariable {
-        name: "".to_string(),
-        value: file::ValueOrDatumOrFile::Value {
-            value: serde_json::Value::from("".to_string()),
-        },
-    })
-}
-
-fn new_full_variables2() -> Result<file::UnvalidatedVariable3, Box<dyn Error + Send + Sync>> {
-    Ok(file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+    Ok(file::UnvalidatedVariable::Simple(SimpleValueVariable {
         name: "".to_string(),
         value: serde_json::Value::from("".to_string()),
     }))

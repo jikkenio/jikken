@@ -73,7 +73,7 @@ pub fn validate_file(
         Vec::new()
     };
 
-    let variables = test::Variable::validate_variables_opt2(
+    let variables = test::Variable::validate_variables_opt(
         file.clone().variables,
         PathBuf::from(&file.filename)
             .parent()

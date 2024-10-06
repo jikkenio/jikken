@@ -12,14 +12,14 @@ use crate::test::file::DatumSchema;
 use crate::test::file::FloatSpecification;
 use crate::test::file::IntegerSpecification;
 use crate::test::file::NameSpecification;
-use crate::test::file::UnvalidatedVariable3;
+use crate::test::file::UnvalidatedVariable;
 use crate::test::file::ValueOrDatumOrFile;
 use file::DateSpecification;
 use file::DateTimeSpecification;
 use file::EmailSpecification;
 use file::SequenceSpecification;
 use file::StringSpecification;
-use file::UnvalidatedDatumSchemaVariable2;
+use file::UnvalidatedDatumSchemaVariable;
 use log::{debug, error, trace};
 use regex::Regex;
 use serde::Serializer;
@@ -112,30 +112,27 @@ pub enum ValueOrDatumOrFileOrSecret {
     },
 }
 
-impl TryFrom<UnvalidatedVariable3> for ValueOrDatumOrFileOrSecret {
+impl TryFrom<UnvalidatedVariable> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 
-    fn try_from(value: UnvalidatedVariable3) -> Result<Self, Self::Error> {
+    fn try_from(value: UnvalidatedVariable) -> Result<Self, Self::Error> {
         match value {
             // \todo : check if file is valid?
             //         we could, but will we ever store responses to file?
             //         basically a TOCTOU question
-            UnvalidatedVariable3::File(f) => Ok(ValueOrDatumOrFileOrSecret::File { value: f.file }),
-            UnvalidatedVariable3::Simple(s) => {
+            UnvalidatedVariable::File(f) => Ok(ValueOrDatumOrFileOrSecret::File { value: f.file }),
+            UnvalidatedVariable::Simple(s) => {
                 Ok(ValueOrDatumOrFileOrSecret::Value { value: s.value })
             }
-            UnvalidatedVariable3::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
+            UnvalidatedVariable::Datum(ds) => TryInto::<DatumSchema>::try_into(ds)
                 .map(|a| ValueOrDatumOrFileOrSecret::Schema { value: a }),
-            UnvalidatedVariable3::ValueSet(vs) => Ok(ValueOrDatumOrFileOrSecret::ValueSet {
+            UnvalidatedVariable::ValueSet(vs) => Ok(ValueOrDatumOrFileOrSecret::ValueSet {
                 value_set: serde_json::Value::Array(vs.value_set),
             }),
         }
     }
 }
 
-/*
-    \todo : Address min/max specified AND value
-*/
 impl TryFrom<ValueOrDatumOrFile> for ValueOrDatumOrFileOrSecret {
     type Error = String;
 
@@ -355,7 +352,7 @@ pub struct File {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cleanup: Option<file::UnvalidatedCleanup>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<Vec<file::UnvalidatedVariable3>>,
+    pub variables: Option<Vec<file::UnvalidatedVariable>>,
     //#[serde(skip_serializing_if = "Option::is_none")]
     //pub variables2: Option<Vec<file::UnvalidatedVariable3>>,
     #[serde(skip_serializing, skip_deserializing)]
@@ -404,43 +401,22 @@ impl Variable {
         variable: file::UnvalidatedVariable,
         source_path: &str,
     ) -> Result<Variable, validation::Error> {
-        let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();
-        if !regex.is_match(variable.name.as_str()) {
-            debug!("variable name '{}' is invalid", variable.name);
-            return Err(validation::Error{reason: "name is invalid - may only contain alphanumeric characters, hyphens, and underscores".to_string()});
-        }
-
-        variable
-            .value
-            .try_into()
-            .map(|v| Variable {
-                name: variable.name,
-                value: v,
-                source_path: source_path.to_string(),
-            })
-            .map_err(|e| validation::Error { reason: e })
-    }
-
-    pub fn new2(
-        variable: file::UnvalidatedVariable3,
-        source_path: &str,
-    ) -> Result<Variable, validation::Error> {
         let name = match &variable {
-            UnvalidatedVariable3::File(f) => Some(f.name.clone()),
-            UnvalidatedVariable3::Simple(s) => Some(s.name.clone()),
-            UnvalidatedVariable3::Datum(d) => match d {
-                UnvalidatedDatumSchemaVariable2::Boolean(b) => b.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Date(d) => d.name.clone(),
-                UnvalidatedDatumSchemaVariable2::DateTime(d) => d.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Email(e) => e.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Float(f) => f.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Integer(i) => i.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Name(n) => n.name.clone(),
-                UnvalidatedDatumSchemaVariable2::String(s) => s.name.clone(),
-                UnvalidatedDatumSchemaVariable2::List(l) => l.name.clone(),
-                UnvalidatedDatumSchemaVariable2::Object { name, schema: _ } => name.clone(),
+            UnvalidatedVariable::File(f) => Some(f.name.clone()),
+            UnvalidatedVariable::Simple(s) => Some(s.name.clone()),
+            UnvalidatedVariable::Datum(d) => match d {
+                UnvalidatedDatumSchemaVariable::Boolean(b) => b.name.clone(),
+                UnvalidatedDatumSchemaVariable::Date(d) => d.name.clone(),
+                UnvalidatedDatumSchemaVariable::DateTime(d) => d.name.clone(),
+                UnvalidatedDatumSchemaVariable::Email(e) => e.name.clone(),
+                UnvalidatedDatumSchemaVariable::Float(f) => f.name.clone(),
+                UnvalidatedDatumSchemaVariable::Integer(i) => i.name.clone(),
+                UnvalidatedDatumSchemaVariable::Name(n) => n.name.clone(),
+                UnvalidatedDatumSchemaVariable::String(s) => s.name.clone(),
+                UnvalidatedDatumSchemaVariable::List(l) => l.name.clone(),
+                UnvalidatedDatumSchemaVariable::Object { name, schema: _ } => name.clone(),
             },
-            UnvalidatedVariable3::ValueSet(vs) => Some(vs.name.clone()),
+            UnvalidatedVariable::ValueSet(vs) => Some(vs.name.clone()),
         };
 
         return match name {
@@ -473,37 +449,7 @@ impl Variable {
         let ret = variables
             .map(|vars| {
                 vars.into_iter()
-                    .map(|f| (f.name.clone(), Variable::new(f, source_path)))
-                    .filter_map(|(name, v)| match v {
-                        Ok(x) => Some(x),
-                        Err(e) => {
-                            errors.push(format!("variable \"{}\" {}", name, e));
-                            None
-                        }
-                    })
-                    .collect::<Vec<Variable>>()
-            })
-            .unwrap_or_default();
-
-        if !errors.is_empty() {
-            return Err(validation::Error {
-                reason: errors.join(","),
-            });
-        }
-
-        Ok(ret)
-    }
-
-    pub fn validate_variables_opt2(
-        variables: Option<Vec<file::UnvalidatedVariable3>>,
-        source_path: &str,
-    ) -> Result<Vec<Variable>, validation::Error> {
-        let mut errors: Vec<String> = vec![];
-
-        let ret = variables
-            .map(|vars| {
-                vars.into_iter()
-                    .map(|f| Variable::new2(f, source_path))
+                    .map(|f| Variable::new(f, source_path))
                     .filter_map(|v| match v {
                         Ok(x) => Some(x),
                         Err(e) => {
@@ -1227,7 +1173,7 @@ impl Definition {
 #[cfg(test)]
 mod tests {
 
-    use file::UnvalidatedVariable;
+    use file::SimpleValueVariable;
     use serde_json::Value;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1236,12 +1182,10 @@ mod tests {
 
     #[test]
     fn variable_new_with_valid_name() {
-        let var = UnvalidatedVariable {
+        let var = UnvalidatedVariable::Simple(SimpleValueVariable {
             name: "VALID-name_123".to_string(),
-            value: ValueOrDatumOrFile::Value {
-                value: Value::default(),
-            },
-        };
+            value: Value::default(),
+        });
 
         let res = Variable::new(var, "");
         assert!(res.is_ok());
@@ -1249,12 +1193,10 @@ mod tests {
 
     #[test]
     fn variable_new_with_invalid_name_dot() {
-        let var = UnvalidatedVariable {
+        let var = UnvalidatedVariable::Simple(SimpleValueVariable {
             name: "invalid.name".to_string(),
-            value: ValueOrDatumOrFile::Value {
-                value: Value::default(),
-            },
-        };
+            value: Value::default(),
+        });
 
         let res = Variable::new(var, "");
         assert!(res.is_err());
@@ -1262,12 +1204,10 @@ mod tests {
 
     #[test]
     fn variable_new_with_invalid_name_space() {
-        let var = UnvalidatedVariable {
+        let var = UnvalidatedVariable::Simple(SimpleValueVariable {
             name: "invalid name".to_string(),
-            value: ValueOrDatumOrFile::Value {
-                value: Value::default(),
-            },
-        };
+            value: Value::default(),
+        });
 
         let res = Variable::new(var, "");
         assert!(res.is_err());
@@ -1275,12 +1215,10 @@ mod tests {
 
     #[test]
     fn variable_new_with_invalid_name_empty() {
-        let var = UnvalidatedVariable {
+        let var = UnvalidatedVariable::Simple(SimpleValueVariable {
             name: "".to_string(),
-            value: ValueOrDatumOrFile::Value {
-                value: Value::default(),
-            },
-        };
+            value: Value::default(),
+        });
 
         let res = Variable::new(var, "");
         assert!(res.is_err());

@@ -362,7 +362,7 @@ impl StageDescriptor {
             request: RequestDescriptor::new(stage.request, variables)?,
             compare: CompareDescriptor::new_opt(stage.compare, variables)?,
             response: ResponseDescriptor::new_opt(stage.response, variables)?,
-            variables: test::Variable::validate_variables_opt2(stage.variables, source_path)?,
+            variables: test::Variable::validate_variables_opt(stage.variables, source_path)?,
             // source_path: source_path.to_string(),
             name: stage.name,
             delay: stage.delay,

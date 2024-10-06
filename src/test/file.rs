@@ -2157,53 +2157,53 @@ impl DatumSchema {
     }
 }
 
-impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
+impl TryFrom<UnvalidatedDatumSchemaVariable> for DatumSchema {
     type Error = String;
-    fn try_from(unvalidated: UnvalidatedDatumSchemaVariable2) -> Result<Self, Self::Error> {
+    fn try_from(unvalidated: UnvalidatedDatumSchemaVariable) -> Result<Self, Self::Error> {
         match unvalidated {
-            UnvalidatedDatumSchemaVariable2::Boolean(specification) => {
+            UnvalidatedDatumSchemaVariable::Boolean(specification) => {
                 TryInto::<Option<BooleanSpecification>>::try_into(specification).map(|spec| {
                     DatumSchema::Boolean {
                         specification: spec,
                     }
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Email(spec) => {
+            UnvalidatedDatumSchemaVariable::Email(spec) => {
                 TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Email {
                     specification: Some(EmailSpecification { specification: s }),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Name(spec) => {
+            UnvalidatedDatumSchemaVariable::Name(spec) => {
                 TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Name {
                     specification: Some(NameSpecification { specification: s }),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::String(spec) => {
+            UnvalidatedDatumSchemaVariable::String(spec) => {
                 TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::String {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Float(spec) => {
+            UnvalidatedDatumSchemaVariable::Float(spec) => {
                 TryInto::<FloatSpecification>::try_into(spec).map(|s| DatumSchema::Float {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Integer(spec) => {
+            UnvalidatedDatumSchemaVariable::Integer(spec) => {
                 TryInto::<IntegerSpecification>::try_into(spec).map(|s| DatumSchema::Integer {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::DateTime(spec) => {
+            UnvalidatedDatumSchemaVariable::DateTime(spec) => {
                 TryInto::<DateTimeSpecification>::try_into(spec).map(|s| DatumSchema::DateTime {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Date(spec) => {
+            UnvalidatedDatumSchemaVariable::Date(spec) => {
                 TryInto::<DateSpecification>::try_into(spec).map(|s| DatumSchema::Date {
                     specification: Some(s),
                 })
             }
-            UnvalidatedDatumSchemaVariable2::Object { name: _, schema } => match schema {
+            UnvalidatedDatumSchemaVariable::Object { name: _, schema } => match schema {
                 None => Ok(DatumSchema::Object { schema: None }),
                 Some(schema_val) => {
                     let f = schema_val
@@ -2221,7 +2221,7 @@ impl TryFrom<UnvalidatedDatumSchemaVariable2> for DatumSchema {
                     f.map(|tree| DatumSchema::Object { schema: Some(tree) })
                 }
             },
-            UnvalidatedDatumSchemaVariable2::List(unvalidated) => {
+            UnvalidatedDatumSchemaVariable::List(unvalidated) => {
                 let violation = unvalidated.length.is_some()
                     && unvalidated
                         .max_length
@@ -2484,8 +2484,6 @@ impl Hash for BodyOrSchema {
 pub type UnvalidatedVariableNameOrValue = UnvalidatedVariableNameOrComponent<serde_json::Value>;
 
 pub type UnvalidatedVariableNameOrDatumSchema = UnvalidatedVariableNameOrComponent<DatumSchema>;
-pub type UnvalidatedVariableNameOrDatumSchema2 =
-    UnvalidatedVariableNameOrComponent<UnvalidatedDatumSchemaVariable2>;
 
 /**
     We expose variables to the user as things
@@ -2717,9 +2715,9 @@ impl Default for UnvalidatedResponse {
 
 #[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "camelCase")]
-pub enum UnvalidatedVariable3 {
+pub enum UnvalidatedVariable {
     File(UnvalidatedFileVariable),
-    Datum(UnvalidatedDatumSchemaVariable2),
+    Datum(UnvalidatedDatumSchemaVariable),
     Simple(SimpleValueVariable),
     ValueSet(UnvalidatedValueSet),
 }
@@ -2847,7 +2845,7 @@ pub type UnvalidatedIntegerSpecification = UnvalidatedNumericSpecification<i64>;
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, untagged)]
 pub enum UnvalidatedValueOrDatumSchema {
-    Datum(UnvalidatedDatumSchemaVariable2),
+    Datum(UnvalidatedDatumSchemaVariable),
     Values(Value),
 }
 
@@ -2860,11 +2858,11 @@ impl Hash for UnvalidatedValueOrDatumSchema {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum UnvalidatedValuesOrSchema {
-    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable2>>),
+    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable>>),
     Values(UnvalidatedSpecification<Vec<Value>>),
     //I don't know if we advertise untagged schemas
     //There are use cases but... its a stretch
-    UntaggedSchema(Box<UnvalidatedDatumSchemaVariable2>),
+    UntaggedSchema(Box<UnvalidatedDatumSchemaVariable>),
     UntaggedLiterals(Vec<Value>),
 }
 #[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
@@ -2890,7 +2888,7 @@ impl Hash for UnvalidatedSequenceSpecification {
 
 #[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type", deny_unknown_fields)]
-pub enum UnvalidatedDatumSchemaVariable2 {
+pub enum UnvalidatedDatumSchemaVariable {
     #[serde(alias = "Boolean", alias = "boolean", alias = "Bool", alias = "bool")]
     Boolean(UnvalidatedSpecification<bool>),
     #[serde(alias = "float")]
@@ -2924,14 +2922,6 @@ pub enum UnvalidatedDatumSchemaVariable2 {
     },
 }
 
-#[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnvalidatedVariable {
-    pub name: String,
-    #[serde(flatten)]
-    pub value: ValueOrDatumOrFile,
-}
-
 #[derive(Hash, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct UnvalidatedStage {
@@ -2943,10 +2933,7 @@ pub struct UnvalidatedStage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<UnvalidatedResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables: Option<Vec<UnvalidatedVariable3>>,
-    //pub variables: Option<Vec<UnvalidatedVariable>>,
-    //#[serde(skip_serializing_if = "Option::is_none")]
-    //pub variables2: Option<Vec<UnvalidatedVariable3>>,
+    pub variables: Option<Vec<UnvalidatedVariable>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delay: Option<u64>,
 }

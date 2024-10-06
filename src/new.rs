@@ -344,42 +344,15 @@ mod openapi_legacy {
             .filter_map(|p_or_ref| {
                 p_or_ref
                     .resolve(spec)
-                    .map(|t| test::file::UnvalidatedVariable {
-                        name: t.name.clone(),
-                        value: test::file::ValueOrDatumOrFile::Value {
-                            value: serde_json::Value::from("value".to_string()),
-                        },
-                    })
-                    .ok()
-            })
-            .collect::<Vec<file::UnvalidatedVariable>>();
-
-        if ret.is_empty() {
-            None
-        } else {
-            Some(ret)
-        }
-    }
-
-    fn create_variables2(
-        op: &openapiv3::Operation,
-        spec: &OpenAPI,
-    ) -> Option<Vec<test::file::UnvalidatedVariable3>> {
-        let ret = op
-            .parameters
-            .iter()
-            .filter_map(|p_or_ref| {
-                p_or_ref
-                    .resolve(spec)
                     .map(|t| {
-                        test::file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+                        test::file::UnvalidatedVariable::Simple(SimpleValueVariable {
                             name: t.name.clone(),
                             value: serde_json::Value::from("value".to_string()),
                         })
                     })
                     .ok()
             })
-            .collect::<Vec<file::UnvalidatedVariable3>>();
+            .collect::<Vec<file::UnvalidatedVariable>>();
 
         if ret.is_empty() {
             None
@@ -409,9 +382,7 @@ mod openapi_legacy {
         let request = create_request(resolved_path.as_str(), verb, op, spec);
         let response =
             create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
-        let variables = create_variables2(op, spec);
-        //let variables = create_variables(op, spec);
-        //let variables2 = create_variables2(op, spec);
+        let variables = create_variables(op, spec);
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
@@ -423,7 +394,6 @@ mod openapi_legacy {
                     compare: None,
                     response,
                     variables,
-                    //variables2,
                     name: None,
                     delay: None,
                 }]),
@@ -511,14 +481,14 @@ mod openapi_v31 {
     use crate::test::file::Specification;
     use crate::test::file::StringSpecification;
     use crate::test::file::UnvalidatedDateSpecification;
-    use crate::test::file::UnvalidatedDatumSchemaVariable2;
+    use crate::test::file::UnvalidatedDatumSchemaVariable;
     use crate::test::file::UnvalidatedFloatSpecification;
     use crate::test::file::UnvalidatedIntegerSpecification;
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
     use crate::test::file::UnvalidatedStringSpecification;
     use crate::test::file::UnvalidatedValuesOrSchema;
-    use crate::test::file::UnvalidatedVariable3;
+    use crate::test::file::UnvalidatedVariable;
     use crate::test::file::UnvalidatedVariableNameOrComponent;
     use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
     use crate::test::file::ValueOrDatumSchema;
@@ -602,7 +572,6 @@ mod openapi_v31 {
             .flatten()
     }
 
-    //needs to go to UnvalidatedDatumSchemaVariable2
     fn schema_to_datum(schema: oas3::Schema, spec: &Spec) -> Option<DatumSchema> {
         schema.schema_type.map(|t| match t {
             oas3::spec::SchemaType::Array => DatumSchema::List {
@@ -708,9 +677,9 @@ mod openapi_v31 {
         schema: oas3::Schema,
         spec: &Spec,
         name: Option<String>
-    ) -> Option<UnvalidatedDatumSchemaVariable2> {
+    ) -> Option<UnvalidatedDatumSchemaVariable> {
         schema.schema_type.map(|t| match t {
-            oas3::spec::SchemaType::Array => UnvalidatedDatumSchemaVariable2::List(
+            oas3::spec::SchemaType::Array => UnvalidatedDatumSchemaVariable::List(
                 test::file::UnvalidatedSequenceSpecification {
                     name: name,
                     schema: schema.items.and_then(|items| {
@@ -724,11 +693,11 @@ mod openapi_v31 {
                     min_length: schema.min_items.map(|n| n as i64),
                 },
             ),
-            oas3::spec::SchemaType::Boolean => UnvalidatedDatumSchemaVariable2::Boolean(
+            oas3::spec::SchemaType::Boolean => UnvalidatedDatumSchemaVariable::Boolean(
                 test::file::UnvalidatedSpecification { name, value: None, any_of: None, one_of: None, none_of: None }
             ),
             oas3::spec::SchemaType::Integer => {
-                UnvalidatedDatumSchemaVariable2::Integer(UnvalidatedIntegerSpecification {
+                UnvalidatedDatumSchemaVariable::Integer(UnvalidatedIntegerSpecification {
                     max: schema.maximum.and_then(|n| {
                         n.as_i64()
                             .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64)
@@ -742,7 +711,7 @@ mod openapi_v31 {
                 })
             }
             oas3::spec::SchemaType::Number => {
-                UnvalidatedDatumSchemaVariable2::Float(UnvalidatedFloatSpecification {
+                UnvalidatedDatumSchemaVariable::Float(UnvalidatedFloatSpecification {
                     max: schema.maximum.and_then(|n| {
                         n.as_f64()
                             .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64 as f64)
@@ -755,7 +724,7 @@ mod openapi_v31 {
                     ..Default::default()
                 })
             }
-            oas3::spec::SchemaType::Object => UnvalidatedDatumSchemaVariable2::Object { 
+            oas3::spec::SchemaType::Object => UnvalidatedDatumSchemaVariable::Object { 
                 name, 
                 schema: Some(
                     schema
@@ -808,22 +777,22 @@ mod openapi_v31 {
                 };
 
                 match schema.format.unwrap_or_default().as_str() {
-                    "date" => UnvalidatedDatumSchemaVariable2::Date(UnvalidatedDateSpecification {
+                    "date" => UnvalidatedDatumSchemaVariable::Date(UnvalidatedDateSpecification {
                         name,
                         ..Default::default()
                     }),
                     "date-time" => {
-                        UnvalidatedDatumSchemaVariable2::DateTime(UnvalidatedDateSpecification {
+                        UnvalidatedDatumSchemaVariable::DateTime(UnvalidatedDateSpecification {
                             name,
                             ..Default::default()
                         })
                     }
-                    "email" => UnvalidatedDatumSchemaVariable2::Email(
+                    "email" => UnvalidatedDatumSchemaVariable::Email(
                         UnvalidatedStringSpecification{
                             name,
                             ..string_spec
                         }),
-                    _ => UnvalidatedDatumSchemaVariable2::String(
+                    _ => UnvalidatedDatumSchemaVariable::String(
                             UnvalidatedStringSpecification{
                                 name,
                                 ..string_spec
@@ -838,7 +807,7 @@ mod openapi_v31 {
         verb: test::http::Verb,
         op: &oas3::spec::Operation,
         spec: &Spec,
-    ) -> (UnvalidatedRequest, Option<UnvalidatedVariable3>) {
+    ) -> (UnvalidatedRequest, Option<UnvalidatedVariable>) {
         let mut headers: Vec<test::http::Header> = vec![];
         let mut parameters: Vec<test::http::Parameter> = vec![];
 
@@ -866,17 +835,7 @@ mod openapi_v31 {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
-                        schema_to_datum2(s, spec, Some("body".to_string())).map(|s| {
-                            UnvalidatedVariable3::Datum(
-                                s
-                            )
-                            //How do I go from datum to UnvalidatedDatumSchemaVariable2 ????
-                            //UnvalidatedVariable3::Datum(test::file::UnvalidatedDatumSchemaVariable2)
-                        })
-                        /*UnvalidatedVariable {
-                                name: "body".to_string(),
-                                value: ValueOrDatumOrFile::Schema(s),
-                        })*/
+                        schema_to_datum2(s, spec, Some("body".to_string())).map(UnvalidatedVariable::Datum)
                     })
                 })
             })
@@ -910,34 +869,15 @@ mod openapi_v31 {
         op.parameters
             .iter()
             .map(|p_or_ref| {
-                p_or_ref
-                    .resolve(spec)
-                    .ok()
-                    .map(|t| test::file::UnvalidatedVariable {
-                        name: t.name.clone(),
-                        value: test::file::ValueOrDatumOrFile::Value {
-                            value: serde_json::Value::from("".to_string()),
-                        },
-                    })
-            })
-            .filter(Option::is_some)
-            .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
-            .unwrap_or_default()
-    }
-
-    fn create_variables2(op: &Operation, spec: &Spec) -> Vec<test::file::UnvalidatedVariable3> {
-        op.parameters
-            .iter()
-            .map(|p_or_ref| {
                 p_or_ref.resolve(spec).ok().map(|t| {
-                    test::file::UnvalidatedVariable3::Simple(SimpleValueVariable {
+                    test::file::UnvalidatedVariable::Simple(SimpleValueVariable {
                         name: t.name.clone(),
                         value: serde_json::Value::from("".to_string()),
                     })
                 })
             })
             .filter(Option::is_some)
-            .collect::<Option<Vec<test::file::UnvalidatedVariable3>>>()
+            .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
             .unwrap_or_default()
     }
 
@@ -962,9 +902,7 @@ mod openapi_v31 {
         //change that to fit how Jikken specifies variables
         //and create jikken variables for each
         let resolved_path = path.replace('{', "${").to_string();
-        let mut variables = create_variables2(op, spec);
-        //let mut variables = create_variables(op, spec);
-        //let mut variables2 = create_variables2(op, spec);
+        let mut variables = create_variables(op, spec);
         let (request, request_var) = create_request(resolved_path.as_str(), verb, op, spec);
         if let Some(v) = request_var {
             variables.push(v)
