@@ -561,7 +561,6 @@ mod openapi_v31 {
                     strict: None,
                     body_schema: t.content.get("application/json").and_then(|c| {
                         c.schema(spec).ok().and_then(|s| {
-                            //do a try_into here from UnvalidatedDatumSchemaVariable2 into DatumSchema
                             schema_to_datum(s, spec)
                                 .map(UnvalidatedVariableNameOrDatumSchema::Component)
                         })

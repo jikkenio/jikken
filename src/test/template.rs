@@ -41,8 +41,6 @@ pub fn template_full() -> Result<test::File, Box<dyn Error + Send + Sync>> {
         stages: Some(vec![new_full_stage()?]),
         cleanup: Some(new_full_cleanup()?),
         variables: Some(vec![new_full_variables()?]),
-        //variables: Some(vec![new_full_variables()?]),
-        //variables2: Some(vec![new_full_variables2()?]),
         disabled: Some(false),
         description: Some("".to_string()),
     })

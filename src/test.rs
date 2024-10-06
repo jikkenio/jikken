@@ -353,8 +353,6 @@ pub struct File {
     pub cleanup: Option<file::UnvalidatedCleanup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<file::UnvalidatedVariable>>,
-    //#[serde(skip_serializing_if = "Option::is_none")]
-    //pub variables2: Option<Vec<file::UnvalidatedVariable3>>,
     #[serde(skip_serializing, skip_deserializing)]
     pub filename: String,
 }
