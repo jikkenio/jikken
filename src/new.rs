@@ -487,6 +487,7 @@ mod openapi_v31 {
     use crate::test::file::UnvalidatedRequest;
     use crate::test::file::UnvalidatedResponse;
     use crate::test::file::UnvalidatedStringSpecification;
+    use crate::test::file::UnvalidatedValueOrDatumSchema;
     use crate::test::file::UnvalidatedValuesOrSchema;
     use crate::test::file::UnvalidatedVariable;
     use crate::test::file::UnvalidatedVariableNameOrComponent;
@@ -503,7 +504,6 @@ mod openapi_v31 {
     use std::collections::BTreeMap;
     use test::file::SequenceSpecification;
     use test::file::ValuesOrSchema;
-    use crate::test::file::UnvalidatedValueOrDatumSchema;
 
     pub fn get_test_paths(
         root_servers: &[Server],
@@ -564,7 +564,7 @@ mod openapi_v31 {
                             schema_to_datum(s, spec)
                                 .map(UnvalidatedVariableNameOrDatumSchema::Component)
                         })
-                    })
+                    }),
                 })
             })
             .last()
@@ -675,26 +675,32 @@ mod openapi_v31 {
     fn schema_to_datum2(
         schema: oas3::Schema,
         spec: &Spec,
-        name: Option<String>
+        name: Option<String>,
     ) -> Option<UnvalidatedDatumSchemaVariable> {
         schema.schema_type.map(|t| match t {
-            oas3::spec::SchemaType::Array => UnvalidatedDatumSchemaVariable::List(
-                test::file::UnvalidatedSequenceSpecification {
+            oas3::spec::SchemaType::Array => {
+                UnvalidatedDatumSchemaVariable::List(test::file::UnvalidatedSequenceSpecification {
                     name: name,
                     schema: schema.items.and_then(|items| {
                         items.resolve(spec).ok().and_then(|s| {
-                            schema_to_datum2(s, spec,None)
+                            schema_to_datum2(s, spec, None)
                                 .map(|ds| UnvalidatedValuesOrSchema::UntaggedSchema(Box::from(ds)))
                         })
                     }),
                     length: None,
                     max_length: schema.max_items.map(|n| n as i64),
                     min_length: schema.min_items.map(|n| n as i64),
-                },
-            ),
-            oas3::spec::SchemaType::Boolean => UnvalidatedDatumSchemaVariable::Boolean(
-                test::file::UnvalidatedSpecification { name, value: None, any_of: None, one_of: None, none_of: None }
-            ),
+                })
+            }
+            oas3::spec::SchemaType::Boolean => {
+                UnvalidatedDatumSchemaVariable::Boolean(test::file::UnvalidatedSpecification {
+                    name,
+                    value: None,
+                    any_of: None,
+                    one_of: None,
+                    none_of: None,
+                })
+            }
             oas3::spec::SchemaType::Integer => {
                 UnvalidatedDatumSchemaVariable::Integer(UnvalidatedIntegerSpecification {
                     max: schema.maximum.and_then(|n| {
@@ -723,8 +729,8 @@ mod openapi_v31 {
                     ..Default::default()
                 })
             }
-            oas3::spec::SchemaType::Object => UnvalidatedDatumSchemaVariable::Object { 
-                name, 
+            oas3::spec::SchemaType::Object => UnvalidatedDatumSchemaVariable::Object {
+                name,
                 schema: Some(
                     schema
                         .properties
@@ -736,42 +742,22 @@ mod openapi_v31 {
                                 .map(|v| {
                                     (
                                         k.clone(),
-                                        schema_to_datum2(v, spec, None).map(UnvalidatedValueOrDatumSchema::Datum),
+                                        schema_to_datum2(v, spec, None)
+                                            .map(UnvalidatedValueOrDatumSchema::Datum),
                                     )
                                 })
                                 .filter(|(_, ds)| ds.is_some())
                                 .map(|(n, ds)| (n, ds.unwrap()))
                         })
-                        .collect::<BTreeMap<String, UnvalidatedValueOrDatumSchema>>()
-                )
-            }/*DatumSchema::Object {
-                schema: Some(
-                    schema
-                        .properties
-                        .iter()
-                        .filter_map(|(k, maybe_schema)| {
-                            maybe_schema
-                                .resolve(spec)
-                                .ok()
-                                .map(|v| {
-                                    (
-                                        k.clone(),
-                                        schema_to_datum(v, spec).map(ValueOrDatumSchema::Datum),
-                                    )
-                                })
-                                .filter(|(_, ds)| ds.is_some())
-                                .map(|(n, ds)| (n, ds.unwrap()))
-                        })
-                        .collect::<BTreeMap<String, ValueOrDatumSchema>>(),
+                        .collect::<BTreeMap<String, UnvalidatedValueOrDatumSchema>>(),
                 ),
-            }*/,
+            },
             oas3::spec::SchemaType::String => {
                 let string_spec = UnvalidatedStringSpecification {
                     pattern: schema.pattern,
                     length: Option::None,
                     max_length: schema.max_length.map(|n| n as i64),
                     min_length: schema.min_length.map(|n| n as i64),
-                    //name.,
                     ..Default::default()
                 };
 
@@ -786,16 +772,16 @@ mod openapi_v31 {
                             ..Default::default()
                         })
                     }
-                    "email" => UnvalidatedDatumSchemaVariable::Email(
-                        UnvalidatedStringSpecification{
+                    "email" => {
+                        UnvalidatedDatumSchemaVariable::Email(UnvalidatedStringSpecification {
                             name,
                             ..string_spec
-                        }),
-                    _ => UnvalidatedDatumSchemaVariable::String(
-                            UnvalidatedStringSpecification{
-                                name,
-                                ..string_spec
-                        }),
+                        })
+                    }
+                    _ => UnvalidatedDatumSchemaVariable::String(UnvalidatedStringSpecification {
+                        name,
+                        ..string_spec
+                    }),
                 }
             }
         })
@@ -834,7 +820,8 @@ mod openapi_v31 {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
-                        schema_to_datum2(s, spec, Some("body".to_string())).map(UnvalidatedVariable::Datum)
+                        schema_to_datum2(s, spec, Some("body".to_string()))
+                            .map(UnvalidatedVariable::Datum)
                     })
                 })
             })
