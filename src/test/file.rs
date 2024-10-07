@@ -770,8 +770,6 @@ fn less_than_or_equal_validator<T: PartialOrd>(
     )
 }
 
-//Once new approach is vetted, we can make this a proper sum
-//type
 impl<T> NumericSpecification<T>
 where
     T: PartialEq,
