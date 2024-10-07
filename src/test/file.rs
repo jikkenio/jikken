@@ -2281,8 +2281,17 @@ impl TryFrom<UnvalidatedDatumSchemaVariable> for DatumSchema {
                                     )
                                     .map(|a| a.map(ValuesOrSchema::Schemas))
                                 }
-                                //I lose error info here.
-                                _ => Err("Foo".to_string()),
+                                (any, none, one, val) => {
+                                    let vs: Validated<Vec<Option<Vec<Box<DatumSchema>>>>, String> =
+                                        vec![any, none, one].into_iter().collect();
+
+                                    match vs {
+                                        Validated::Fail(nvec) => Err(nvec
+                                            .into_iter()
+                                            .fold("".to_string(), |acc, x| format!("{acc}, {x}"))),
+                                        Good(_) => Err(val.unwrap_err()),
+                                    }
+                                }
                             }
                         }
                         //Simply treat it as a Tagged schema that only has value specified.
