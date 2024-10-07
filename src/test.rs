@@ -376,7 +376,6 @@ impl Default for File {
             stages: None,
             cleanup: None,
             variables: None,
-            //variables2: None,
             disabled: None,
             description: None,
         }
@@ -572,7 +571,6 @@ pub struct Definition {
     pub tags: Vec<String>,
     pub iterate: u32,
     pub variables: Vec<Variable>,
-    //pub variables2: Vec<Variable>,
     pub global_variables: Vec<Variable>,
     pub stages: Vec<definition::StageDescriptor>,
     pub setup: Option<definition::RequestResponseDescriptor>,

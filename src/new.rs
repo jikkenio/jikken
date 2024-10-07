@@ -899,13 +899,6 @@ mod openapi_v31 {
             None
         };
 
-        /*
-        let maybe_vars2 = if !variables2.is_empty() {
-            Some(variables2)
-        } else {
-            None
-        };*/
-
         let response =
             create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
 
@@ -920,7 +913,6 @@ mod openapi_v31 {
                     compare: None,
                     response,
                     variables: maybe_vars,
-                    //variables2: maybe_vars2,
                     name: None,
                     delay: None,
                 }]),
