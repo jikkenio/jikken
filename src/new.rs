@@ -672,7 +672,7 @@ mod openapi_v31 {
         })
     }
 
-    fn schema_to_datum2(
+    fn schema_to_unvalidated_datum(
         schema: oas3::Schema,
         spec: &Spec,
         name: Option<String>,
@@ -683,7 +683,7 @@ mod openapi_v31 {
                     name: name,
                     schema: schema.items.and_then(|items| {
                         items.resolve(spec).ok().and_then(|s| {
-                            schema_to_datum2(s, spec, None)
+                            schema_to_unvalidated_datum(s, spec, None)
                                 .map(|ds| UnvalidatedValuesOrSchema::UntaggedSchema(Box::from(ds)))
                         })
                     }),
@@ -742,7 +742,7 @@ mod openapi_v31 {
                                 .map(|v| {
                                     (
                                         k.clone(),
-                                        schema_to_datum2(v, spec, None)
+                                        schema_to_unvalidated_datum(v, spec, None)
                                             .map(UnvalidatedValueOrDatumSchema::Datum),
                                     )
                                 })
@@ -820,7 +820,7 @@ mod openapi_v31 {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
-                        schema_to_datum2(s, spec, Some("body".to_string()))
+                        schema_to_unvalidated_datum(s, spec, Some("body".to_string()))
                             .map(UnvalidatedVariable::Datum)
                     })
                 })
