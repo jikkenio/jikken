@@ -145,11 +145,9 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
         .into_iter()
         .filter(|o| o.is_some())
         .count();
-        if specified > 1
-            || (specified == 1 && unvalidated.none_of.is_none() && unvalidated.value.is_some())
-        {
+        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
             return Err(
-                "can only specify one of the following constraints: oneOf, anyOf, or value"
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value"
                     .to_string(),
             );
         }
@@ -3380,7 +3378,7 @@ mod tests {
         let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3398,7 +3396,7 @@ mod tests {
         let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3416,7 +3414,7 @@ mod tests {
         let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3424,7 +3422,7 @@ mod tests {
     }
 
     #[test]
-    fn unvalidated_specification_allow_value_and_none_of() {
+    fn unvalidated_specification_disallow_value_and_none_of() {
         let unvalidated = UnvalidatedSpecification::<bool> {
             none_of: Some(vec![]),
             value: Some(false),
@@ -3433,8 +3431,8 @@ mod tests {
 
         let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
         match attempt {
-            Err(_) => assert!(false),
-            Ok(_) => assert!(true),
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
         };
     }
 
@@ -3459,7 +3457,7 @@ mod tests {
         let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3477,7 +3475,7 @@ mod tests {
         let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3495,7 +3493,7 @@ mod tests {
         let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3503,7 +3501,7 @@ mod tests {
     }
 
     #[test]
-    fn unvalidated_numeric_specification_allow_value_and_none_of() {
+    fn unvalidated_numeric_specification_disallow_value_and_none_of() {
         let unvalidated = UnvalidatedFloatSpecification {
             none_of: Some(vec![]),
             value: Some(12.0),
@@ -3512,8 +3510,8 @@ mod tests {
 
         let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
         match attempt {
-            Err(_) => assert!(false),
-            Ok(_) => assert!(true),
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
         };
     }
 
@@ -3592,7 +3590,7 @@ mod tests {
         let attempt: Result<StringSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3610,7 +3608,7 @@ mod tests {
         let attempt: Result<StringSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3628,7 +3626,7 @@ mod tests {
         let attempt: Result<StringSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3636,7 +3634,7 @@ mod tests {
     }
 
     #[test]
-    fn unvalidated_string_specification_allow_value_and_none_of() {
+    fn unvalidated_string_specification_disallow_value_and_none_of() {
         let unvalidated = UnvalidatedStringSpecification {
             none_of: Some(vec![]),
             value: Some("".to_string()),
@@ -3645,8 +3643,8 @@ mod tests {
 
         let attempt: Result<StringSpecification, String> = unvalidated.try_into();
         match attempt {
-            Err(_) => assert!(false),
-            Ok(_) => assert!(true),
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
         };
     }
 
@@ -3671,7 +3669,7 @@ mod tests {
         let attempt: Result<DateSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3689,7 +3687,7 @@ mod tests {
         let attempt: Result<DateSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3707,7 +3705,7 @@ mod tests {
         let attempt: Result<DateSpecification, String> = unvalidated.try_into();
         match attempt {
             Err(e) => assert_eq!(
-                "can only specify one of the following constraints: oneOf, anyOf, or value",
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
                 e
             ),
             Ok(_) => assert!(false),
@@ -3715,7 +3713,7 @@ mod tests {
     }
 
     #[test]
-    fn unvalidated_date_specification_allow_value_and_none_of() {
+    fn unvalidated_date_specification_disallow_value_and_none_of() {
         let unvalidated = UnvalidatedDateSpecification {
             none_of: Some(vec![]),
             value: Some("2020-09-12".to_string()),
@@ -3724,8 +3722,8 @@ mod tests {
 
         let attempt: Result<DateSpecification, String> = unvalidated.try_into();
         match attempt {
-            Err(_) => assert!(false),
-            Ok(_) => assert!(true),
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
         };
     }
 
