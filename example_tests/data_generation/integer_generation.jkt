@@ -6,11 +6,11 @@ request:
 response:
   status: 200
 variables:
-- name: status_val
-  type: Integer
-  oneOf:
-  - 200
-  - 201
-  - 202
-  - 400
-  - 500
+  - name: status_val
+    type: Integer
+    oneOf:
+      - 200
+      - 201
+      - 202
+      - 400
+      - 500

@@ -4,6 +4,7 @@ use std::cell::Cell;
 use std::error::Error;
 use ulid::Ulid;
 
+use super::file::SimpleValueVariable;
 use super::File;
 
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
@@ -85,12 +86,10 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
 
 //Do we want to create a variable of every type as part of the full template?
 fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
-    Ok(file::UnvalidatedVariable {
+    Ok(file::UnvalidatedVariable::Simple(SimpleValueVariable {
         name: "".to_string(),
-        value: file::ValueOrDatumOrFile::Value {
-            value: serde_json::Value::from("".to_string()),
-        },
-    })
+        value: serde_json::Value::from("".to_string()),
+    }))
 }
 
 fn new_response() -> file::UnvalidatedResponse {

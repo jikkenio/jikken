@@ -54,7 +54,8 @@ struct SessionCompletedPost {
 #[serde(rename_all = "camelCase")]
 struct SessionResponse {
     pub session_id: String,
-    pub identifier: Option<ulid::Ulid>,
+    #[serde(rename = "identifier")]
+    pub _identifier: Option<ulid::Ulid>,
 }
 
 #[derive(Clone)]
