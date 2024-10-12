@@ -2298,6 +2298,7 @@ mod tests {
                 expected: expected.clone(),
                 actual: Option::from(ResponseResultData {
                     body: serde_json::Value::default(),
+                    response_time: 100,
                     status: 200,
                     headers: Vec::default(),
                 }),
@@ -2311,6 +2312,7 @@ mod tests {
                     body: json!({
                         "Name" : "Bob"
                     }),
+                    response_time: 100,
                     status: 200,
                     headers: Vec::default(),
                 }),
@@ -2393,6 +2395,7 @@ mod tests {
                 expected: expected.clone(),
                 actual: Some(ResponseResultData {
                     body: serde_json::Value::default(),
+                    response_time: 100,
                     headers: Vec::default(),
                     status: 200,
                 }),
@@ -2436,6 +2439,7 @@ mod tests {
                 expected: expected.clone(),
                 actual: Some(ResponseResultData {
                     status: 200,
+                    response_time: 100,
                     body: json!({
                         "Name": "Bob"
                     }),
@@ -2480,6 +2484,7 @@ mod tests {
                 },
                 expected: expected.clone(),
                 actual: Some(ResponseResultData {
+                    response_time: 100,
                     body: serde_json::Value::default(),
                     headers: Vec::default(),
                     status: 200,
@@ -2519,6 +2524,7 @@ mod tests {
                 },
                 expected: expected.clone(),
                 actual: Option::from(ResponseResultData {
+                    response_time: 100,
                     status: 500,
                     body: serde_json::Value::default(),
                     headers: Vec::default(),
