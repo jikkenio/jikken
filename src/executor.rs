@@ -1258,7 +1258,9 @@ fn process_response(
                 trace!("validating {}response time", validation_type);
 
                 t.check(&actual, &|expected, actual| -> String {
-                    format!("Expected response time {expected} but received {actual}")
+                    format!(
+                        "Expected response time {expected} milliseconds but actual response time was {actual} milliseconds"
+                    )
                 })
             }
         }
@@ -2640,7 +2642,7 @@ mod tests {
         assert_eq!(actual.status, TestStatus::Failed);
         assert_eq!(
             actual.validation,
-            Validated::fail("Expected response time maximum of 100 but received 300".to_string())
+            Validated::fail("Expected response time maximum of 100 milliseconds but actual response time was 300 milliseconds".to_string())
         );
     }
 
