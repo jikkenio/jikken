@@ -124,8 +124,6 @@ pub struct TestResult {
 }
 
 pub struct ExecutionResult {
-    //Elapsed Time?
-    //Start Time?
     pub test_results: Vec<TestResult>,
     pub runtime: u32,
 }
@@ -606,11 +604,15 @@ pub enum TestStatus {
 pub struct ResponseResultData {
     pub headers: Vec<http::Header>,
     pub status: u16,
+    pub response_time: u32,
     pub body: serde_json::Value,
 }
 
 impl ResponseResultData {
-    pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResponseResultData> {
+    pub async fn from_response(
+        resp: hyper::Response<Body>,
+        resp_time: u32,
+    ) -> Option<ResponseResultData> {
         debug!("Received response : {resp:?}");
 
         let response_status = resp.status();
@@ -630,6 +632,7 @@ impl ResponseResultData {
                     Some(ResponseResultData {
                         headers,
                         status: response_status.as_u16(),
+                        response_time: resp_time,
                         body: data,
                     })
                 }
@@ -640,6 +643,7 @@ impl ResponseResultData {
                     Some(ResponseResultData {
                         headers,
                         status: response_status.as_u16(),
+                        response_time: resp_time,
                         body: serde_json::Value::Null,
                     })
                 }
@@ -656,6 +660,7 @@ impl ResponseResultData {
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
     pub status: Option<ValueOrNumericSpecification<u16>>,
+    pub response_time: Option<ValueOrNumericSpecification<u32>>,
     pub body: Option<BodyOrSchema>,
     pub strict: bool,
 }
@@ -665,6 +670,7 @@ impl ExpectedResultData {
         Self {
             headers: Vec::default(),
             status: Option::default(),
+            response_time: Option::default(),
             body: Option::default(),
             strict: true,
         }
@@ -681,6 +687,7 @@ impl ExpectedResultData {
         req.map(|r| ExpectedResultData {
             headers: r.headers,
             status: r.status,
+            response_time: r.response_time,
             body: td.get_expected_request_body(&r.body, state_variables, variables, iteration), //.unwrap_or(serde_json::Value::Null),
             strict: r.strict,
         })
@@ -1245,6 +1252,22 @@ fn process_response(
         }
     };
 
+    let validate_response_time = |validation_type: &str,
+                                  expected: &Option<ValueOrNumericSpecification<u32>>,
+                                  actual: u32|
+     -> Vec<Validated<(), String>> {
+        match expected {
+            None => vec![Good(())].into_iter().collect(),
+            Some(t) => {
+                trace!("validating {}response time", validation_type);
+
+                t.check(&actual, &|expected, actual| -> String {
+                    format!("Expected response time {expected} but received {actual}")
+                })
+            }
+        }
+    };
+
     let validate_body = |validation_type: &str,
                          expected: &std::option::Option<BodyOrSchema>,
                          actual: &serde_json::Value,
@@ -1279,6 +1302,10 @@ fn process_response(
             &resp.headers,
         ));
         validation.append(validate_status_code("", &details.expected.status, resp.status).as_mut());
+        validation.append(
+            validate_response_time("", &details.expected.response_time, resp.response_time)
+                .as_mut(),
+        );
         validation.append(
             validate_body(
                 "",
@@ -1388,7 +1415,7 @@ async fn validate_setup(
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResponseResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response, runtime).await;
 
         let request = RequestDetails {
             headers: req_headers
@@ -1497,7 +1524,7 @@ async fn run_cleanup(
             let start_time = Instant::now();
             let req_response = process_request(state, resolved_request).await?;
             let runtime = start_time.elapsed().as_millis() as u32;
-            let actual = ResponseResultData::from_response(req_response).await;
+            let actual = ResponseResultData::from_response(req_response, runtime).await;
 
             let request = RequestDetails {
                 headers: success_headers
@@ -1555,7 +1582,7 @@ async fn run_cleanup(
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResponseResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response, runtime).await;
 
         let request = RequestDetails {
             headers: failure_headers
@@ -1614,7 +1641,7 @@ async fn run_cleanup(
         let start_time = Instant::now();
         let req_response = process_request(state, resolved_request).await?;
         let runtime = start_time.elapsed().as_millis() as u32;
-        let actual = ResponseResultData::from_response(req_response).await;
+        let actual = ResponseResultData::from_response(req_response, runtime).await;
 
         let request = RequestDetails {
             headers: req_headers
@@ -1746,11 +1773,11 @@ async fn validate_stage(
     }
 
     let runtime = start_time.elapsed().as_millis() as u32;
-    let actual = ResponseResultData::from_response(req_response).await;
+    let actual = ResponseResultData::from_response(req_response, runtime).await;
     let mut compare_actual = None;
-
+    //Darius : we're doing weird things with response time in compare
     if let Some(compare_response) = compare_response_opt {
-        compare_actual = ResponseResultData::from_response(compare_response).await;
+        compare_actual = ResponseResultData::from_response(compare_response, runtime).await;
     }
 
     let details = ResultDetails {
@@ -2515,7 +2542,7 @@ mod tests {
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty());
 
-        let result = ResponseResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap(), 100).await;
         assert_eq!(400, result.as_ref().unwrap().status);
     }
 
@@ -2530,7 +2557,7 @@ mod tests {
             .status(StatusCode::OK)
             .body(Body::from(val.to_string()));
 
-        let result = ResponseResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap(), 100).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!(val.to_string(), result.as_ref().unwrap().body.to_string());
     }
@@ -2543,7 +2570,7 @@ mod tests {
             //could we detect this and possibly account for it?
             .body(Body::from("\"ok;\""));
 
-        let result = ResponseResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap(), 100).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!("ok;", result.as_ref().unwrap().body.as_str().unwrap());
     }
@@ -2555,7 +2582,7 @@ mod tests {
             .status(StatusCode::OK)
             .body(Body::empty());
 
-        let result = ResponseResultData::from_response(rep.unwrap()).await;
+        let result = ResponseResultData::from_response(rep.unwrap(), 100).await;
         assert_eq!(200, result.as_ref().unwrap().status);
         assert_eq!(1, result.as_ref().unwrap().headers.len());
         assert!(result.as_ref().unwrap().body.is_null());

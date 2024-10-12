@@ -249,6 +249,7 @@ impl ResponseExtraction {
 #[serde(deny_unknown_fields)]
 pub struct ResponseDescriptor {
     pub status: Option<ValueOrNumericSpecification<u16>>,
+    pub response_time: Option<ValueOrNumericSpecification<u32>>,
     pub headers: Vec<http::Header>,
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,
@@ -326,6 +327,7 @@ impl ResponseDescriptor {
 
                 Ok(Some(ResponseDescriptor {
                     status: res.status,
+                    response_time: res.time,
                     headers: validated_headers,
                     body: response_body,
                     ignore: validated_ignore,

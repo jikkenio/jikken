@@ -2672,6 +2672,8 @@ pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<ValueOrNumericSpecification<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub time: Option<ValueOrNumericSpecification<u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
     //Responses can only contain a body OR a body_schema
     //We used to signify this using (serde-flattened)enums, but its
@@ -2708,6 +2710,7 @@ impl Default for UnvalidatedResponse {
     fn default() -> Self {
         Self {
             status: Some(ValueOrNumericSpecification::Value(200)),
+            time: None,
             headers: None,
             body: None,
             ignore: None,

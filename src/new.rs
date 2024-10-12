@@ -120,6 +120,7 @@ mod openapi_legacy {
                     });
                     UnvalidatedResponse {
                         status: create_status_code(status_code_pattern.as_str()),
+                        time: None,
                         headers: create_headers(&t.headers),
                         extract: None,
                         ignore: None,
@@ -554,6 +555,7 @@ mod openapi_v31 {
             .map(|(status_code_pattern, obj_or_ref)| {
                 obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
+                    time: None,
                     body: None,
                     headers: create_headers(&t.headers),
                     extract: None,

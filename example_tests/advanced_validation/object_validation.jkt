@@ -9,6 +9,8 @@ request:
     value: ${token}
 response:
   status: 200
+  time:
+    value: 200
   bodySchema:
     type: Object
     schema:
