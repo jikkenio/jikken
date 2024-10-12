@@ -15,6 +15,3 @@ response:
 variables:
   - name: password_val
     value: password
-variables2:
-  - name: foo
-    value: 12

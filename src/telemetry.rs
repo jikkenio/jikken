@@ -359,11 +359,11 @@ pub async fn complete_stage(
     let post_data = TestCompletedPost {
         session_id: test.session.session_id.to_string(),
         iteration,
+        runtime: stage.total_runtime,
         stage: stage.stage,
         stage_type: stage.stage_type.clone() as u32,
         stage_name: stage.stage_name.clone(),
         status: stage.status.clone() as u32,
-        runtime: stage.runtime,
         details: Some(details_json),
         project: stage.project.clone(),
         environment: stage.environment.clone(),
@@ -688,6 +688,8 @@ mod tests {
             actual: None,
             request: rd.clone(),
             compare_actual: None,
+            compare_request_runtime: None,
+            request_runtime: 100,
             expected: ExpectedResultData {
                 body: None,
                 headers: vec![],
