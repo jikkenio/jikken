@@ -1786,7 +1786,7 @@ async fn validate_stage(
     let compare_runtime = compare_start_time.elapsed().as_millis() as u32;
     let actual = ResponseResultData::from_response(req_response).await;
     let mut compare_actual = None;
-    //Darius : we're doing weird things with response time in compare
+
     if let Some(compare_response) = compare_response_opt {
         compare_actual = ResponseResultData::from_response(compare_response).await;
     }
