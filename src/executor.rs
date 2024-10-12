@@ -6,6 +6,7 @@ use crate::test::definition::ResponseDescriptor;
 use crate::test::file::BodyOrSchema;
 use crate::test::file::BodyOrSchemaChecker;
 use crate::test::file::Checker;
+use crate::test::file::NumericSpecification;
 use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::http::Header;
@@ -660,7 +661,7 @@ impl ResponseResultData {
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
     pub status: Option<ValueOrNumericSpecification<u16>>,
-    pub response_time: Option<ValueOrNumericSpecification<u32>>,
+    pub response_time: Option<NumericSpecification<u32>>,
     pub body: Option<BodyOrSchema>,
     pub strict: bool,
 }
@@ -1253,7 +1254,7 @@ fn process_response(
     };
 
     let validate_response_time = |validation_type: &str,
-                                  expected: &Option<ValueOrNumericSpecification<u32>>,
+                                  expected: &Option<NumericSpecification<u32>>,
                                   actual: u32|
      -> Vec<Validated<(), String>> {
         match expected {
