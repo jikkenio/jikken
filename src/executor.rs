@@ -6,6 +6,7 @@ use crate::test::definition::ResponseDescriptor;
 use crate::test::file::BodyOrSchema;
 use crate::test::file::BodyOrSchemaChecker;
 use crate::test::file::Checker;
+use crate::test::file::NumericSpecification;
 use crate::test::file::ValueOrNumericSpecification;
 use crate::test::http;
 use crate::test::http::Header;
@@ -124,8 +125,6 @@ pub struct TestResult {
 }
 
 pub struct ExecutionResult {
-    //Elapsed Time?
-    //Start Time?
     pub test_results: Vec<TestResult>,
     pub runtime: u32,
 }
@@ -493,7 +492,7 @@ async fn run_tests<T: ExecutionPolicy>(
 
             match &result {
                 Ok(p) => {
-                    let total_runtime: u32 = p.1.iter().map(|r| r.runtime).sum();
+                    let total_runtime: u32 = p.1.iter().map(|r| r.total_runtime).sum();
                     let runtime_label = runtime_formatter(total_runtime);
                     if p.0 {
                         info!(" Runtime({}) ... \x1b[32mPASSED\x1b[0m\n", runtime_label);
@@ -656,6 +655,7 @@ impl ResponseResultData {
 pub struct ExpectedResultData {
     pub headers: Vec<http::Header>,
     pub status: Option<ValueOrNumericSpecification<u16>>,
+    pub response_time: Option<NumericSpecification<u32>>,
     pub body: Option<BodyOrSchema>,
     pub strict: bool,
 }
@@ -665,6 +665,7 @@ impl ExpectedResultData {
         Self {
             headers: Vec::default(),
             status: Option::default(),
+            response_time: Option::default(),
             body: Option::default(),
             strict: true,
         }
@@ -681,6 +682,7 @@ impl ExpectedResultData {
         req.map(|r| ExpectedResultData {
             headers: r.headers,
             status: r.status,
+            response_time: r.response_time,
             body: td.get_expected_request_body(&r.body, state_variables, variables, iteration), //.unwrap_or(serde_json::Value::Null),
             strict: r.strict,
         })
@@ -699,9 +701,11 @@ pub struct RequestDetails {
 #[derive(Debug, Clone, Serialize)]
 pub struct ResultDetails {
     pub request: RequestDetails,
+    pub request_runtime: u32,
     pub expected: ExpectedResultData,
     pub actual: Option<ResponseResultData>,
     pub compare_request: Option<RequestDetails>,
+    pub compare_request_runtime: Option<u32>,
     pub compare_actual: Option<ResponseResultData>,
 }
 
@@ -710,7 +714,7 @@ pub struct StageResult {
     pub stage: u32,
     pub stage_type: StageType,
     pub stage_name: Option<String>,
-    pub runtime: u32,
+    pub total_runtime: u32,
     pub status: TestStatus,
     pub details: ResultDetails,
     pub validation: Validated<Vec<()>, String>,
@@ -1198,7 +1202,6 @@ fn process_response(
     stage: u32,
     stage_type: StageType,
     stage_name: Option<String>,
-    runtime: u32,
     details: ResultDetails,
     ignore_body: &[String],
     project: Option<String>,
@@ -1210,7 +1213,7 @@ fn process_response(
         stage,
         stage_type,
         stage_name,
-        runtime,
+        total_runtime: details.compare_request_runtime.unwrap_or(0) + details.request_runtime,
         details: details.clone(),
         status: TestStatus::Passed,
         validation: Validated::Good(vec![()]),
@@ -1240,6 +1243,24 @@ fn process_response(
 
                 t.check(&actual, &|expected, actual| -> String {
                     format!("Expected status code {expected} but received {actual}")
+                })
+            }
+        }
+    };
+
+    let validate_response_time = |validation_type: &str,
+                                  expected: &Option<NumericSpecification<u32>>,
+                                  actual: u32|
+     -> Vec<Validated<(), String>> {
+        match expected {
+            None => vec![Good(())].into_iter().collect(),
+            Some(t) => {
+                trace!("validating {}response time", validation_type);
+
+                t.check(&actual, &|expected, actual| -> String {
+                    format!(
+                        "Expected response time {expected} milliseconds but actual response time was {actual} milliseconds"
+                    )
                 })
             }
         }
@@ -1280,6 +1301,10 @@ fn process_response(
         ));
         validation.append(validate_status_code("", &details.expected.status, resp.status).as_mut());
         validation.append(
+            validate_response_time("", &details.expected.response_time, details.request_runtime)
+                .as_mut(),
+        );
+        validation.append(
             validate_body(
                 "",
                 &details.expected.body,
@@ -1303,6 +1328,14 @@ fn process_response(
                                 compare_request_result.status,
                             )),
                             resp.status,
+                        )
+                        .as_mut(),
+                    );
+                    ret.append(
+                        validate_response_time(
+                            "compare ",
+                            &details.expected.response_time,
+                            details.compare_request_runtime.unwrap_or(0),
                         )
                         .as_mut(),
                     );
@@ -1402,9 +1435,11 @@ async fn validate_setup(
 
         let details = ResultDetails {
             request,
+            request_runtime: runtime,
             expected,
             actual,
             compare_request: None,
+            compare_request_runtime: None,
             compare_actual: None,
         };
 
@@ -1412,7 +1447,6 @@ async fn validate_setup(
             0,
             StageType::Setup,
             None,
-            runtime,
             details,
             &setup.response.clone().map_or(Vec::new(), |r| r.ignore),
             td.project.clone(),
@@ -1512,8 +1546,10 @@ async fn run_cleanup(
             let details = ResultDetails {
                 request,
                 expected,
+                request_runtime: runtime,
                 actual,
                 compare_request: None,
+                compare_request_runtime: None,
                 compare_actual: None,
             };
 
@@ -1521,7 +1557,6 @@ async fn run_cleanup(
                 counter,
                 StageType::Cleanup,
                 None,
-                runtime,
                 details,
                 &Vec::new(),
                 td.project.clone(),
@@ -1570,8 +1605,10 @@ async fn run_cleanup(
         let details = ResultDetails {
             request,
             expected,
+            request_runtime: runtime,
             actual,
             compare_request: None,
+            compare_request_runtime: None,
             compare_actual: None,
         };
 
@@ -1579,7 +1616,6 @@ async fn run_cleanup(
             counter,
             StageType::Cleanup,
             None,
-            runtime,
             details,
             &Vec::new(),
             td.project.clone(),
@@ -1629,8 +1665,10 @@ async fn run_cleanup(
         let details = ResultDetails {
             request,
             expected,
+            request_runtime: runtime,
             actual,
             compare_request: None,
+            compare_request_runtime: None,
             compare_actual: None,
         };
 
@@ -1638,7 +1676,6 @@ async fn run_cleanup(
             counter,
             StageType::Cleanup,
             None,
-            runtime,
             details,
             &Vec::new(),
             td.project.clone(),
@@ -1702,8 +1739,11 @@ async fn validate_stage(
     let mut compare_response_opt = None;
     let mut compare_request = None;
 
-    let start_time = Instant::now();
+    let req_start_time = Instant::now();
     let req_response = process_request(state, resolved_request).await?;
+    let req_runtime = req_start_time.elapsed().as_millis() as u32;
+
+    let compare_start_time = Instant::now();
 
     if let Some(compare) = &stage.compare {
         debug!("execute stage {stage_name} comparison");
@@ -1745,7 +1785,7 @@ async fn validate_stage(
         compare_response_opt = Some(process_request(state, resolved_compare_request).await?);
     }
 
-    let runtime = start_time.elapsed().as_millis() as u32;
+    let compare_runtime = compare_start_time.elapsed().as_millis() as u32;
     let actual = ResponseResultData::from_response(req_response).await;
     let mut compare_actual = None;
 
@@ -1755,9 +1795,11 @@ async fn validate_stage(
 
     let details = ResultDetails {
         request,
+        request_runtime: req_runtime,
         expected,
         actual,
         compare_request,
+        compare_request_runtime: Some(compare_runtime),
         compare_actual,
     };
 
@@ -1765,7 +1807,6 @@ async fn validate_stage(
         stage_index as u32,
         StageType::Normal,
         stage.name.clone(),
-        runtime,
         details,
         &stage.response.clone().map_or(Vec::new(), |r| r.ignore),
         td.project.clone(),
@@ -2259,7 +2300,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2268,6 +2308,7 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
+                request_runtime: 100,
                 actual: Option::from(ResponseResultData {
                     body: serde_json::Value::default(),
                     status: 200,
@@ -2279,6 +2320,7 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 }),
+                compare_request_runtime: None,
                 compare_actual: Some(ResponseResultData {
                     body: json!({
                         "Name" : "Bob"
@@ -2312,7 +2354,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2320,6 +2361,8 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 },
+                request_runtime: 100,
+                compare_request_runtime: None,
                 expected: expected.clone(),
                 actual: None,
                 compare_request: None,
@@ -2354,7 +2397,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2362,6 +2404,8 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 },
+                request_runtime: 100,
+                compare_request_runtime: None,
                 expected: expected.clone(),
                 actual: Some(ResponseResultData {
                     body: serde_json::Value::default(),
@@ -2397,7 +2441,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2406,6 +2449,7 @@ mod tests {
                     url: "".to_string(),
                 },
                 expected: expected.clone(),
+                request_runtime: 100,
                 actual: Some(ResponseResultData {
                     status: 200,
                     body: json!({
@@ -2414,6 +2458,7 @@ mod tests {
                     headers: Vec::default(),
                 }),
                 compare_request: None,
+                compare_request_runtime: None,
                 compare_actual: None,
             },
             &ignore_body,
@@ -2442,7 +2487,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2450,6 +2494,7 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 },
+                request_runtime: 100,
                 expected: expected.clone(),
                 actual: Some(ResponseResultData {
                     body: serde_json::Value::default(),
@@ -2457,6 +2502,7 @@ mod tests {
                     status: 200,
                 }),
                 compare_request: None,
+                compare_request_runtime: None,
                 compare_actual: None,
             },
             &ignore_body,
@@ -2481,7 +2527,6 @@ mod tests {
             0,
             StageType::Normal,
             None,
-            0,
             ResultDetails {
                 request: RequestDetails {
                     body: serde_json::Value::default(),
@@ -2489,6 +2534,7 @@ mod tests {
                     method: http::Verb::Post.as_method(),
                     url: "".to_string(),
                 },
+                request_runtime: 0,
                 expected: expected.clone(),
                 actual: Option::from(ResponseResultData {
                     status: 500,
@@ -2496,6 +2542,7 @@ mod tests {
                     headers: Vec::default(),
                 }),
                 compare_request: None,
+                compare_request_runtime: None,
                 compare_actual: None,
             },
             &ignore_body,
@@ -2506,6 +2553,96 @@ mod tests {
         assert_eq!(
             actual.validation,
             Validated::fail("Expected status code 200 but received 500".to_string())
+        );
+    }
+
+    #[test]
+    fn process_response_time_less() {
+        let expected = ExpectedResultData {
+            status: Some(ValueOrNumericSpecification::Value(200)),
+            body: None,
+            headers: Vec::default(),
+            response_time: Some(NumericSpecification::<u32> {
+                max: Some(300),
+                ..Default::default()
+            }),
+            ..ExpectedResultData::new()
+        };
+
+        let ignore_body: [String; 0] = [];
+        let actual = process_response(
+            0,
+            StageType::Normal,
+            None,
+            ResultDetails {
+                request: RequestDetails {
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                    method: http::Verb::Post.as_method(),
+                    url: "".to_string(),
+                },
+                request_runtime: 100,
+                expected: expected.clone(),
+                actual: Option::from(ResponseResultData {
+                    status: 200,
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                }),
+                compare_request: None,
+                compare_request_runtime: None,
+                compare_actual: None,
+            },
+            &ignore_body,
+            None,
+            None,
+        );
+        assert_eq!(actual.status, TestStatus::Passed);
+    }
+
+    #[test]
+    fn process_response_time_greater() {
+        let expected = ExpectedResultData {
+            status: Some(ValueOrNumericSpecification::Value(200)),
+            body: None,
+            headers: Vec::default(),
+            response_time: Some(NumericSpecification::<u32> {
+                max: Some(100),
+                ..Default::default()
+            }),
+            ..ExpectedResultData::new()
+        };
+
+        let ignore_body: [String; 0] = [];
+        let actual = process_response(
+            0,
+            StageType::Normal,
+            None,
+            ResultDetails {
+                request: RequestDetails {
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                    method: http::Verb::Post.as_method(),
+                    url: "".to_string(),
+                },
+                request_runtime: 300,
+                expected: expected.clone(),
+                actual: Option::from(ResponseResultData {
+                    status: 200,
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                }),
+                compare_request: None,
+                compare_request_runtime: None,
+                compare_actual: None,
+            },
+            &ignore_body,
+            None,
+            None,
+        );
+        assert_eq!(actual.status, TestStatus::Failed);
+        assert_eq!(
+            actual.validation,
+            Validated::fail("Expected response time maximum of 100 milliseconds but actual response time was 300 milliseconds".to_string())
         );
     }
 
