@@ -2554,6 +2554,96 @@ mod tests {
         );
     }
 
+    #[test]
+    fn process_response_time_less() {
+        let expected = ExpectedResultData {
+            status: Some(ValueOrNumericSpecification::Value(200)),
+            body: None,
+            headers: Vec::default(),
+            response_time: Some(NumericSpecification::<u32> {
+                max: Some(300),
+                ..Default::default()
+            }),
+            ..ExpectedResultData::new()
+        };
+
+        let ignore_body: [String; 0] = [];
+        let actual = process_response(
+            0,
+            StageType::Normal,
+            None,
+            ResultDetails {
+                request: RequestDetails {
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                    method: http::Verb::Post.as_method(),
+                    url: "".to_string(),
+                },
+                request_runtime: 100,
+                expected: expected.clone(),
+                actual: Option::from(ResponseResultData {
+                    status: 200,
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                }),
+                compare_request: None,
+                compare_request_runtime: None,
+                compare_actual: None,
+            },
+            &ignore_body,
+            None,
+            None,
+        );
+        assert_eq!(actual.status, TestStatus::Passed);
+    }
+
+    #[test]
+    fn process_response_time_greater() {
+        let expected = ExpectedResultData {
+            status: Some(ValueOrNumericSpecification::Value(200)),
+            body: None,
+            headers: Vec::default(),
+            response_time: Some(NumericSpecification::<u32> {
+                max: Some(100),
+                ..Default::default()
+            }),
+            ..ExpectedResultData::new()
+        };
+
+        let ignore_body: [String; 0] = [];
+        let actual = process_response(
+            0,
+            StageType::Normal,
+            None,
+            ResultDetails {
+                request: RequestDetails {
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                    method: http::Verb::Post.as_method(),
+                    url: "".to_string(),
+                },
+                request_runtime: 300,
+                expected: expected.clone(),
+                actual: Option::from(ResponseResultData {
+                    status: 200,
+                    body: serde_json::Value::default(),
+                    headers: Vec::default(),
+                }),
+                compare_request: None,
+                compare_request_runtime: None,
+                compare_actual: None,
+            },
+            &ignore_body,
+            None,
+            None,
+        );
+        assert_eq!(actual.status, TestStatus::Failed);
+        assert_eq!(
+            actual.validation,
+            Validated::fail("Expected response time maximum of 100 but received 300".to_string())
+        );
+    }
+
     #[tokio::test]
     async fn from_bad_response() {
         let rep = Response::builder()
