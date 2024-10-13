@@ -7,9 +7,13 @@ use crate::test;
 use crate::test::definition::RequestDescriptor;
 use crate::test::http::Header;
 use crate::test::Definition;
+use bytes::{Bytes, BytesMut};
+use http_body_util::{BodyExt, Full};
 use hyper::header::HeaderValue;
-use hyper::{body, Body, Client, Request};
-use hyper_tls::HttpsConnector;
+use hyper::Request;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -181,13 +185,22 @@ fn get_config(config: &config::Config) -> serde_json::Value {
     config_json
 }
 
+pub fn get_connector() -> HttpsConnector<HttpConnector> {
+    HttpsConnectorBuilder::new()
+        .with_platform_verifier()
+        .https_or_http()
+        .enable_all_versions()
+        .build()
+}
+
 pub async fn create_session(
     token: Uuid,
     tests: Vec<&Definition>,
     args_json: Box<serde_json::Value>,
     config: &config::Config,
 ) -> Result<Session, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url("/sessions", config);
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
@@ -237,7 +250,7 @@ pub async fn create_session(
         .method("POST")
         .header("Authorization", token.to_string())
         .header("Content-Type", HeaderValue::from_static("application/json"))
-        .body(Body::from(post_string));
+        .body(Full::from(post_string));
 
     if let Ok(req) = request {
         let response = client.request(req).await?;
@@ -251,10 +264,18 @@ pub async fn create_session(
             }));
         }
 
-        let (_, body) = response.into_parts();
+        let (_, mut body) = response.into_parts();
 
-        let response_bytes = body::to_bytes(body).await?;
-        let response: SessionResponse = serde_json::from_slice(response_bytes.as_ref())?;
+        let mut body_bytes = BytesMut::new();
+
+        while let Some(next) = body.frame().await {
+            let frame = next.unwrap();
+            if let Some(chunk) = frame.data_ref() {
+                body_bytes.extend(chunk);
+            }
+        }
+
+        let response: SessionResponse = serde_json::from_slice(body_bytes.as_ref())?;
         let session_id = uuid::Uuid::parse_str(&response.session_id)?;
 
         return Ok(Session {
@@ -274,7 +295,8 @@ pub async fn create_test(
     definition: test::Definition,
     config: &config::Config,
 ) -> Result<Test, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url("/tests", config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
@@ -306,7 +328,7 @@ pub async fn create_test(
         .method("POST")
         .header("Authorization", session.token.to_string())
         .header("Content-Type", HeaderValue::from_static("application/json"))
-        .body(Body::from(post_string));
+        .body(Full::from(post_string));
 
     if let Ok(req) = request {
         let response = client.request(req).await?;
@@ -320,10 +342,17 @@ pub async fn create_test(
             }));
         }
 
-        let (_, body) = response.into_parts();
+        let (_, mut body) = response.into_parts();
+        let mut body_bytes = BytesMut::new();
 
-        let response_bytes = body::to_bytes(body).await?;
-        let response: TestResponse = serde_json::from_slice(response_bytes.as_ref())?;
+        while let Some(next) = body.frame().await {
+            let frame = next.unwrap();
+            if let Some(chunk) = frame.data_ref() {
+                body_bytes.extend(chunk);
+            }
+        }
+
+        let response: TestResponse = serde_json::from_slice(body_bytes.as_ref())?;
         let test_id = uuid::Uuid::parse_str(&response.test_id)?;
 
         return Ok(Test {
@@ -345,7 +374,8 @@ pub async fn complete_stage(
     stage: &executor::StageResult,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
@@ -380,7 +410,7 @@ pub async fn complete_stage(
         .method("POST")
         .header("Authorization", test.session.token.to_string())
         .header("Content-Type", HeaderValue::from_static("application/json"))
-        .body(Body::from(post_string));
+        .body(Full::from(post_string));
 
     if let Ok(req) = request {
         let response = client.request(req).await?;
@@ -407,7 +437,8 @@ pub async fn complete_stage_skipped(
     test_definition: &test::Definition,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
     trace!("telemetry complete stage url: {}", uri);
     if let Err(error) = Url::parse(&uri) {
@@ -436,7 +467,7 @@ pub async fn complete_stage_skipped(
         .method("POST")
         .header("Authorization", test.session.token.to_string())
         .header("Content-Type", HeaderValue::from_static("application/json"))
-        .body(Body::from(post_string));
+        .body(Full::from(post_string));
 
     if let Ok(req) = request {
         let response = client.request(req).await?;
@@ -463,7 +494,8 @@ pub async fn complete_session(
     status: u32,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(
         &format!("/sessions/{}/completed", session.session_id),
         config,
@@ -486,7 +518,7 @@ pub async fn complete_session(
         .method("POST")
         .header("Authorization", session.token.to_string())
         .header("Content-Type", HeaderValue::from_static("application/json"))
-        .body(Body::from(post_string));
+        .body(Full::from(post_string));
 
     if let Ok(req) = request {
         let response = client.request(req).await?;

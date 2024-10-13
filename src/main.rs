@@ -450,6 +450,11 @@ async fn run_tests(
     let project = project.or(config.clone().settings.project);
     let environment = environment.or(config.clone().settings.environment);
 
+    if config.settings.bypass_cert_verification {
+        warn!("WARNING: SSL certificate verification is disabled.\nIf this is not intentional please adjust your config settings.\nFor more information please check our docs: https://www.jikken.io/docs/configuration/");
+        log::logger().flush();
+    }
+
     info!(
         "Jikken found {} test file{}.\n\n",
         files.len(),
