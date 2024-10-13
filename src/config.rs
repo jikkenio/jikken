@@ -344,6 +344,7 @@ mod tests {
             Config {
                 settings: Settings {
                     continue_on_failure: true,
+                    bypass_cert_verification: false,
                     api_key: None,
                     dev_mode: None,
                     project: None,
@@ -428,6 +429,7 @@ mod tests {
             Config {
                 settings: Settings {
                     continue_on_failure: false,
+                    bypass_cert_verification: false,
                     api_key: Some(String::from("key")),
                     dev_mode: Some(true),
                     project: Some(String::from("my_proj")),
