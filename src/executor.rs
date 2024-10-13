@@ -433,6 +433,7 @@ async fn run_tests<T: ExecutionPolicy>(
     let mut state = State {
         variables: HashMap::new(),
         cookies: HashMap::new(),
+        bypass_cert_verification: config.settings.bypass_cert_verification,
     };
     let start_time = Instant::now();
 
@@ -593,6 +594,7 @@ impl StateCookie {
 struct State {
     variables: HashMap<String, String>,
     cookies: HashMap<String, HashMap<String, StateCookie>>,
+    bypass_cert_verification: bool,
 }
 
 #[derive(PartialEq, Eq, Clone)]
