@@ -12,8 +12,8 @@ use http_body_util::{BodyExt, Full};
 use hyper::header::HeaderValue;
 use hyper::Request;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -199,7 +199,8 @@ pub async fn create_session(
     args_json: Box<serde_json::Value>,
     config: &config::Config,
 ) -> Result<Session, Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build(get_connector());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url("/sessions", config);
     trace!("telemetry session url({})", uri);
     match Url::parse(&uri) {
@@ -294,7 +295,8 @@ pub async fn create_test(
     definition: test::Definition,
     config: &config::Config,
 ) -> Result<Test, Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build(get_connector());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url("/tests", config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
@@ -372,7 +374,8 @@ pub async fn complete_stage(
     stage: &executor::StageResult,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build(get_connector());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
     trace!("telemetry test url({})", uri);
     match Url::parse(&uri) {
@@ -434,7 +437,8 @@ pub async fn complete_stage_skipped(
     test_definition: &test::Definition,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build(get_connector());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(&format!("/tests/{}/completed", test.test_id), config);
     trace!("telemetry complete stage url: {}", uri);
     if let Err(error) = Url::parse(&uri) {
@@ -490,7 +494,8 @@ pub async fn complete_session(
     status: u32,
     config: &config::Config,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build(get_connector());
+    let client: Client<_, Full<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(get_connector());
     let uri = get_url(
         &format!("/sessions/{}/completed", session.session_id),
         config,

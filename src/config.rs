@@ -215,7 +215,9 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                     continue_on_failure: settings
                         .continue_on_failure
                         .unwrap_or(config.settings.continue_on_failure),
-                    bypass_cert_verification: settings.bypass_cert_verification.unwrap_or(config.settings.bypass_cert_verification),
+                    bypass_cert_verification: settings
+                        .bypass_cert_verification
+                        .unwrap_or(config.settings.bypass_cert_verification),
                     api_key: settings.api_key.or(config.settings.api_key),
                     dev_mode: settings.dev_mode.or(config.settings.dev_mode),
                     project: settings.project.or(config.settings.project),
@@ -260,7 +262,12 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
                             .settings
                             .as_ref()
                             .and_then(|s| s.continue_on_failure)),
-                        bypass_cert_verification: settings.bypass_cert_verification.or(existing_file.settings.as_ref().and_then(|s| s.bypass_cert_verification)),
+                        bypass_cert_verification: settings.bypass_cert_verification.or(
+                            existing_file
+                                .settings
+                                .as_ref()
+                                .and_then(|s| s.bypass_cert_verification),
+                        ),
                         api_key: settings.api_key.or(existing_file
                             .settings
                             .as_ref()

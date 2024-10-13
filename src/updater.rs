@@ -1,6 +1,6 @@
-use hyper::Request;
 use bytes::{Bytes, BytesMut};
 use http_body_util::{BodyExt, Empty};
+use hyper::Request;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, error, info, warn};
 use regex::Regex;
@@ -127,7 +127,8 @@ fn has_newer_version(new_version: Version) -> bool {
 }
 
 pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
-    let client: Client<_, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build(crate::telemetry::get_connector());
+    let client: Client<_, Empty<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(crate::telemetry::get_connector());
     let req = Request::builder()
         .uri(format!(
             "{}?channel=stable&platform={}",
@@ -141,12 +142,12 @@ pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Err
 
     let mut body_bytes = BytesMut::new();
 
-        while let Some(next) = body.frame().await {
-            let frame = next.unwrap();
-            if let Some(chunk) = frame.data_ref() {
-                body_bytes.extend(chunk);
-            }
+    while let Some(next) = body.frame().await {
+        let frame = next.unwrap();
+        if let Some(chunk) = frame.data_ref() {
+            body_bytes.extend(chunk);
         }
+    }
     if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&body_bytes) {
         if has_newer_version(Version(r.version.clone())) {
             return Ok(Some(r));
