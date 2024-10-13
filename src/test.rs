@@ -7,28 +7,28 @@ pub mod variable;
 use crate::test::file::BodyOrSchema;
 
 use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
-use crate::test::definition::RequestBody;
-use crate::test::file::DatumSchema;
-use crate::test::file::FloatSpecification;
-use crate::test::file::IntegerSpecification;
-use crate::test::file::NameSpecification;
-use crate::test::file::UnvalidatedVariable;
-use crate::test::file::ValueOrDatumOrFile;
-use file::DateSpecification;
-use file::DateTimeSpecification;
-use file::EmailSpecification;
-use file::SequenceSpecification;
-use file::StringSpecification;
-use file::UnvalidatedDatumSchemaVariable;
+use crate::test::{
+    definition::RequestBody,
+    file::{
+        DatumSchema, FloatSpecification, IntegerSpecification, NameSpecification,
+        UnvalidatedVariable, ValueOrDatumOrFile,
+    },
+};
+use file::{
+    DateSpecification, DateTimeSpecification, EmailSpecification, SequenceSpecification,
+    StringSpecification, UnvalidatedDatumSchemaVariable,
+};
 use log::{debug, error, trace};
 use regex::Regex;
-use serde::Serializer;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use std::fmt::{self};
-use std::hash::{Hash, Hasher};
-use std::path::Path;
+use serde::{Deserialize, Serialize, Serializer};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{
+        Debug, {self},
+    },
+    hash::{Hash, Hasher},
+    path::Path,
+};
 use ulid::Ulid;
 
 #[derive(Deserialize, PartialEq)]

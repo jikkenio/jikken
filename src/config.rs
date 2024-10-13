@@ -2,9 +2,7 @@ use crate::test::{self, SecretValue};
 use chrono::Local;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::env;
-use std::path::Path;
+use std::{collections::BTreeMap, env, path::Path};
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -301,7 +299,8 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use {std::fs::OpenOptions, std::io::Write, tempfile::tempdir};
+    use std::{fs::OpenOptions, io::Write};
+    use tempfile::tempdir;
 
     #[test]
     fn no_overrides_yields_default_config() {

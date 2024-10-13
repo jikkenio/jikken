@@ -6,10 +6,12 @@ use log::{debug, error, info, warn};
 use regex::Regex;
 use remove_dir_all::remove_dir_all;
 use serde::Deserialize;
-use std::cmp::Ordering;
-use std::env;
-use std::error::Error;
-use std::io::{stdout, Cursor, Write};
+use std::{
+    cmp::Ordering,
+    env,
+    error::Error,
+    io::{stdout, Cursor, Write},
+};
 use tokio::io::AsyncWriteExt;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";

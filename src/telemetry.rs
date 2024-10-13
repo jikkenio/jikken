@@ -1,24 +1,22 @@
-use crate::config;
-use crate::errors::TelemetryError;
-use crate::executor;
-use crate::executor::ResultDetails;
-use crate::machine;
-use crate::test;
-use crate::test::definition::RequestDescriptor;
-use crate::test::http::Header;
-use crate::test::Definition;
+use crate::{
+    config,
+    errors::TelemetryError,
+    executor,
+    executor::ResultDetails,
+    machine, test,
+    test::{definition::RequestDescriptor, http::Header, Definition},
+};
 use bytes::{Bytes, BytesMut};
 use http_body_util::{BodyExt, Full};
-use hyper::header::HeaderValue;
-use hyper::Request;
+use hyper::{header::HeaderValue, Request};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::env;
-use std::error::Error;
+use std::{collections::HashSet, env, error::Error};
 use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;

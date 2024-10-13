@@ -1,11 +1,14 @@
-use crate::test;
-use crate::test::file::NumericSpecification;
-use crate::test::file::ValueOrNumericSpecification;
-use crate::test::{file, http, validation};
+use crate::{
+    test,
+    test::{
+        file,
+        file::{NumericSpecification, ValueOrNumericSpecification},
+        http, validation,
+    },
+};
 use log::trace;
 use serde::{Deserialize, Serialize};
-use std::cell::Cell;
-use std::collections::HashSet;
+use std::{cell::Cell, collections::HashSet};
 
 use super::file::BodyOrSchema;
 use crate::test::Variable;
