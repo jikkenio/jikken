@@ -13,10 +13,17 @@ use crate::test::http::Header;
 use crate::test::Definition;
 use crate::test::{definition, validation, Variable};
 use crate::TagMode;
+use bytes::{Bytes, BytesMut};
+use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
 use hyper::header::HeaderValue;
-use hyper::{body, Body, Client, Request};
-use hyper_tls::HttpsConnector;
+use hyper::Request;
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use log::{debug, error, info, trace, warn};
+use rustls::ClientConfig;
+use rustls_platform_verifier::Verifier;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -24,6 +31,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::io::Write;
+use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
 use url::Url;
@@ -609,7 +617,7 @@ pub struct ResponseResultData {
 }
 
 impl ResponseResultData {
-    pub async fn from_response(resp: hyper::Response<Body>) -> Option<ResponseResultData> {
+    pub async fn from_response(resp: hyper::Response<Incoming>) -> Option<ResponseResultData> {
         debug!("Received response : {resp:?}");
 
         let response_status = resp.status();
@@ -619,33 +627,35 @@ impl ResponseResultData {
             .iter()
             .map(|h| http::Header::new(h.0.to_string(), h.1.to_str().unwrap_or("").to_string()))
             .collect();
-        let (_, body) = resp.into_parts();
-        let response_bytes = body::to_bytes(body).await;
+        let (_, mut body) = resp.into_parts();
 
-        match response_bytes {
-            Ok(resp_data) => match serde_json::from_slice(resp_data.as_ref()) {
-                Ok(data) => {
-                    debug!("Body is {data}");
-                    Some(ResponseResultData {
-                        headers,
-                        status: response_status.as_u16(),
-                        body: data,
-                    })
-                }
-                Err(e) => {
-                    // TODO: add support for non JSON responses
-                    debug!("response is not valid JSON data: {}", e);
-                    debug!("{}", std::str::from_utf8(&resp_data).unwrap_or(""));
-                    Some(ResponseResultData {
-                        headers,
-                        status: response_status.as_u16(),
-                        body: serde_json::Value::Null,
-                    })
-                }
-            },
+        let mut response_bytes = BytesMut::new();
+
+        while let Some(next) = body.frame().await {
+            let frame = next.unwrap();
+            if let Some(chunk) = frame.data_ref() {
+                response_bytes.extend(chunk);
+            }
+        }
+
+        match serde_json::from_slice(&response_bytes) {
+            Ok(data) => {
+                debug!("Body is {data}");
+                Some(ResponseResultData {
+                    headers,
+                    status: response_status.as_u16(),
+                    body: data,
+                })
+            }
             Err(e) => {
-                error!("unable to get response bytes: {}", e);
-                None
+                // TODO: add support for non JSON responses
+                debug!("response is not valid JSON data: {}", e);
+                debug!("{}", std::str::from_utf8(&response_bytes).unwrap_or(""));
+                Some(ResponseResultData {
+                    headers,
+                    status: response_status.as_u16(),
+                    body: serde_json::Value::Null,
+                })
             }
         }
     }
@@ -1846,7 +1856,7 @@ async fn validate_stage(
 fn http_request_from_test_spec(
     state: &State,
     resolved_request: test::definition::ResolvedRequest,
-) -> Result<Request<Body>, Box<dyn Error + Send + Sync>> {
+) -> Result<Request<Full<Bytes>>, Box<dyn Error + Send + Sync>> {
     let vars: Vec<(String, &String)> = state
         .variables
         .iter()
@@ -1914,22 +1924,47 @@ fn http_request_from_test_spec(
                 .fold(builder, |builder, (k, v)| {
                     builder.header(k, variable_resolver(v.clone()))
                 })
-                .body(maybe_body.map(Body::from).unwrap_or(Body::empty()))
+                .body(maybe_body.map(|b| b.into()).unwrap_or_default())
                 .map_err(|e| Box::from(format!("bad request result: {}", e)))
         })
+}
+
+pub fn get_rustls_config_dangerous() -> Result<ClientConfig, Box<dyn Error + Send + Sync>> {
+    let config = ClientConfig::builder()
+        .dangerous() // The `Verifier` we're using is actually safe
+        .with_custom_certificate_verifier(Arc::new(Verifier::new()))
+        .with_no_client_auth();
+
+    Ok(config)
 }
 
 async fn process_request(
     state: &mut State,
     resolved_request: test::definition::ResolvedRequest,
-) -> Result<hyper::Response<Body>, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+) -> Result<hyper::Response<Incoming>, Box<dyn Error + Send + Sync>> {
+    let connection = if state.bypass_cert_verification {
+        debug!("WARNING: bypassing cert verification");
+        HttpsConnectorBuilder::new()
+            .with_tls_config(get_rustls_config_dangerous()?)
+            .https_or_http()
+            .enable_all_versions()
+            .build()
+    } else {
+        HttpsConnectorBuilder::new()
+            .with_platform_verifier()
+            .https_or_http()
+            .enable_all_versions()
+            .build()
+    };
+
+    let client = Client::builder(TokioExecutor::new()).build(connection);
     debug!("url({})", resolved_request.url);
 
     match http_request_from_test_spec(state, resolved_request) {
         Ok(req) => {
             debug!("sending request: {req:?}");
             let response = client.request(req).await?;
+
             let cookies = response.headers().get_all("Set-Cookie");
             for c in cookies.iter() {
                 let cookie_raw = StateCookie::new(c.to_str().unwrap().to_string());
