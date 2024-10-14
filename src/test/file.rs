@@ -1,36 +1,28 @@
-use crate::json::filter::filter_json;
-use crate::test;
-use crate::test::file::Validated::Good;
-use crate::test::variable::Modifier;
-use crate::test::{definition, http, variable};
-use crate::validated::ValidatedExt;
-use chrono::NaiveDate;
-use chrono::TimeZone;
-use chrono::{DateTime, ParseError};
-use chrono::{Datelike, Local};
-use chrono::{Days, Months};
-use chrono::{Duration, NaiveDateTime};
-use log::debug;
-use log::error;
-use log::trace;
+use crate::{
+    json::filter::filter_json,
+    test,
+    test::{definition, file::Validated::Good, http, variable, variable::Modifier},
+    validated::ValidatedExt,
+};
+use chrono::{
+    DateTime, Datelike, Days, Duration, Local, Months, NaiveDate, NaiveDateTime, ParseError,
+    TimeZone,
+};
+use log::{debug, error, trace};
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
 use num::{Num, Signed};
-use rand::distributions::uniform::SampleUniform;
-use rand::rngs::ThreadRng;
-use rand::Rng;
+use rand::{distributions::uniform::SampleUniform, rngs::ThreadRng, Rng};
 use regex::Regex;
-use serde::de::Visitor;
-use serde::Deserializer;
-use serde::{Deserialize, Serialize};
-use serde_json::Map;
-use serde_json::Value;
-use std::cmp::{max, min};
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt::{self};
-use std::fmt::{Debug, Display};
-use std::fs;
-use std::hash::{Hash, Hasher};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Value};
+use std::{
+    cmp::{max, min},
+    collections::BTreeMap,
+    error::Error,
+    fmt::{self, Debug, Display},
+    fs,
+    hash::{Hash, Hasher},
+};
 use validated::Validated;
 
 const GIVEN_NAMES: [&str; 20] = [

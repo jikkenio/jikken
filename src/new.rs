@@ -1,15 +1,12 @@
-use super::errors::GenericError;
-use super::test::template;
+use super::{errors::GenericError, test::template};
 use log::{error, info};
 
-use crate::test::file::NumericSpecification;
-use crate::test::file::ValueOrNumericSpecification;
-use crate::test::http;
-use crate::test::File;
-use std::error::Error;
-use std::io::Write;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use crate::test::{
+    file::{NumericSpecification, ValueOrNumericSpecification},
+    http, File,
+};
+use std::{error::Error, io::Write};
+use tokio::{fs, io::AsyncWriteExt};
 
 fn create_tags(tags: &[String]) -> Option<String> {
     if tags.is_empty() {
@@ -54,29 +51,26 @@ fn create_filename(path_string: &str, verb: &http::Verb) -> String {
 
 mod openapi_legacy {
     use super::*;
-    use crate::test;
-    use crate::test::file;
-    use crate::test::file::generate_value_from_schema;
-    use crate::test::file::DatumSchema;
-    use crate::test::file::FloatSpecification;
-    use crate::test::file::IntegerSpecification;
-    use crate::test::file::SimpleValueVariable;
-    use crate::test::file::Specification;
-    use crate::test::file::StringSpecification;
-    use crate::test::file::UnvalidatedRequest;
-    use crate::test::file::UnvalidatedResponse;
-    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
-    use crate::test::file::UnvalidatedVariableNameOrValue;
-    use crate::test::file::ValueOrDatumSchema;
-    use openapiv3::IndexMap;
-    use openapiv3::OpenAPI;
-    use openapiv3::Parameter;
-    use openapiv3::Schema;
-    use openapiv3::VariantOrUnknownOrEmpty;
-    use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
-    use std::collections::hash_map::RandomState;
-    use std::collections::BTreeMap;
-    use std::io::BufReader;
+    use crate::{
+        test,
+        test::{
+            file,
+            file::{
+                generate_value_from_schema, DatumSchema, FloatSpecification, IntegerSpecification,
+                SimpleValueVariable, Specification, StringSpecification, UnvalidatedRequest,
+                UnvalidatedResponse, UnvalidatedVariableNameOrDatumSchema,
+                UnvalidatedVariableNameOrValue, ValueOrDatumSchema,
+            },
+        },
+    };
+    use openapiv3::{
+        IndexMap, OpenAPI, Operation, Parameter, PathItem, RefOr, Responses, Schema, Server,
+        VariantOrUnknownOrEmpty, VersionedOpenAPI,
+    };
+    use std::{
+        collections::{hash_map::RandomState, BTreeMap},
+        io::BufReader,
+    };
 
     fn create_headers(
         headers: &IndexMap<String, RefOr<openapiv3::Header>, RandomState>,
@@ -471,40 +465,21 @@ mod openapi_legacy {
 
 mod openapi_v31 {
     use super::*;
-    use crate::test;
-    use crate::test::file::DateSpecification;
-    use crate::test::file::DateTimeSpecification;
-    use crate::test::file::DatumSchema;
-    use crate::test::file::EmailSpecification;
-    use crate::test::file::FloatSpecification;
-    use crate::test::file::IntegerSpecification;
-    use crate::test::file::SimpleValueVariable;
-    use crate::test::file::Specification;
-    use crate::test::file::StringSpecification;
-    use crate::test::file::UnvalidatedDateSpecification;
-    use crate::test::file::UnvalidatedDatumSchemaVariable;
-    use crate::test::file::UnvalidatedFloatSpecification;
-    use crate::test::file::UnvalidatedIntegerSpecification;
-    use crate::test::file::UnvalidatedRequest;
-    use crate::test::file::UnvalidatedResponse;
-    use crate::test::file::UnvalidatedStringSpecification;
-    use crate::test::file::UnvalidatedValueOrDatumSchema;
-    use crate::test::file::UnvalidatedValuesOrSchema;
-    use crate::test::file::UnvalidatedVariable;
-    use crate::test::file::UnvalidatedVariableNameOrComponent;
-    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
-    use crate::test::file::ValueOrDatumSchema;
-    use crate::test::file::VariableName;
-    use oas3::spec::Header;
-    use oas3::spec::ObjectOrReference;
-    use oas3::spec::Operation;
-    use oas3::spec::PathItem;
-    use oas3::spec::Response;
-    use oas3::spec::Server;
-    use oas3::spec::Spec;
+    use crate::{
+        test,
+        test::file::{
+            DateSpecification, DateTimeSpecification, DatumSchema, EmailSpecification,
+            FloatSpecification, IntegerSpecification, SimpleValueVariable, Specification,
+            StringSpecification, UnvalidatedDateSpecification, UnvalidatedDatumSchemaVariable,
+            UnvalidatedFloatSpecification, UnvalidatedIntegerSpecification, UnvalidatedRequest,
+            UnvalidatedResponse, UnvalidatedStringSpecification, UnvalidatedValueOrDatumSchema,
+            UnvalidatedValuesOrSchema, UnvalidatedVariable, UnvalidatedVariableNameOrComponent,
+            UnvalidatedVariableNameOrDatumSchema, ValueOrDatumSchema, VariableName,
+        },
+    };
+    use oas3::spec::{Header, ObjectOrReference, Operation, PathItem, Response, Server, Spec};
     use std::collections::BTreeMap;
-    use test::file::SequenceSpecification;
-    use test::file::ValuesOrSchema;
+    use test::file::{SequenceSpecification, ValuesOrSchema};
 
     pub fn get_test_paths(
         root_servers: &[Server],

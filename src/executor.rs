@@ -1,39 +1,38 @@
-use crate::config;
-use crate::json::extractor::extract_json;
-use crate::telemetry;
-use crate::test;
-use crate::test::definition::ResponseDescriptor;
-use crate::test::file::BodyOrSchema;
-use crate::test::file::BodyOrSchemaChecker;
-use crate::test::file::Checker;
-use crate::test::file::NumericSpecification;
-use crate::test::file::ValueOrNumericSpecification;
-use crate::test::http;
-use crate::test::http::Header;
-use crate::test::Definition;
-use crate::test::{definition, validation, Variable};
-use crate::TagMode;
+use crate::{
+    config,
+    json::extractor::extract_json,
+    telemetry, test,
+    test::{
+        definition,
+        definition::ResponseDescriptor,
+        file::{
+            BodyOrSchema, BodyOrSchemaChecker, Checker, NumericSpecification,
+            ValueOrNumericSpecification,
+        },
+        http,
+        http::Header,
+        validation, Definition, Variable,
+    },
+    TagMode,
+};
 use bytes::{Bytes, BytesMut};
 use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
-use hyper::header::HeaderValue;
-use hyper::Request;
+use hyper::{body::Incoming, header::HeaderValue, Request};
 use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, error, info, trace, warn};
 use rustls::ClientConfig;
 use rustls_platform_verifier::Verifier;
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt;
-use std::io::Write;
-use std::sync::Arc;
-use std::time::Instant;
-use std::vec;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    error::Error,
+    fmt,
+    io::Write,
+    sync::Arc,
+    time::Instant,
+    vec,
+};
 use url::Url;
 use validated::Validated::{self, Good};
 
@@ -2307,17 +2306,14 @@ fn validate_dry_run(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::file::NumericSpecification;
-    use crate::test::file::Specification;
+    use crate::test::file::{NumericSpecification, Specification};
 
     use self::test::definition::ResolvedRequest;
-    use hyper::Response;
     use std::any::Any;
     use test::File;
 
     use super::*;
     use adjacent_pair_iterator::AdjacentPairIterator;
-    use hyper::StatusCode;
     use nonempty_collections::*;
     use serde_json::json;
 

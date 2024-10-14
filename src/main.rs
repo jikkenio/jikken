@@ -12,15 +12,15 @@ mod validated;
 
 use clap::{Parser, Subcommand};
 use glob::{glob_with, MatchOptions};
-use log::warn;
-use log::{debug, error, info, Level, LevelFilter};
+use log::{debug, error, info, warn, Level, LevelFilter};
 use logger::SimpleLogger;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+};
 use telemetry::PlatformIdFailure;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use tokio::{fs, io::AsyncWriteExt};
 use ulid::Ulid;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -812,7 +812,8 @@ mod tests {
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use {std::fs::File, tempfile::tempdir};
+    use std::fs::File;
+    use tempfile::tempdir;
 
     struct DirectoryFixture {
         pub temp_dir: tempfile::TempDir,

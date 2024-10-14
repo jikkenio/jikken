@@ -1,11 +1,10 @@
-use crate::test;
-use crate::test::definition;
-use crate::test::validation;
-use crate::test::variable;
+use crate::{
+    test,
+    test::{definition, validation, variable},
+};
 use log::warn;
 use regex::Regex;
-use std::fmt;
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 use ulid::Ulid;
 
 #[derive(Debug, Clone)]

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize, Serializer};
-use std::cell::Cell;
-use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::{
+    cell::Cell,
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

@@ -1,11 +1,11 @@
-use crate::test;
-use crate::test::{definition, file, http};
-use std::cell::Cell;
-use std::error::Error;
+use crate::{
+    test,
+    test::{definition, file, http},
+};
+use std::{cell::Cell, error::Error};
 use ulid::Ulid;
 
-use super::file::SimpleValueVariable;
-use super::File;
+use super::{file::SimpleValueVariable, File};
 
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
     Ok(test::File::default())
