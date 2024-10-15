@@ -136,7 +136,7 @@ jobs:
         id: create_release
         uses: actions/create-release@main
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}  # Access token for creating releases
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Access token for creating releases
         with:
           tag_name: v${{ env.RELEASE_VER }}-dev  # Replace with your desired version tag
           release_name: Release v${{ env.RELEASE_VER }}-dev  # Replace with your desired release name
