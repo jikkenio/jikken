@@ -119,10 +119,10 @@ jobs:
           echo "MAC_ZIP_HASH=$(cat mac_zip_hash.txt)" >> "$GITHUB_ENV"
           echo "WINDOWS_EXE_HASH=$(cat windows_exe_hash.txt)" >> "$GITHUB_ENV"      
           echo "WINDOWS_ZIP_HASH=$(cat windows_zip_hash.txt)" >> "$GITHUB_ENV"
-          mv jk.exe "jikken-v${{ env.RELEASE_VER }}-windows.exe"
-          mv jk.zip "jikken-v${{ env.RELEASE_VER }}-windows.zip"
-          mv jikken-x86_64-unknown-linux-musl.tar.gz "jikken-v${{ env.RELEASE_VER }}-x86_64-unknown-linux-musl.tar.gz"
-          mv jikken-x86_64-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-x86_64-apple-darwin.tar.gz"
+          mv jk.exe "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe"
+          mv jk.zip "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip"
+          mv jikken-x86_64-unknown-linux-musl.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz"
+          mv jikken-x86_64-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz"
 
       - name: Release Type
         run: |
@@ -132,14 +132,23 @@ jobs:
             echo "PRERELEASE=true" >> "$GITHUB_ENV"
           fi
 
+      - uses: sgpublic/delete-release-action@v1.1
+        name: Delete Existing Pre-Released Releases
+        with:
+          pre-release-drop: true
+          pre-release-keep-count: -1
+          pre-release-drop-tag: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Access token for creating releases
         with:
-          tag_name: v${{ env.RELEASE_VER }}-dev  # Replace with your desired version tag
-          release_name: Release v${{ env.RELEASE_VER }}-dev  # Replace with your desired release name
+          tag_name: v${{ env.RELEASE_VER }}-develop  # Replace with your desired version tag
+          release_name: Release v${{ env.RELEASE_VER }}-develop  # Replace with your desired release name
           body: |
             **Release Notes**
             Docs can be found at: jikken.io
@@ -151,10 +160,10 @@ jobs:
             - Mac (jk): ${{ env.MAC_EXE_HASH }}
 
             SHA-256 Binary Hashes of compressed files.              
-            - Windows (jikken-v${{ env.RELEASE_VER }}-windows.zip) ${{ env.WINDOWS_ZIP_HASH }}
-            - Windows (jikken-v${{ env.RELEASE_VER }}-windows.exe) ${{ env.WINDOWS_EXE_HASH }}
-            - Linux (jikken-v${{ env.RELEASE_VER }}-x86_64-unknown-linux-musl.tar.gz) ${{ env.LINUX_ZIP_HASH }}
-            - Mac (jikken-v${{ env.RELEASE_VER }}-x86_64-apple-darwin.tar.gz) ${{ env.MAC_ZIP_HASH }}
+            - Windows (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip) ${{ env.WINDOWS_ZIP_HASH }}
+            - Windows (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe) ${{ env.WINDOWS_EXE_HASH }}
+            - Linux (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz) ${{ env.LINUX_ZIP_HASH }}
+            - Mac (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz) ${{ env.MAC_ZIP_HASH }}
 
           draft: false
           prerelease: ${{ env.PRERELEASE }}
@@ -165,8 +174,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./jikken-v${{ env.RELEASE_VER }}-x86_64-unknown-linux-musl.tar.gz
-          asset_name: jikken-v${{ env.RELEASE_VER }}-x86_64-unknown-linux-musl.tar.gz
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz
           asset_content_type: zip
 
       - name: Upload Artifacts MacOS Zip
@@ -175,8 +184,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./jikken-v${{ env.RELEASE_VER }}-x86_64-apple-darwin.tar.gz
-          asset_name: jikken-v${{ env.RELEASE_VER }}-x86_64-apple-darwin.tar.gz
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz
           asset_content_type: zip
 
       - name: Upload Artifacts Windows Zip
@@ -185,8 +194,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./jikken-v${{ env.RELEASE_VER }}-windows.zip
-          asset_name: jikken-v${{ env.RELEASE_VER }}-windows.zip
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip
           asset_content_type: zip    
 
       - name: Upload Artifacts Windows exe
@@ -195,8 +204,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./jikken-v${{ env.RELEASE_VER }}-windows.exe
-          asset_name: jikken-v${{ env.RELEASE_VER }} -windows.exe
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
           asset_content_type: application     
 
       # - name: Setup upterm session
