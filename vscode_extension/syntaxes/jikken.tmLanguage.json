@@ -146,7 +146,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.jikken",
-					"match": "\\b(status|ignore|extract|strict|bodySchema)\\b"
+					"match": "\\b(status|time|ignore|extract|strict|bodySchema)\\b"
 				},
 				{
 					"include": "#http-keywords"
