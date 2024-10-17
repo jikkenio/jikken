@@ -1,10 +1,11 @@
-use crate::test;
-use crate::test::{definition, file, http};
-use std::cell::Cell;
-use std::error::Error;
+use crate::{
+    test,
+    test::{definition, file, http},
+};
+use std::{cell::Cell, error::Error};
 use ulid::Ulid;
 
-use super::File;
+use super::{file::SimpleValueVariable, File};
 
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
     Ok(test::File::default())
@@ -85,12 +86,10 @@ fn new_full_stage() -> Result<file::UnvalidatedStage, Box<dyn Error + Send + Syn
 
 //Do we want to create a variable of every type as part of the full template?
 fn new_full_variables() -> Result<file::UnvalidatedVariable, Box<dyn Error + Send + Sync>> {
-    Ok(file::UnvalidatedVariable {
+    Ok(file::UnvalidatedVariable::Simple(SimpleValueVariable {
         name: "".to_string(),
-        value: file::ValueOrDatumOrFile::Value {
-            value: serde_json::Value::from("".to_string()),
-        },
-    })
+        value: serde_json::Value::from("".to_string()),
+    }))
 }
 
 fn new_response() -> file::UnvalidatedResponse {
@@ -100,6 +99,7 @@ fn new_response() -> file::UnvalidatedResponse {
 fn new_full_response() -> Result<file::UnvalidatedResponse, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedResponse {
         status: Some(test::file::ValueOrNumericSpecification::Value(200)),
+        time: Some(test::file::ValueOrNumericSpecification::Value(500)),
         headers: Some(vec![new_header()]),
         body: Some(serde_json::from_str("{}")?),
         ignore: Some(vec!["".to_string()]),

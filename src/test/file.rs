@@ -1,36 +1,28 @@
-use crate::json::filter::filter_json;
-use crate::test;
-use crate::test::file::Validated::Good;
-use crate::test::variable::Modifier;
-use crate::test::{definition, http, variable};
-use crate::validated::ValidatedExt;
-use chrono::NaiveDate;
-use chrono::TimeZone;
-use chrono::{DateTime, ParseError};
-use chrono::{Datelike, Local};
-use chrono::{Days, Months};
-use chrono::{Duration, NaiveDateTime};
-use log::debug;
-use log::error;
-use log::trace;
+use crate::{
+    json::filter::filter_json,
+    test,
+    test::{definition, file::Validated::Good, http, variable, variable::Modifier},
+    validated::ValidatedExt,
+};
+use chrono::{
+    DateTime, Datelike, Days, Duration, Local, Months, NaiveDate, NaiveDateTime, ParseError,
+    TimeZone,
+};
+use log::{debug, error, trace};
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
-use num::Num;
-use rand::distributions::uniform::SampleUniform;
-use rand::rngs::ThreadRng;
-use rand::Rng;
+use num::{Num, Signed};
+use rand::{distributions::uniform::SampleUniform, rngs::ThreadRng, Rng};
 use regex::Regex;
-use serde::de::Visitor;
-use serde::Deserializer;
-use serde::{Deserialize, Serialize};
-use serde_json::Map;
-use serde_json::Value;
-use std::cmp::{max, min};
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt::{self};
-use std::fmt::{Debug, Display};
-use std::fs;
-use std::hash::{Hash, Hasher};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Value};
+use std::{
+    cmp::{max, min},
+    collections::BTreeMap,
+    error::Error,
+    fmt::{self, Debug, Display},
+    fs,
+    hash::{Hash, Hasher},
+};
 use validated::Validated;
 
 const GIVEN_NAMES: [&str; 20] = [
@@ -131,6 +123,38 @@ pub enum Specification<T> {
 impl<T> Default for Specification<T> {
     fn default() -> Self {
         Specification::NoneOf(vec![])
+    }
+}
+
+impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
+    type Error = String;
+    fn try_from(unvalidated: UnvalidatedSpecification<T>) -> Result<Self, Self::Error> {
+        let specified = vec![
+            &unvalidated.any_of,
+            &unvalidated.one_of,
+            &unvalidated.none_of,
+        ]
+        .into_iter()
+        .filter(|o| o.is_some())
+        .count();
+        if specified > 1 || (specified == 1 && unvalidated.value.is_some()) {
+            return Err(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value"
+                    .to_string(),
+            );
+        }
+        return match (
+            unvalidated.value,
+            unvalidated.any_of,
+            unvalidated.one_of,
+            unvalidated.none_of,
+        ) {
+            (Some(v), _, _, _) => Ok(Some(Specification::Value(v))),
+            (_, Some(vs), _, _) => Ok(Some(Specification::AnyOf(vs))),
+            (_, _, Some(vs), _) => Ok(Some(Specification::OneOf(vs))),
+            (_, _, _, Some(vs)) => Ok(Some(Specification::NoneOf(vs))),
+            _ => Ok(None),
+        };
     }
 }
 
@@ -666,11 +690,76 @@ where
     }
 }
 
-fn min_less_than_equal_max<T: PartialOrd>(min: &Option<T>, max: &Option<T>) -> bool {
-    min.as_ref()
-        .zip(max.as_ref())
-        .map(|(min, max)| min <= max)
-        .unwrap_or(true)
+impl<T> Hash for UnvalidatedNumericSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Serialize,
+    T: Clone,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+fn validate1<T: Copy>(
+    pred: &impl Fn(&T) -> bool,
+    val: &Option<T>,
+    message: String,
+) -> Validated<Option<T>, String> {
+    val.map(|v| {
+        if !pred(&v) {
+            Validated::fail(message)
+        } else {
+            Good(val.clone())
+        }
+    })
+    .unwrap_or(Validated::Good(None))
+}
+
+fn validate2<T>(
+    pred: &impl Fn(&T, &T) -> bool,
+    val: &Option<T>,
+    val2: &Option<T>,
+    message: String,
+) -> Validated<(), String> {
+    val.as_ref()
+        .zip(val2.as_ref())
+        .map(|(v, v2)| {
+            if !pred(v, v2) {
+                Validated::fail(message)
+            } else {
+                Good(())
+            }
+        })
+        .unwrap_or(Good(()))
+}
+
+fn non_negative_validator<T: Signed + Copy>(
+    num: &Option<T>,
+    variable_name: &str,
+) -> Validated<Option<T>, String> {
+    validate1::<T>(
+        &|val| val.is_positive() || val.is_zero(),
+        num,
+        format!("negative value provided for {variable_name}"),
+    )
+}
+
+fn less_than_or_equal_validator<T: PartialOrd>(
+    lhs: &Option<T>,
+    rhs: &Option<T>,
+    lhs_variable_name: &str,
+    rhs_variable_name: &str,
+) -> Validated<(), String> {
+    validate2::<T>(
+        &|lhs, rhs| lhs <= rhs,
+        lhs,
+        rhs,
+        format!("{lhs_variable_name} must be less than or equal to {rhs_variable_name}"),
+    )
 }
 
 impl<T> NumericSpecification<T>
@@ -686,15 +775,28 @@ where
         min: Option<T>,
         max: Option<T>,
     ) -> Result<Self, String> {
-        if min_less_than_equal_max(&min, &max) {
-            Ok(Self {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
+        if violation {
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
+        }
+        less_than_or_equal_validator(&min, &max, "min", "max")
+            .map(|_| Self {
                 specification,
                 min,
                 max,
             })
-        } else {
-            Err("min must be less than or equal to max".to_string())
-        }
+            .ok()
+            .map_err(|nev| {
+                nev.into_nonempty_iter()
+                    .reduce(|acc, e| format!("{},{}", acc, e))
+            })
     }
 
     fn check_min(
@@ -735,6 +837,33 @@ where
             }
             None => Good(()),
         }
+    }
+}
+
+impl<T> TryFrom<UnvalidatedNumericSpecification<T>> for NumericSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Clone,
+{
+    type Error = String;
+
+    fn try_from(
+        unvalidated_numeric: UnvalidatedNumericSpecification<T>,
+    ) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<T> {
+            name: unvalidated_numeric.name,
+            value: unvalidated_numeric.value,
+            any_of: unvalidated_numeric.any_of,
+            one_of: unvalidated_numeric.one_of,
+            none_of: unvalidated_numeric.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<T>>>::try_into(unvalidated_spec);
+        maybe_spec
+            .and_then(|spec| Self::new(spec, unvalidated_numeric.min, unvalidated_numeric.max))
     }
 }
 
@@ -801,27 +930,28 @@ impl StringSpecification {
         max_length: Option<i64>,
         pattern: Option<String>,
     ) -> Result<Self, String> {
-        let negative_validator = |number: &Option<i64>, var_name: &str| {
-            number
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+        let violation = specification.is_some()
+            && !is_none_of
+            && length
                 .as_ref()
-                .map(|s| {
-                    if s.is_negative() {
-                        Validated::fail(format!("negative value provided for {var_name}"))
-                    } else {
-                        Good(*number)
-                    }
-                })
-                .unwrap_or(Validated::Good(None))
-        };
+                .or(min_length.as_ref())
+                .or(max_length.as_ref())
+                .or(pattern.as_ref().map(|_| &25)) //random value to make iti64
+                .is_some();
 
-        let negative_validation_length = negative_validator(&length, "length");
-        let negative_validation_max = negative_validator(&max_length, "maxLength");
-        let negative_validation_min = negative_validator(&min_length, "minLength");
-        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
-            Good(())
-        } else {
-            Validated::fail("minLength must be less than or equal to maxLength".to_string())
-        };
+        if violation {
+            return Err("Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value".to_string());
+        }
+
+        let negative_validation_length = non_negative_validator(&length, "length");
+        let negative_validation_max = non_negative_validator(&max_length, "maxLength");
+        let negative_validation_min = non_negative_validator(&min_length, "minLength");
+        let relation_validation =
+            less_than_or_equal_validator(&min_length, &max_length, "minLength", "maxLength");
 
         let length_not_combined_with_min_or_max_validation =
             if length.and(min_length).is_some() || length.and(max_length).is_some() {
@@ -945,6 +1075,31 @@ impl StringSpecification {
     }
 }
 
+impl TryFrom<UnvalidatedStringSpecification> for StringSpecification {
+    type Error = String;
+
+    fn try_from(unvalidated_string: UnvalidatedStringSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_string.name,
+            value: unvalidated_string.value,
+            any_of: unvalidated_string.any_of,
+            one_of: unvalidated_string.one_of,
+            none_of: unvalidated_string.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_string.length,
+                unvalidated_string.min_length,
+                unvalidated_string.max_length,
+                unvalidated_string.pattern,
+            )
+        })
+    }
+}
+
 impl SequenceSpecification {
     pub fn new(
         schema: Option<ValuesOrSchema>,
@@ -952,27 +1107,11 @@ impl SequenceSpecification {
         min_length: Option<i64>,
         max_length: Option<i64>,
     ) -> Result<Self, String> {
-        let negative_validator = |number: &Option<i64>, var_name: &str| {
-            number
-                .as_ref()
-                .map(|s| {
-                    if s.is_negative() {
-                        Validated::fail(format!("negative value provided for {var_name}"))
-                    } else {
-                        Good(*number)
-                    }
-                })
-                .unwrap_or(Validated::Good(None))
-        };
-
-        let negative_validation_length = negative_validator(&length, "length");
-        let negative_validation_max = negative_validator(&max_length, "maxLength");
-        let negative_validation_min = negative_validator(&min_length, "minLength");
-        let relation_validation = if min_less_than_equal_max(&min_length, &max_length) {
-            Good(())
-        } else {
-            Validated::fail("minLength must be less than or equal to maxLength".to_string())
-        };
+        let negative_validation_length = non_negative_validator(&length, "length");
+        let negative_validation_max = non_negative_validator(&max_length, "maxLength");
+        let negative_validation_min = non_negative_validator(&min_length, "minLength");
+        let relation_validation =
+            less_than_or_equal_validator(&min_length, &max_length, "minLength", "maxLength");
 
         let length_not_combined_with_min_or_max_validation =
             if length.and(min_length).is_some() || length.and(max_length).is_some() {
@@ -1146,6 +1285,20 @@ impl DateSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
+
+        if violation {
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
+        }
+
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
@@ -1332,6 +1485,32 @@ impl DateSpecification {
     }
 }
 
+impl TryFrom<UnvalidatedDateSpecification> for DateSpecification {
+    type Error = String;
+
+    fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_date.name,
+            value: unvalidated_date.value,
+            any_of: unvalidated_date.any_of,
+            one_of: unvalidated_date.one_of,
+            none_of: unvalidated_date.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_date.min,
+                unvalidated_date.max,
+                unvalidated_date.format,
+                unvalidated_date.modifier,
+            )
+        })
+    }
+}
+
 impl Checker for DateSpecification {
     type Item = String;
     fn check(
@@ -1383,6 +1562,20 @@ impl DateTimeSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
+        let is_none_of = match specification.as_ref() {
+            Some(Specification::NoneOf(_)) => true,
+            _ => false,
+        };
+
+        let violation =
+            specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
+
+        if violation {
+            return Err(
+                "Cannot specify min or max alongside either of oneOf, anyOf, or value".to_string(),
+            );
+        }
+
         let date_validator = |date_string: &Option<String>, var_name: &str| {
             date_string
                 .as_ref()
@@ -1561,6 +1754,32 @@ impl DateTimeSpecification {
                 }
             })
             .map(|d| self.time_to_str(&d))
+    }
+}
+
+impl TryFrom<UnvalidatedDateSpecification> for DateTimeSpecification {
+    type Error = String;
+
+    fn try_from(unvalidated_date: UnvalidatedDateSpecification) -> Result<Self, Self::Error> {
+        let unvalidated_spec = UnvalidatedSpecification::<String> {
+            name: unvalidated_date.name,
+            value: unvalidated_date.value,
+            any_of: unvalidated_date.any_of,
+            one_of: unvalidated_date.one_of,
+            none_of: unvalidated_date.none_of,
+        };
+
+        let maybe_spec = TryInto::<Option<Specification<String>>>::try_into(unvalidated_spec);
+
+        maybe_spec.and_then(|spec| {
+            Self::new(
+                spec,
+                unvalidated_date.min,
+                unvalidated_date.max,
+                unvalidated_date.format,
+                unvalidated_date.modifier,
+            )
+        })
     }
 }
 
@@ -1926,6 +2145,198 @@ impl DatumSchema {
     }
 }
 
+impl TryFrom<UnvalidatedDatumSchemaVariable> for DatumSchema {
+    type Error = String;
+    fn try_from(unvalidated: UnvalidatedDatumSchemaVariable) -> Result<Self, Self::Error> {
+        match unvalidated {
+            UnvalidatedDatumSchemaVariable::Boolean(specification) => {
+                TryInto::<Option<BooleanSpecification>>::try_into(specification).map(|spec| {
+                    DatumSchema::Boolean {
+                        specification: spec,
+                    }
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Email(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Email {
+                    specification: Some(EmailSpecification { specification: s }),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Name(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::Name {
+                    specification: Some(NameSpecification { specification: s }),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::String(spec) => {
+                TryInto::<StringSpecification>::try_into(spec).map(|s| DatumSchema::String {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Float(spec) => {
+                TryInto::<FloatSpecification>::try_into(spec).map(|s| DatumSchema::Float {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Integer(spec) => {
+                TryInto::<IntegerSpecification>::try_into(spec).map(|s| DatumSchema::Integer {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::DateTime(spec) => {
+                TryInto::<DateTimeSpecification>::try_into(spec).map(|s| DatumSchema::DateTime {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Date(spec) => {
+                TryInto::<DateSpecification>::try_into(spec).map(|s| DatumSchema::Date {
+                    specification: Some(s),
+                })
+            }
+            UnvalidatedDatumSchemaVariable::Object { name: _, schema } => match schema {
+                None => Ok(DatumSchema::Object { schema: None }),
+                Some(schema_val) => {
+                    let f = schema_val
+                        .into_iter()
+                        .map(|(k, v)| match v {
+                            UnvalidatedValueOrDatumSchema::Datum(ud) => {
+                                TryInto::<DatumSchema>::try_into(ud)
+                                    .map(|ds| (k, ValueOrDatumSchema::Datum(ds)))
+                            }
+                            UnvalidatedValueOrDatumSchema::Values(v) => {
+                                Ok((k, ValueOrDatumSchema::Values(v)))
+                            }
+                        })
+                        .collect::<Result<BTreeMap<String, ValueOrDatumSchema>, String>>();
+                    f.map(|tree| DatumSchema::Object { schema: Some(tree) })
+                }
+            },
+            UnvalidatedDatumSchemaVariable::List(unvalidated) => {
+                let violation = unvalidated.length.is_some()
+                    && unvalidated
+                        .max_length
+                        .as_ref()
+                        .or(unvalidated.min_length.as_ref())
+                        .is_some();
+                if violation {
+                    return Err(
+                        "Cannot specify minLength or maxLength alongside length".to_string()
+                    );
+                }
+                let values_or_schema = match unvalidated.schema {
+                    None => Ok(None),
+                    Some(values_or_schema) => match values_or_schema {
+                        UnvalidatedValuesOrSchema::Schemas(s) => {
+                            let any_of = match s.any_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+                            let one_of = match s.one_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+                            let none_of = match s.none_of {
+                                None => Ok(None),
+                                Some(us) => us
+                                    .into_iter()
+                                    .map(|u| TryInto::<DatumSchema>::try_into(*u))
+                                    .map(|u| u.map(Box::new))
+                                    .collect::<Result<Vec<Box<DatumSchema>>, String>>()
+                                    .map(Some),
+                            };
+
+                            let value = match s.value {
+                                None => Ok(None),
+                                Some(v) => {
+                                    TryInto::<DatumSchema>::try_into(*v).map(Box::new).map(Some)
+                                }
+                            };
+
+                            match (any_of, none_of, one_of, value) {
+                                (Ok(anys), Ok(nones), Ok(ones), Ok(val)) => {
+                                    TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
+                                        UnvalidatedSpecification::<Box<DatumSchema>> {
+                                            name: None,
+                                            any_of: anys,
+                                            none_of: nones,
+                                            one_of: ones,
+                                            value: val,
+                                        },
+                                    )
+                                    .map(|a| a.map(ValuesOrSchema::Schemas))
+                                }
+                                (any, none, one, val) => {
+                                    let vs: Validated<Vec<Option<Vec<Box<DatumSchema>>>>, String> =
+                                        vec![any, none, one].into_iter().collect();
+
+                                    match vs {
+                                        Validated::Fail(nvec) => Err(nvec
+                                            .into_iter()
+                                            .fold("".to_string(), |acc, x| format!("{acc}, {x}"))),
+                                        Good(_) => Err(val.unwrap_err()),
+                                    }
+                                }
+                            }
+                        }
+                        //Simply treat it as a Tagged schema that only has value specified.
+                        UnvalidatedValuesOrSchema::UntaggedSchema(schema) => {
+                            TryInto::<DatumSchema>::try_into(*schema)
+                                .map(Box::new)
+                                .and_then(|ds| {
+                                    TryInto::<Option<Specification<Box<DatumSchema>>>>::try_into(
+                                        UnvalidatedSpecification::<Box<DatumSchema>> {
+                                            name: None,
+                                            any_of: None,
+                                            none_of: None,
+                                            one_of: None,
+                                            value: Some(ds),
+                                        },
+                                    )
+                                })
+                                .map(|a| a.map(ValuesOrSchema::Schemas))
+                        }
+                        UnvalidatedValuesOrSchema::Values(v) => {
+                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(v)
+                                .map(|a| a.map(ValuesOrSchema::Values))
+                        }
+                        //Simply make it a tagged variant and reapply simple transformation from above
+                        UnvalidatedValuesOrSchema::UntaggedLiterals(literals) => {
+                            let foo = UnvalidatedSpecification::<Vec<Value>> {
+                                value: Some(literals),
+                                any_of: None,
+                                name: None,
+                                none_of: None,
+                                one_of: None,
+                            };
+                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(foo)
+                                .map(|a| a.map(ValuesOrSchema::Values))
+                        }
+                    },
+                };
+                values_or_schema.and_then(|schema| {
+                    SequenceSpecification::new(
+                        schema,
+                        unvalidated.length,
+                        unvalidated.min_length,
+                        unvalidated.max_length,
+                    )
+                    .map(|s| DatumSchema::List {
+                        specification: Some(s),
+                    })
+                })
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UnvalidatedRequest {
@@ -2253,6 +2664,8 @@ pub struct UnvalidatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<ValueOrNumericSpecification<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub time: Option<ValueOrNumericSpecification<u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Vec<http::Header>>,
     //Responses can only contain a body OR a body_schema
     //We used to signify this using (serde-flattened)enums, but its
@@ -2289,6 +2702,7 @@ impl Default for UnvalidatedResponse {
     fn default() -> Self {
         Self {
             status: Some(ValueOrNumericSpecification::Value(200)),
+            time: None,
             headers: None,
             body: None,
             ignore: None,
@@ -2300,11 +2714,212 @@ impl Default for UnvalidatedResponse {
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnvalidatedVariable {
+#[serde(untagged, rename_all = "camelCase")]
+pub enum UnvalidatedVariable {
+    File(UnvalidatedFileVariable),
+    Datum(UnvalidatedDatumSchemaVariable),
+    Simple(SimpleValueVariable),
+    ValueSet(UnvalidatedValueSet),
+}
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnvalidatedValueSet {
     pub name: String,
-    #[serde(flatten)]
-    pub value: ValueOrDatumOrFile,
+    pub value_set: Vec<Value>,
+}
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnvalidatedFileVariable {
+    pub name: String,
+    pub file: String,
+}
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SimpleValueVariable {
+    pub name: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnvalidatedSpecification<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<T>>,
+}
+
+impl<T> Hash for UnvalidatedSpecification<T>
+where
+    T: PartialEq,
+    T: Display,
+    T: PartialOrd,
+    T: fmt::Debug,
+    T: Display,
+    T: Serialize,
+    T: Clone,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Default, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnvalidatedNumericSpecification<T: std::fmt::Display + Clone + PartialOrd> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<T>,
+}
+
+#[derive(Default, Serialize, Hash, Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnvalidatedStringSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+}
+
+#[derive(Default, Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnvalidatedDateSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub any_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modifier: Option<variable::Modifier>,
+}
+
+pub type UnvalidatedFloatSpecification = UnvalidatedNumericSpecification<f64>;
+pub type UnvalidatedIntegerSpecification = UnvalidatedNumericSpecification<i64>;
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields, untagged)]
+pub enum UnvalidatedValueOrDatumSchema {
+    Datum(UnvalidatedDatumSchemaVariable),
+    Values(Value),
+}
+
+impl Hash for UnvalidatedValueOrDatumSchema {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum UnvalidatedValuesOrSchema {
+    Schemas(UnvalidatedSpecification<Box<UnvalidatedDatumSchemaVariable>>),
+    Values(UnvalidatedSpecification<Vec<Value>>),
+    //I don't know if we advertise untagged schemas
+    //There are use cases but... its a stretch
+    UntaggedSchema(Box<UnvalidatedDatumSchemaVariable>),
+    UntaggedLiterals(Vec<Value>),
+}
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnvalidatedSequenceSpecification {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<UnvalidatedValuesOrSchema>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+}
+
+impl Hash for UnvalidatedSequenceSpecification {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        serde_json::to_string(self).unwrap().hash(state)
+    }
+}
+
+#[derive(Hash, Serialize, Debug, Clone, Deserialize, PartialEq)]
+#[serde(tag = "type", deny_unknown_fields)]
+pub enum UnvalidatedDatumSchemaVariable {
+    #[serde(alias = "Boolean", alias = "boolean", alias = "Bool", alias = "bool")]
+    Boolean(UnvalidatedSpecification<bool>),
+    #[serde(alias = "float")]
+    Float(UnvalidatedFloatSpecification),
+    #[serde(alias = "Integer", alias = "integer", alias = "Int", alias = "int")]
+    Integer(UnvalidatedIntegerSpecification),
+    #[serde(alias = "string")]
+    String(UnvalidatedStringSpecification),
+    #[serde(alias = "date")]
+    Date(UnvalidatedDateSpecification),
+    #[serde(
+        alias = "DateTime",
+        alias = "dateTime",
+        alias = "Datetime",
+        alias = "datetime"
+    )]
+    DateTime(UnvalidatedDateSpecification),
+    #[serde(alias = "name", alias = "Name")]
+    Name(UnvalidatedStringSpecification),
+    #[serde(alias = "email", alias = "Email")]
+    Email(UnvalidatedStringSpecification),
+    #[serde(alias = "list", alias = "List")]
+    List(UnvalidatedSequenceSpecification),
+    #[serde(alias = "object", alias = "Object")]
+    Object {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        //Supports not having to explicitly specify type for every object member
+        schema: Option<BTreeMap<String, UnvalidatedValueOrDatumSchema>>,
+    },
 }
 
 #[derive(Hash, Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -2744,6 +3359,375 @@ mod tests {
     use variable::Modifier;
 
     use super::*;
+    #[test]
+    fn unvalidated_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedSpecification<bool>>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            any_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            one_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_specification_disallow_value_and_none_of() {
+        let unvalidated = UnvalidatedSpecification::<bool> {
+            none_of: Some(vec![]),
+            value: Some(false),
+            ..Default::default()
+        };
+
+        let attempt: Result<Option<Specification<bool>>, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedFloatSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            any_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            one_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_numeric_specification_disallow_value_and_none_of() {
+        let unvalidated = UnvalidatedFloatSpecification {
+            none_of: Some(vec![]),
+            value: Some(12.0),
+            ..Default::default()
+        };
+
+        let attempt: Result<FloatSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_any_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            any_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            one_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "Cannot specify minLength, maxLength, or pattern alongside either of oneOf, anyOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_length_alongside_max() {
+        let unvalidated = UnvalidatedStringSpecification {
+            length: Some(12),
+            min_length: Some(24),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "length cannot be specified alongside minLength or maxLength",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedStringSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            any_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            one_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_string_specification_disallow_value_and_none_of() {
+        let unvalidated = UnvalidatedStringSpecification {
+            none_of: Some(vec![]),
+            value: Some("".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<StringSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_unknown_fields_detected() {
+        let json = json!({
+            "name" : "blah",
+            "madeup" : "yo"
+        });
+
+        assert!(serde_json::from_value::<UnvalidatedDateSpecification>(json).is_err());
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_any_of_and_one_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            any_of: Some(vec![]),
+            none_of: Some(vec![]),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_value_and_any_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            any_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_value_and_one_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            one_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(e) => assert_eq!(
+                "can only specify one of the following constraints: oneOf, anyOf, noneOf, or value",
+                e
+            ),
+            Ok(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn unvalidated_date_specification_disallow_value_and_none_of() {
+        let unvalidated = UnvalidatedDateSpecification {
+            none_of: Some(vec![]),
+            value: Some("2020-09-12".to_string()),
+            ..Default::default()
+        };
+
+        let attempt: Result<DateSpecification, String> = unvalidated.try_into();
+        match attempt {
+            Err(_) => assert!(true),
+            Ok(_) => assert!(false),
+        };
+    }
 
     #[test]
     fn specification_none_of_checker() {

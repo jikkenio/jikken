@@ -1,15 +1,12 @@
-use super::errors::GenericError;
-use super::test::template;
+use super::{errors::GenericError, test::template};
 use log::{error, info};
 
-use crate::test::file::NumericSpecification;
-use crate::test::file::ValueOrNumericSpecification;
-use crate::test::http;
-use crate::test::File;
-use std::error::Error;
-use std::io::Write;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use crate::test::{
+    file::{NumericSpecification, ValueOrNumericSpecification},
+    http, File,
+};
+use std::{error::Error, io::Write};
+use tokio::{fs, io::AsyncWriteExt};
 
 fn create_tags(tags: &[String]) -> Option<String> {
     if tags.is_empty() {
@@ -54,28 +51,26 @@ fn create_filename(path_string: &str, verb: &http::Verb) -> String {
 
 mod openapi_legacy {
     use super::*;
-    use crate::test;
-    use crate::test::file;
-    use crate::test::file::generate_value_from_schema;
-    use crate::test::file::DatumSchema;
-    use crate::test::file::FloatSpecification;
-    use crate::test::file::IntegerSpecification;
-    use crate::test::file::Specification;
-    use crate::test::file::StringSpecification;
-    use crate::test::file::UnvalidatedRequest;
-    use crate::test::file::UnvalidatedResponse;
-    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
-    use crate::test::file::UnvalidatedVariableNameOrValue;
-    use crate::test::file::ValueOrDatumSchema;
-    use openapiv3::IndexMap;
-    use openapiv3::OpenAPI;
-    use openapiv3::Parameter;
-    use openapiv3::Schema;
-    use openapiv3::VariantOrUnknownOrEmpty;
-    use openapiv3::{Operation, PathItem, RefOr, Responses, Server, VersionedOpenAPI};
-    use std::collections::hash_map::RandomState;
-    use std::collections::BTreeMap;
-    use std::io::BufReader;
+    use crate::{
+        test,
+        test::{
+            file,
+            file::{
+                generate_value_from_schema, DatumSchema, FloatSpecification, IntegerSpecification,
+                SimpleValueVariable, Specification, StringSpecification, UnvalidatedRequest,
+                UnvalidatedResponse, UnvalidatedVariableNameOrDatumSchema,
+                UnvalidatedVariableNameOrValue, ValueOrDatumSchema,
+            },
+        },
+    };
+    use openapiv3::{
+        IndexMap, OpenAPI, Operation, Parameter, PathItem, RefOr, Responses, Schema, Server,
+        VariantOrUnknownOrEmpty, VersionedOpenAPI,
+    };
+    use std::{
+        collections::{hash_map::RandomState, BTreeMap},
+        io::BufReader,
+    };
 
     fn create_headers(
         headers: &IndexMap<String, RefOr<openapiv3::Header>, RandomState>,
@@ -119,6 +114,7 @@ mod openapi_legacy {
                     });
                     UnvalidatedResponse {
                         status: create_status_code(status_code_pattern.as_str()),
+                        time: None,
                         headers: create_headers(&t.headers),
                         extract: None,
                         ignore: None,
@@ -343,11 +339,11 @@ mod openapi_legacy {
             .filter_map(|p_or_ref| {
                 p_or_ref
                     .resolve(spec)
-                    .map(|t| test::file::UnvalidatedVariable {
-                        name: t.name.clone(),
-                        value: test::file::ValueOrDatumOrFile::Value {
+                    .map(|t| {
+                        test::file::UnvalidatedVariable::Simple(SimpleValueVariable {
+                            name: t.name.clone(),
                             value: serde_json::Value::from("value".to_string()),
-                        },
+                        })
                     })
                     .ok()
             })
@@ -382,7 +378,6 @@ mod openapi_legacy {
         let response =
             create_response(&op.responses, spec).or(Some(UnvalidatedResponse::default()));
         let variables = create_variables(op, spec);
-
         if multistage || verb == test::http::Verb::Delete {
             Some(File {
                 name: op.summary.clone().or(default.name),
@@ -470,33 +465,21 @@ mod openapi_legacy {
 
 mod openapi_v31 {
     use super::*;
-    use crate::test;
-    use crate::test::file::DateSpecification;
-    use crate::test::file::DateTimeSpecification;
-    use crate::test::file::DatumSchema;
-    use crate::test::file::EmailSpecification;
-    use crate::test::file::FloatSpecification;
-    use crate::test::file::IntegerSpecification;
-    use crate::test::file::Specification;
-    use crate::test::file::StringSpecification;
-    use crate::test::file::UnvalidatedRequest;
-    use crate::test::file::UnvalidatedResponse;
-    use crate::test::file::UnvalidatedVariable;
-    use crate::test::file::UnvalidatedVariableNameOrComponent;
-    use crate::test::file::UnvalidatedVariableNameOrDatumSchema;
-    use crate::test::file::ValueOrDatumOrFile;
-    use crate::test::file::ValueOrDatumSchema;
-    use crate::test::file::VariableName;
-    use oas3::spec::Header;
-    use oas3::spec::ObjectOrReference;
-    use oas3::spec::Operation;
-    use oas3::spec::PathItem;
-    use oas3::spec::Response;
-    use oas3::spec::Server;
-    use oas3::spec::Spec;
+    use crate::{
+        test,
+        test::file::{
+            DateSpecification, DateTimeSpecification, DatumSchema, EmailSpecification,
+            FloatSpecification, IntegerSpecification, SimpleValueVariable, Specification,
+            StringSpecification, UnvalidatedDateSpecification, UnvalidatedDatumSchemaVariable,
+            UnvalidatedFloatSpecification, UnvalidatedIntegerSpecification, UnvalidatedRequest,
+            UnvalidatedResponse, UnvalidatedStringSpecification, UnvalidatedValueOrDatumSchema,
+            UnvalidatedValuesOrSchema, UnvalidatedVariable, UnvalidatedVariableNameOrComponent,
+            UnvalidatedVariableNameOrDatumSchema, ValueOrDatumSchema, VariableName,
+        },
+    };
+    use oas3::spec::{Header, ObjectOrReference, Operation, PathItem, Response, Server, Spec};
     use std::collections::BTreeMap;
-    use test::file::SequenceSpecification;
-    use test::file::ValuesOrSchema;
+    use test::file::{SequenceSpecification, ValuesOrSchema};
 
     pub fn get_test_paths(
         root_servers: &[Server],
@@ -547,6 +530,7 @@ mod openapi_v31 {
             .map(|(status_code_pattern, obj_or_ref)| {
                 obj_or_ref.resolve(spec).ok().map(|t| UnvalidatedResponse {
                     status: create_status_code(status_code_pattern),
+                    time: None,
                     body: None,
                     headers: create_headers(&t.headers),
                     extract: None,
@@ -665,6 +649,121 @@ mod openapi_v31 {
         })
     }
 
+    fn schema_to_unvalidated_datum(
+        schema: oas3::Schema,
+        spec: &Spec,
+        name: Option<String>,
+    ) -> Option<UnvalidatedDatumSchemaVariable> {
+        schema.schema_type.map(|t| match t {
+            oas3::spec::SchemaType::Array => {
+                UnvalidatedDatumSchemaVariable::List(test::file::UnvalidatedSequenceSpecification {
+                    name: name,
+                    schema: schema.items.and_then(|items| {
+                        items.resolve(spec).ok().and_then(|s| {
+                            schema_to_unvalidated_datum(s, spec, None)
+                                .map(|ds| UnvalidatedValuesOrSchema::UntaggedSchema(Box::from(ds)))
+                        })
+                    }),
+                    length: None,
+                    max_length: schema.max_items.map(|n| n as i64),
+                    min_length: schema.min_items.map(|n| n as i64),
+                })
+            }
+            oas3::spec::SchemaType::Boolean => {
+                UnvalidatedDatumSchemaVariable::Boolean(test::file::UnvalidatedSpecification {
+                    name,
+                    value: None,
+                    any_of: None,
+                    one_of: None,
+                    none_of: None,
+                })
+            }
+            oas3::spec::SchemaType::Integer => {
+                UnvalidatedDatumSchemaVariable::Integer(UnvalidatedIntegerSpecification {
+                    max: schema.maximum.and_then(|n| {
+                        n.as_i64()
+                            .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64)
+                    }),
+                    min: schema.minimum.and_then(|n| {
+                        n.as_i64()
+                            .map(|n| n + schema.exclusive_minimum.unwrap_or_default() as i64)
+                    }),
+                    name,
+                    ..Default::default()
+                })
+            }
+            oas3::spec::SchemaType::Number => {
+                UnvalidatedDatumSchemaVariable::Float(UnvalidatedFloatSpecification {
+                    max: schema.maximum.and_then(|n| {
+                        n.as_f64()
+                            .map(|n| n + schema.exclusive_maximum.unwrap_or_default() as i64 as f64)
+                    }),
+                    min: schema.minimum.and_then(|n| {
+                        n.as_f64()
+                            .map(|n| n + schema.exclusive_minimum.unwrap_or_default() as i64 as f64)
+                    }),
+                    name,
+                    ..Default::default()
+                })
+            }
+            oas3::spec::SchemaType::Object => UnvalidatedDatumSchemaVariable::Object {
+                name,
+                schema: Some(
+                    schema
+                        .properties
+                        .iter()
+                        .filter_map(|(k, maybe_schema)| {
+                            maybe_schema
+                                .resolve(spec)
+                                .ok()
+                                .map(|v| {
+                                    (
+                                        k.clone(),
+                                        schema_to_unvalidated_datum(v, spec, None)
+                                            .map(UnvalidatedValueOrDatumSchema::Datum),
+                                    )
+                                })
+                                .filter(|(_, ds)| ds.is_some())
+                                .map(|(n, ds)| (n, ds.unwrap()))
+                        })
+                        .collect::<BTreeMap<String, UnvalidatedValueOrDatumSchema>>(),
+                ),
+            },
+            oas3::spec::SchemaType::String => {
+                let string_spec = UnvalidatedStringSpecification {
+                    pattern: schema.pattern,
+                    length: Option::None,
+                    max_length: schema.max_length.map(|n| n as i64),
+                    min_length: schema.min_length.map(|n| n as i64),
+                    ..Default::default()
+                };
+
+                match schema.format.unwrap_or_default().as_str() {
+                    "date" => UnvalidatedDatumSchemaVariable::Date(UnvalidatedDateSpecification {
+                        name,
+                        ..Default::default()
+                    }),
+                    "date-time" => {
+                        UnvalidatedDatumSchemaVariable::DateTime(UnvalidatedDateSpecification {
+                            name,
+                            ..Default::default()
+                        })
+                    }
+                    "email" => {
+                        UnvalidatedDatumSchemaVariable::Email(UnvalidatedStringSpecification {
+                            name,
+                            ..string_spec
+                        })
+                    }
+                    _ => UnvalidatedDatumSchemaVariable::String(UnvalidatedStringSpecification {
+                        name,
+                        ..string_spec
+                    }),
+                }
+            }
+        })
+    }
+
     fn create_request(
         url: &str,
         verb: test::http::Verb,
@@ -698,10 +797,8 @@ mod openapi_v31 {
             body.resolve(spec).ok().and_then(|b| {
                 b.content.get("application/json").and_then(|c| {
                     c.schema(spec).ok().and_then(|s| {
-                        schema_to_datum(s, spec).map(|s| UnvalidatedVariable {
-                            name: "body".to_string(),
-                            value: ValueOrDatumOrFile::Schema(s),
-                        })
+                        schema_to_unvalidated_datum(s, spec, Some("body".to_string()))
+                            .map(UnvalidatedVariable::Datum)
                     })
                 })
             })
@@ -735,15 +832,12 @@ mod openapi_v31 {
         op.parameters
             .iter()
             .map(|p_or_ref| {
-                p_or_ref
-                    .resolve(spec)
-                    .ok()
-                    .map(|t| test::file::UnvalidatedVariable {
+                p_or_ref.resolve(spec).ok().map(|t| {
+                    test::file::UnvalidatedVariable::Simple(SimpleValueVariable {
                         name: t.name.clone(),
-                        value: test::file::ValueOrDatumOrFile::Value {
-                            value: serde_json::Value::from("".to_string()),
-                        },
+                        value: serde_json::Value::from("".to_string()),
                     })
+                })
             })
             .filter(Option::is_some)
             .collect::<Option<Vec<test::file::UnvalidatedVariable>>>()
@@ -772,7 +866,6 @@ mod openapi_v31 {
         //and create jikken variables for each
         let resolved_path = path.replace('{', "${").to_string();
         let mut variables = create_variables(op, spec);
-
         let (request, request_var) = create_request(resolved_path.as_str(), verb, op, spec);
         if let Some(v) = request_var {
             variables.push(v)

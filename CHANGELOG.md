@@ -1,5 +1,16 @@
 # Next (Version determined when release is cut)
 
+# 0.8.1
+
+# New Features
+
+- Tests can now provide response time constraints to indicate a test failure.
+- New `bypass-cert-verification` configuration option to bypass ssl cert verification.
+
+# Changes
+
+- We've migrated to Hyper 1.0 and to Rustls.
+
 # 0.8.0
 
 Jikken now supports secrets, body schemas, and data generation to allow complex schema validation and fuzz testing.

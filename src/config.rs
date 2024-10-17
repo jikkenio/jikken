@@ -2,9 +2,7 @@ use crate::test::{self, SecretValue};
 use chrono::Local;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::env;
-use std::path::Path;
+use std::{collections::BTreeMap, env, path::Path};
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +17,7 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub continue_on_failure: bool,
+    pub bypass_cert_verification: bool,
     pub project: Option<String>,
     pub environment: Option<String>,
     #[serde(skip_serializing)]
@@ -39,6 +38,7 @@ struct File {
 #[serde(rename_all = "camelCase")]
 struct FileSettings {
     pub continue_on_failure: Option<bool>,
+    pub bypass_cert_verification: Option<bool>,
     pub api_key: Option<String>,
     pub dev_mode: Option<bool>,
     pub project: Option<String>,
@@ -98,6 +98,7 @@ impl Default for Config {
         Config {
             settings: Settings {
                 continue_on_failure: false,
+                bypass_cert_verification: false,
                 api_key: None,
                 dev_mode: None,
                 project: None,
@@ -168,6 +169,10 @@ fn load_config_from_environment_variables_as_file() -> File {
         .ok()
         .and_then(|cfg| cfg.parse::<bool>().ok());
 
+    let envvar_bcv = env::var("JIKKEN_BYPASS_CERT_VERIFICATION")
+        .ok()
+        .and_then(|cfg| cfg.parse::<bool>().ok());
+
     let envvar_apikey = env::var("JIKKEN_API_KEY").ok();
     let envvar_devmode = env::var("JIKKEN_DEV_MODE")
         .ok()
@@ -181,6 +186,7 @@ fn load_config_from_environment_variables_as_file() -> File {
             api_key: envvar_apikey,
             dev_mode: envvar_devmode,
             continue_on_failure: envvar_cof,
+            bypass_cert_verification: envvar_bcv,
             project: envvar_project,
             environment: envvar_env,
         }),
@@ -207,6 +213,9 @@ fn apply_config_file(config: Config, file_opt: Option<File>) -> Config {
                     continue_on_failure: settings
                         .continue_on_failure
                         .unwrap_or(config.settings.continue_on_failure),
+                    bypass_cert_verification: settings
+                        .bypass_cert_verification
+                        .unwrap_or(config.settings.bypass_cert_verification),
                     api_key: settings.api_key.or(config.settings.api_key),
                     dev_mode: settings.dev_mode.or(config.settings.dev_mode),
                     project: settings.project.or(config.settings.project),
@@ -251,6 +260,12 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
                             .settings
                             .as_ref()
                             .and_then(|s| s.continue_on_failure)),
+                        bypass_cert_verification: settings.bypass_cert_verification.or(
+                            existing_file
+                                .settings
+                                .as_ref()
+                                .and_then(|s| s.bypass_cert_verification),
+                        ),
                         api_key: settings.api_key.or(existing_file
                             .settings
                             .as_ref()
@@ -284,7 +299,8 @@ fn combine_config_files(lhs: Option<File>, rhs: Option<File>) -> Option<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use {std::fs::OpenOptions, std::io::Write, tempfile::tempdir};
+    use std::{fs::OpenOptions, io::Write};
+    use tempfile::tempdir;
 
     #[test]
     fn no_overrides_yields_default_config() {
@@ -327,6 +343,7 @@ mod tests {
             Config {
                 settings: Settings {
                     continue_on_failure: true,
+                    bypass_cert_verification: false,
                     api_key: None,
                     dev_mode: None,
                     project: None,
@@ -411,6 +428,7 @@ mod tests {
             Config {
                 settings: Settings {
                     continue_on_failure: false,
+                    bypass_cert_verification: false,
                     api_key: Some(String::from("key")),
                     dev_mode: Some(true),
                     project: Some(String::from("my_proj")),

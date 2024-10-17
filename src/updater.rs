@@ -1,13 +1,17 @@
-use hyper::{body, Body, Client, Request};
-use hyper_tls::HttpsConnector;
+use bytes::{Bytes, BytesMut};
+use http_body_util::{BodyExt, Empty};
+use hyper::Request;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, error, info, warn};
 use regex::Regex;
 use remove_dir_all::remove_dir_all;
 use serde::Deserialize;
-use std::cmp::Ordering;
-use std::env;
-use std::error::Error;
-use std::io::{stdout, Cursor, Write};
+use std::{
+    cmp::Ordering,
+    env,
+    error::Error,
+    io::{stdout, Cursor, Write},
+};
 use tokio::io::AsyncWriteExt;
 
 const UPDATE_URL: &str = "https://api.jikken.io/v1/latest_version";
@@ -125,19 +129,28 @@ fn has_newer_version(new_version: Version) -> bool {
 }
 
 pub async fn get_latest_version() -> Result<Option<ReleaseResponse>, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder().build::<_, Body>(HttpsConnector::new());
+    let client: Client<_, Empty<Bytes>> =
+        Client::builder(TokioExecutor::new()).build(crate::telemetry::get_connector());
     let req = Request::builder()
         .uri(format!(
             "{}?channel=stable&platform={}",
             UPDATE_URL,
             env::consts::OS
         ))
-        .body(Body::empty())?;
+        .body(Empty::new())?;
 
     let resp = client.request(req).await?;
-    let (_, body) = resp.into_parts();
-    let response_bytes = body::to_bytes(body).await?;
-    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&response_bytes) {
+    let (_, mut body) = resp.into_parts();
+
+    let mut body_bytes = BytesMut::new();
+
+    while let Some(next) = body.frame().await {
+        let frame = next.unwrap();
+        if let Some(chunk) = frame.data_ref() {
+            body_bytes.extend(chunk);
+        }
+    }
+    if let Ok(r) = serde_json::from_slice::<ReleaseResponse>(&body_bytes) {
         if has_newer_version(Version(r.version.clone())) {
             return Ok(Some(r));
         }

@@ -1,8 +1,8 @@
-name: Github Actions Test
+name: Github Actions Build & Test
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "main", "feature/**" ]
 env:
   CARGO_TERM_COLOR: always
 jobs:

@@ -1,10 +1,14 @@
-use crate::test;
-use crate::test::file::ValueOrNumericSpecification;
-use crate::test::{file, http, validation};
+use crate::{
+    test,
+    test::{
+        file,
+        file::{NumericSpecification, ValueOrNumericSpecification},
+        http, validation,
+    },
+};
 use log::trace;
 use serde::{Deserialize, Serialize};
-use std::cell::Cell;
-use std::collections::HashSet;
+use std::{cell::Cell, collections::HashSet};
 
 use super::file::BodyOrSchema;
 use crate::test::Variable;
@@ -249,6 +253,7 @@ impl ResponseExtraction {
 #[serde(deny_unknown_fields)]
 pub struct ResponseDescriptor {
     pub status: Option<ValueOrNumericSpecification<u16>>,
+    pub response_time: Option<NumericSpecification<u32>>,
     pub headers: Vec<http::Header>,
     pub body: Option<RequestBody>,
     pub ignore: Vec<String>,
@@ -275,6 +280,16 @@ impl ResponseDescriptor {
                         .collect(),
                     None => Vec::new(),
                 };
+
+                //Value in this case means max. So we do a translation
+                let validated_response_time =
+                    res.time.map(|value_or_numeric| match value_or_numeric {
+                        ValueOrNumericSpecification::Value(v) => NumericSpecification {
+                            max: Some(v),
+                            ..Default::default()
+                        },
+                        ValueOrNumericSpecification::Schema(s) => s,
+                    });
 
                 let validated_ignore = res.ignore.unwrap_or_default();
                 let validated_extraction: Vec<ResponseExtraction> = res.extract.unwrap_or_default();
@@ -326,6 +341,7 @@ impl ResponseDescriptor {
 
                 Ok(Some(ResponseDescriptor {
                     status: res.status,
+                    response_time: validated_response_time,
                     headers: validated_headers,
                     body: response_body,
                     ignore: validated_ignore,
