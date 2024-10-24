@@ -1,8 +1,9 @@
-name: Build, Compile, and Release Jikken
+name: Build, Compile, and Release Jikken (Development)
 
 on:
   push:
-    branches: [ "develop" ]
+    branches:
+      - develop
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,21 +12,21 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@main
-      - name: Compile-Linux-musl
-        id: compile-linux-musl
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile Linux-musl
         uses: gmiam/rust-musl-action@master
         with:
           args: cargo build --target x86_64-unknown-linux-musl --release
-        
-      - name: Compile-linux
-        id: compile-linux
+
+      - name: Compile Linux
         run: |
           tar -czf jikken-x86_64-unknown-linux-musl.tar.gz -C target/x86_64-unknown-linux-musl/release/ jk
           mkdir -p files-linux && cp "jikken-x86_64-unknown-linux-musl.tar.gz" files-linux/
 
       - name: Attach compressed file to release
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: files-linux
           path: files-linux
@@ -33,20 +34,22 @@ jobs:
   build-mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - name: Compile-macOS
-        id: compile-mac
+
+      - name: Compile MacOS
         run: |
           cargo build --release
           tar -czf jikken-x86_64-apple-darwin.tar.gz -C target/release jk
           mkdir -p files-mac && cp "jikken-x86_64-apple-darwin.tar.gz" files-mac/
 
       - name: Attach compressed file to release
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: files-mac
           path: files-mac
@@ -54,14 +57,15 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
 
-      - name: Compile-Windows
-        id: compile-windows
+      - name: Compile Windows
         run: |
           cargo build --release
 
@@ -73,36 +77,40 @@ jobs:
           Move-Item target/release/jk.exe files-windows
 
       - name: Attach compressed file to release
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: files-windows
           path: files-windows
 
   release:
-    needs: [ build-linux, build-mac, build-windows ]
+    needs:
+      - build-linux
+      - build-mac
+      - build-windows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@main
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@main
-        name: Download Linux
+      - name: Download Linux files
+        uses: actions/download-artifact@v4
         with:
           name: files-linux
 
-      - uses: actions/download-artifact@main
-        name: Download Mac
+      - name: Download Mac files
+        uses: actions/download-artifact@v4
         with:
           name: files-mac
 
-      - uses: actions/download-artifact@main
-        name: Download Windows
+      - name: Download Windows files
+        uses: actions/download-artifact@v4
         with:
           name: files-windows
 
-      - name: Get Release Ver
+      - name: Get release version
         run: echo "RELEASE_VER=$(grep -Eo '[0-9]+.[0-9]+.[0-9]+' CHANGELOG.md | head -n 1)" >> "$GITHUB_ENV"
 
-      - name: Get SHA256 Values
+      - name: Get SHA256 values
         run: |
           mkdir jk_linux jk_mac jk_windows
           sha256sum jikken-x86_64-unknown-linux-musl.tar.gz | awk '{print $1}' > linux_zip_hash.txt
@@ -124,7 +132,7 @@ jobs:
           mv jikken-x86_64-unknown-linux-musl.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz"
           mv jikken-x86_64-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz"
 
-      - name: Release Type
+      - name: Get release type
         run: |
           if [[ ${{ github.ref }} == refs/heads/main ]]; then
             echo "PRERELEASE=false" >> "$GITHUB_ENV"
@@ -132,8 +140,8 @@ jobs:
             echo "PRERELEASE=true" >> "$GITHUB_ENV"
           fi
 
-      - uses: louis-jikkenio/delete-release-action@debug
-        name: Delete Existing Pre-Released Releases
+      - name: Delete existing pre-releases
+        uses: louis-jikkenio/delete-release-action@debug
         with:
           pre-release-drop: true
           pre-release-keep-count: -1
@@ -141,14 +149,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Release
+      - name: Create release
         id: create_release
-        uses: actions/create-release@main
+        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Access token for creating releases
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Access token for creating releases
         with:
-          tag_name: v${{ env.RELEASE_VER }}-develop  # Replace with your desired version tag
-          release_name: Release v${{ env.RELEASE_VER }}-develop  # Replace with your desired release name
+          tag_name: v${{ env.RELEASE_VER }}-develop # Replace with your desired version tag
+          release_name: Release v${{ env.RELEASE_VER }}-develop # Replace with your desired release name
           body: |
             **Release Notes**
             Docs can be found at: [jikken.io](https://www.jikken.io/docs/)
@@ -167,9 +175,9 @@ jobs:
           draft: false
           prerelease: ${{ env.PRERELEASE }}
 
-      - name: Upload Artifacts Linux Zip
+      - name: Upload Linux asset
         uses: actions/upload-release-asset@v1
-        env: 
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -177,9 +185,9 @@ jobs:
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz
           asset_content_type: zip
 
-      - name: Upload Artifacts MacOS Zip
+      - name: Upload MacOS asset
         uses: actions/upload-release-asset@v1
-        env: 
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -187,25 +195,25 @@ jobs:
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz
           asset_content_type: zip
 
-      - name: Upload Artifacts Windows Zip
+      - name: Upload Windows asset
         uses: actions/upload-release-asset@v1
-        env: 
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip
-          asset_content_type: zip    
+          asset_content_type: zip
 
-          #  - name: Upload Artifacts Windows exe
-          #    uses: actions/upload-release-asset@v1
-          #    env: 
-          #      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          #    with:
-          #      upload_url: ${{ steps.create_release.outputs.upload_url }}
-          #      asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
-          #      asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
-          #      asset_content_type: application     
+      #  - name: Upload Artifacts Windows exe
+      #    uses: actions/upload-release-asset@v1
+      #    env:
+      #      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #    with:
+      #      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #      asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
+      #      asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe
+      #      asset_content_type: application
 
       # - name: Setup upterm session
       #   uses: lhotari/action-upterm@v1
