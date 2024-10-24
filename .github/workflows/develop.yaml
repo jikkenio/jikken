@@ -205,7 +205,7 @@ jobs:
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip
           asset_content_type: zip
 
-      #  - name: Upload Artifacts Windows exe
+      #  - name: Upload Windows .exe asset
       #    uses: actions/upload-release-asset@v1
       #    env:
       #      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
