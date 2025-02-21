@@ -54,13 +54,20 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) \
           cargo build --release --target=aarch64-apple-darwin
 
+          mkdir -p target/universal-apple-darwin/release
           lipo -create \
-            -output target/jk \
+            -output target/universal-apple-darwin/release/jk \
             target/aarch64-apple-darwin/release/jk \
             target/x86_64-apple-darwin/release/jk
 
-          tar -czf jikken-universal-apple-darwin.tar.gz -C target/ jk
-          mkdir -p files-mac && cp "jikken-universal-apple-darwin.tar.gz" files-mac/
+          tar -czf jikken-x86_64-apple-darwin.tar.gz -C target/x86_64-apple-darwin/release jk
+          tar -czf jikken-aarch64-apple-darwin.tar.gz -C target/aarch64-apple-darwin/release jk
+          tar -czf jikken-universal-apple-darwin.tar.gz -C target/universal-apple-darwin/release jk
+
+          mkdir -p files-mac
+          cp jikken-x86_64-apple-darwin.tar.gz files-mac/
+          cp jikken-aarch64-apple-darwin.tar.gz files-mac/
+          cp jikken-universal-apple-darwin.tar.gz files-mac/
 
       - name: Attach compressed file to release
         uses: actions/upload-artifact@v4
@@ -126,25 +133,40 @@ jobs:
 
       - name: Get SHA256 values
         run: |
-          mkdir jk_linux jk_mac jk_windows
+          mkdir jk_linux jk_mac jk_mac_x86 jk_mac_arm jk_windows
           sha256sum jikken-x86_64-unknown-linux-musl.tar.gz | awk '{print $1}' > linux_zip_hash.txt
           sha256sum jikken-universal-apple-darwin.tar.gz | awk '{print $1}' > mac_zip_hash.txt
+          sha256sum jikken-x86_64-apple-darwin.tar.gz | awk '{print $1}' > mac_x86_zip_hash.txt
+          sha256sum jikken-aarch64-apple-darwin.tar.gz | awk '{print $1}' > mac_arm_zip_hash.txt
           sha256sum jk.zip | awk '{print $1}' > windows_zip_hash.txt
+
           tar -xf jikken-x86_64-unknown-linux-musl.tar.gz -C jk_linux
           tar -xf jikken-universal-apple-darwin.tar.gz -C jk_mac
+          tar -xf jikken-x86_64-apple-darwin.tar.gz -C jk_mac_x86
+          tar -xf jikken-aarch64-apple-darwin.tar.gz -C jk_mac_arm
           sha256sum jk_linux/jk | awk '{print $1}' > linux_exe_hash.txt
           sha256sum jk_mac/jk | awk '{print $1}' > mac_exe_hash.txt
+          sha256sum jk_mac_x86/jk | awk '{print $1}' > mac_x86_exe_hash.txt
+          sha256sum jk_mac_arm/jk | awk '{print $1}' > mac_arm_exe_hash.txt
           sha256sum jk.exe | awk '{print $1}' > windows_exe_hash.txt
+
           echo "LINUX_EXE_HASH=$(cat linux_exe_hash.txt)" >> "$GITHUB_ENV" 
           echo "LINUX_ZIP_HASH=$(cat linux_zip_hash.txt)" >> "$GITHUB_ENV"
           echo "MAC_EXE_HASH=$(cat mac_exe_hash.txt)" >> "$GITHUB_ENV"      
           echo "MAC_ZIP_HASH=$(cat mac_zip_hash.txt)" >> "$GITHUB_ENV"
+          echo "MAC_X86_EXE_HASH=$(cat mac_x86_exe_hash.txt)" >> "$GITHUB_ENV"
+          echo "MAC_X86_ZIP_HASH=$(cat mac_x86_zip_hash.txt)" >> "$GITHUB_ENV"
+          echo "MAC_ARM_EXE_HASH=$(cat mac_arm_exe_hash.txt)" >> "$GITHUB_ENV"
+          echo "MAC_ARM_ZIP_HASH=$(cat mac_arm_zip_hash.txt)" >> "$GITHUB_ENV"
           echo "WINDOWS_EXE_HASH=$(cat windows_exe_hash.txt)" >> "$GITHUB_ENV"      
           echo "WINDOWS_ZIP_HASH=$(cat windows_zip_hash.txt)" >> "$GITHUB_ENV"
+
           # mv jk.exe "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.exe"
           mv jk.zip "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip"
           mv jikken-x86_64-unknown-linux-musl.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz"
           mv jikken-universal-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-universal-apple-darwin.tar.gz"
+          mv jikken-x86_64-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz"
+          mv jikken-aarch64-apple-darwin.tar.gz "jikken-v${{ env.RELEASE_VER }}-develop-aarch64-apple-darwin.tar.gz"
 
       - name: Get release type
         run: |
@@ -179,12 +201,18 @@ jobs:
             SHA-256 Binary Hashes
             - Windows (jk.exe): ${{ env.WINDOWS_EXE_HASH }}
             - Linux (jk): ${{ env.LINUX_EXE_HASH }}
-            - Mac (jk): ${{ env.MAC_EXE_HASH }}
+            - Mac (jk):
+              - Universal: ${{ env.MAC_EXE_HASH }}
+              - x86: ${{ env.MAC_X86_EXE_HASH }}
+              - ARM: ${{ env.MAC_ARM_EXE_HASH }}
 
-            SHA-256 Binary Hashes of compressed files.              
-            - Windows (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip) ${{ env.WINDOWS_ZIP_HASH }}
-            - Linux (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz) ${{ env.LINUX_ZIP_HASH }}
-            - Mac (jikken-v${{ env.RELEASE_VER }}-develop-universal-apple-darwin.tar.gz) ${{ env.MAC_ZIP_HASH }}
+            SHA-256 Binary Hashes (compressed)
+            - Windows (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-windows.zip): ${{ env.WINDOWS_ZIP_HASH }}
+            - Linux (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz): ${{ env.LINUX_ZIP_HASH }}
+            - Mac
+              - Universal (jikken-v${{ env.RELEASE_VER }}-develop-universal-apple-darwin.tar.gz): ${{ env.MAC_ZIP_HASH }}
+              - x86 (jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz): ${{ env.MAC_X86_ZIP_HASH }}
+              - ARM (jikken-v${{ env.RELEASE_VER }}-develop-aarch64-apple-darwin.tar.gz): ${{ env.MAC_ARM_ZIP_HASH }}
 
           draft: false
           prerelease: ${{ env.PRERELEASE }}
@@ -199,7 +227,7 @@ jobs:
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-unknown-linux-musl.tar.gz
           asset_content_type: zip
 
-      - name: Upload MacOS asset
+      - name: Upload MacOS asset (universal)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -207,6 +235,26 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-universal-apple-darwin.tar.gz
           asset_name: jikken-v${{ env.RELEASE_VER }}-develop-universal-apple-darwin.tar.gz
+          asset_content_type: zip
+
+      - name: Upload MacOS asset (x86)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-x86_64-apple-darwin.tar.gz
+          asset_content_type: zip
+
+      - name: Upload MacOS asset (ARM)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./jikken-v${{ env.RELEASE_VER }}-develop-aarch64-apple-darwin.tar.gz
+          asset_name: jikken-v${{ env.RELEASE_VER }}-develop-aarch64-apple-darwin.tar.gz
           asset_content_type: zip
 
       - name: Upload Windows asset
