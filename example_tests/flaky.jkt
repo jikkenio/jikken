@@ -7,6 +7,6 @@ request:
   url: https://api.jikken.io/v2/fix_me
   headers:
   - header: Authorization
-    value: ${token}
+    value: Bearer ${token}
 response:
   status: 200

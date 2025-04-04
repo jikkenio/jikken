@@ -6,7 +6,7 @@ request:
   url: https://api.jikken.io/api/v2/examples/status
   headers:
   - header: Authorization
-    value: ${token}
+    value: Bearer ${token}
 response:
   status: 200
   time: 500
