@@ -1,5 +1,12 @@
 # Next (Version determined when release is cut)
 
+# 0.8.2
+
+# Changes
+
+- Updated release assets for MacOS to offer a universal bundle (supporting both architectures), as well as individual binaries for Intel (x86) and Apple Silicon (ARM) hardware.
+- Updated Example Tests to properly prefix auth tokens with "Bearer".
+
 # 0.8.1
 
 # New Features
