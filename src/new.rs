@@ -1,9 +1,10 @@
-use super::{errors::GenericError, test::template};
+use jikken_core::{errors::GenericError, test::template};
 use log::{error, info};
 
-use crate::test::{
+use jikken_core::test::{
+    File,
     file::{NumericSpecification, ValueOrNumericSpecification},
-    http, File,
+    http,
 };
 use std::{error::Error, io::Write};
 use tokio::{fs, io::AsyncWriteExt};
@@ -51,15 +52,15 @@ fn create_filename(path_string: &str, verb: &http::Verb) -> String {
 
 mod openapi_legacy {
     use super::*;
-    use crate::{
+    use jikken_core::{
         test,
         test::{
             file,
             file::{
-                generate_value_from_schema, DatumSchema, FloatSpecification, IntegerSpecification,
-                SimpleValueVariable, Specification, StringSpecification, UnvalidatedRequest,
-                UnvalidatedResponse, UnvalidatedVariableNameOrDatumSchema,
-                UnvalidatedVariableNameOrValue, ValueOrDatumSchema,
+                DatumSchema, FloatSpecification, IntegerSpecification, SimpleValueVariable,
+                Specification, StringSpecification, UnvalidatedRequest, UnvalidatedResponse,
+                UnvalidatedVariableNameOrDatumSchema, UnvalidatedVariableNameOrValue,
+                ValueOrDatumSchema, generate_value_from_schema,
             },
         },
     };
@@ -68,7 +69,7 @@ mod openapi_legacy {
         VariantOrUnknownOrEmpty, VersionedOpenAPI,
     };
     use std::{
-        collections::{hash_map::RandomState, BTreeMap},
+        collections::{BTreeMap, hash_map::RandomState},
         io::BufReader,
     };
 
@@ -84,11 +85,7 @@ mod openapi_legacy {
             })
             .collect();
 
-        if !ret.is_empty() {
-            Some(ret)
-        } else {
-            None
-        }
+        if !ret.is_empty() { Some(ret) } else { None }
     }
 
     fn create_response(responses: &Responses, spec: &OpenAPI) -> Option<UnvalidatedResponse> {
@@ -349,11 +346,7 @@ mod openapi_legacy {
             })
             .collect::<Vec<file::UnvalidatedVariable>>();
 
-        if ret.is_empty() {
-            None
-        } else {
-            Some(ret)
-        }
+        if ret.is_empty() { None } else { Some(ret) }
     }
 
     fn create_test(
@@ -465,7 +458,8 @@ mod openapi_legacy {
 
 mod openapi_v31 {
     use super::*;
-    use crate::{
+    use jikken_core::test::file::{SequenceSpecification, ValuesOrSchema};
+    use jikken_core::{
         test,
         test::file::{
             DateSpecification, DateTimeSpecification, DatumSchema, EmailSpecification,
@@ -479,7 +473,6 @@ mod openapi_v31 {
     };
     use oas3::spec::{Header, ObjectOrReference, Operation, PathItem, Response, Server, Spec};
     use std::collections::BTreeMap;
-    use test::file::{SequenceSpecification, ValuesOrSchema};
 
     pub fn get_test_paths(
         root_servers: &[Server],
@@ -513,11 +506,7 @@ mod openapi_v31 {
             })
             .collect();
 
-        if !ret.is_empty() {
-            Some(ret)
-        } else {
-            None
-        }
+        if !ret.is_empty() { Some(ret) } else { None }
     }
 
     fn create_response(
@@ -1068,7 +1057,10 @@ pub async fn create_test_template(
                 };
 
                 if std::path::Path::new(&filename).exists() {
-                    error!("`{}` already exists. Please pick a new name/location or delete the existing file.", filename);
+                    error!(
+                        "`{}` already exists. Please pick a new name/location or delete the existing file.",
+                        filename
+                    );
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::AlreadyExists,
                         "the output file already exists",
@@ -1093,7 +1085,7 @@ pub async fn create_test_template(
 mod test {
     use super::*;
     //use crate::test::file::Specification;
-    use crate::test::file::ValueOrNumericSpecification;
+    use jikken_core::test::file::ValueOrNumericSpecification;
 
     #[test]
     fn create_status_code_number_ok() {

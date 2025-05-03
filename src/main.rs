@@ -1,25 +1,17 @@
-mod config;
-mod errors;
-mod executor;
-mod json;
-mod logger;
-mod machine;
 mod new;
-mod telemetry;
-mod test;
 mod updater;
-mod validated;
 
 use clap::{Parser, Subcommand};
-use glob::{glob_with, MatchOptions};
-use log::{debug, error, info, warn, Level, LevelFilter};
-use logger::SimpleLogger;
+use glob::{MatchOptions, glob_with};
+use jikken_core::logger::SimpleLogger;
+use jikken_core::telemetry::PlatformIdFailure;
+use jikken_core::{TagMode, config, executor, telemetry};
+use log::{Level, LevelFilter, debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     path::{Path, PathBuf},
 };
-use telemetry::PlatformIdFailure;
 use tokio::{fs, io::AsyncWriteExt};
 use ulid::Ulid;
 
@@ -33,11 +25,6 @@ pub enum ExecutionMode {
     List,
     Format,
     Validate(bool),
-}
-
-pub enum TagMode {
-    AND,
-    OR,
 }
 
 #[derive(Parser, Serialize, Deserialize)]
@@ -389,7 +376,7 @@ async fn get_files(
     Ok(results)
 }
 
-fn print_test_info(mut tests: Vec<test::Definition>) {
+fn print_test_info(mut tests: Vec<jikken_core::test::Definition>) {
     let mut path_column = vec!["PATH".to_string()];
     let mut name_column = vec!["TEST NAME".to_string()];
     let mut tags_column = vec!["TAGS".to_string()];
@@ -451,7 +438,9 @@ async fn run_tests(
     let environment = environment.or(config.clone().settings.environment);
 
     if config.settings.bypass_cert_verification {
-        warn!("WARNING: SSL certificate verification is disabled.\nIf this is not intentional please adjust your config settings.\nFor more information please check our docs: https://www.jikken.io/docs/configuration/");
+        warn!(
+            "WARNING: SSL certificate verification is disabled.\nIf this is not intentional please adjust your config settings.\nFor more information please check our docs: https://www.jikken.io/docs/configuration/"
+        );
         log::logger().flush();
     }
 
@@ -528,7 +517,9 @@ async fn run_tests(
                     }
 
                     if has_missing {
-                        warn!("\nRun the validate command with the --generate-platform-ids option to automatically generate and insert missing platform IDs.");
+                        warn!(
+                            "\nRun the validate command with the --generate-platform-ids option to automatically generate and insert missing platform IDs."
+                        );
                     }
                 }
             } else {
@@ -868,12 +859,14 @@ mod tests {
         );
 
         dir_fixture.create_ignore_file(
-            vec![dir_fixture
-                .temp_dir
-                .path()
-                .join("my_test*")
-                .to_str()
-                .unwrap_or_default()]
+            vec![
+                dir_fixture
+                    .temp_dir
+                    .path()
+                    .join("my_test*")
+                    .to_str()
+                    .unwrap_or_default(),
+            ]
             .as_slice(),
         );
 

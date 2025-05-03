@@ -1,29 +1,9 @@
 [package]
-name = "jikken"
-version = "1.0.0"
+name = "jikken-core"
+version = "0.1.0"
 edition = "2024"
-authors = ["Louis Russo <louis@jikken.io>"]
-description = """
-Jikken is a CLI tool for automated API testing.
-It utilizes JKT files (Jikken Test Definitions) to execute jobs for testing REST APIs.
-It has first-class support on Windows, macOS, and Linux.
-
-Visit jikken.io for more info.
-"""
-documentation = "https://www.jikken.io/docs/"
-homepage = "https://www.jikken.io/"
-repository = "https://github.com/jikkenio/jikken"
-keywords = ["test", "testing", "api", "tool"]
-categories = ["command-line-utilities", "development-tools"]
-license = "MIT"
-
-[[bin]]
-name = "jk"
-path = "src/main.rs"
-bench = false
 
 [dependencies]
-jikken-core = { path = "./jikken-core" }
 adjacent-pair-iterator = { version = "1.0.0" }
 assert-json-diff = { version = "2.0" }
 bytes = { version = "1.7.2" }
@@ -72,4 +52,5 @@ uuid = { version = "1.6", features = ["v4"] }
 validated = { version = "0.4.0" }
 walkdir = { version = "2.4" }
 
-[dev-dependencies]
+[lib]
+crate-type = ["lib"]
