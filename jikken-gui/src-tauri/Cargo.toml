@@ -1,0 +1,37 @@
+[package]
+name = "jikken-gui"
+version = "0.1.0"
+edition = "2024"
+description = "Jikken's GUI Client"
+authors = ["Louis Russo <louis@jikken.io>"]
+license = "MIT"
+documentation = "https://www.jikken.io/docs/"
+homepage = "https://www.jikken.io/"
+repository = "https://github.com/jikkenio/jikken"
+keywords = ["test", "testing", "api", "tool"]
+categories = ["development-tools"]
+
+[[bin]]
+name = "jk-gui"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+reqwest = { version = "0.11" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = { version = "0.9" }
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-fs = "2.0.0"
+tauri-plugin-shell = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+[target."cfg(target_os = \"macos\")".dependencies]
+cocoa = "0.25"

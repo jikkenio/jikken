@@ -1,0 +1,25 @@
+{
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/logo.png"]
+  },
+  "productName": "jikken-gui",
+  "mainBinaryName": "jikken-gui",
+  "version": "0.1.0",
+  "identifier": "io.jikken",
+  "plugins": {},
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  }
+}

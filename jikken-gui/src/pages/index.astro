@@ -1,0 +1,111 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Sidebar from "../components/Sidebar.astro";
+import { FolderView } from "../components/FolderView.tsx";
+import Fileview from "../components/fileview/Fileview.astro";
+// import Homeview from "../components/Homeview.astro";
+
+import { $layoutState } from "../stores/layoutState";
+---
+
+<Layout>
+  <div class="w-8">
+    <Sidebar />
+  </div>
+  <div
+    id="folder-panel"
+    class="relative float-left h-full ml-8 min-w-52 w-72 select-none bg-neutral-850 border-t border-l border-neutral-700"
+    class:list={[
+      { hidden: !($layoutState.value?.folderPanelVisible ?? false) },
+    ]}
+  >
+    <div class="float-left folder-panel h-full">
+      <FolderView client:load />
+    </div>
+    <div
+      id="folder-resizer"
+      class="relative float-right h-full w-1.5 select-none cursor-col-resize border-r border-neutral-700 hover:border-indigo-400 hover:border-r-4"
+    >
+    </div>
+  </div>
+  <div
+    id="content-panel"
+    class="relative h-full ml-8 select-none overflow-y-scroll bg-neutral-850 border-t border-neutral-700"
+    class:list={[
+      { "border-l": !($layoutState.value?.folderPanelVisible ?? false) },
+    ]}
+  >
+    <Fileview />
+  </div>
+</Layout>
+
+<style>
+  .folder-panel {
+    width: calc(100% - 6px);
+  }
+</style>
+
+<script>
+  import { listenKeys } from "nanostores";
+  import { $layoutState, setFolderPanel } from "../stores/layoutState";
+
+  const initializePage = function () {
+    const elem = document.getElementById("folder-panel");
+    const resizer = document.getElementById("folder-resizer");
+    const main = document.getElementById("main-panel");
+
+    let x = 0;
+    let w = 0;
+
+    const mouseDownHandler = function (e: MouseEvent) {
+      if (!elem) return;
+
+      x = e.clientX;
+      const styles = window.getComputedStyle(elem);
+      w = parseInt(styles.width, 10);
+
+      document.addEventListener("mousemove", mouseMoveHandler);
+      document.addEventListener("mouseup", mouseUpHandler);
+
+      resizer?.classList.add("border-indigo-400", "border-r-4");
+      main?.classList.add("cursor-col-resize");
+    };
+
+    const mouseMoveHandler = function (e: MouseEvent) {
+      if (!elem) return;
+
+      let dx = e.clientX - x;
+      let computedWidth = w + dx;
+      elem.style.width = `${computedWidth}px`;
+
+      if (computedWidth < 125) {
+        setFolderPanel(false);
+      } else if (!$layoutState.value?.folderPanelVisible) {
+        setFolderPanel(true);
+      }
+    };
+
+    const mouseUpHandler = function () {
+      resizer?.classList.remove("border-indigo-400", "border-r-4");
+      main?.classList.remove("cursor-col-resize");
+      document.removeEventListener("mousemove", mouseMoveHandler);
+      document.removeEventListener("mouseup", mouseUpHandler);
+    };
+
+    resizer?.addEventListener("mousedown", mouseDownHandler);
+  };
+
+  listenKeys($layoutState, ["folderPanelVisible"], (layout, key) => {
+    const folder = document.getElementById("folder-panel");
+    const content = document.getElementById("content-panel");
+    if (!layout[key]) {
+      folder?.classList.add("hidden");
+      content?.classList.add("border-l");
+    } else {
+      folder?.classList.remove("hidden");
+      content?.classList.remove("border-l");
+    }
+  });
+
+  initializePage();
+</script>

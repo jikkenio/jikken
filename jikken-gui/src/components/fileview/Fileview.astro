@@ -1,0 +1,122 @@
+---
+import { FileTabs } from "./FileTabs";
+import { RequestBar } from "./request/RequestBar";
+import { RequestTabs } from "./request/RequestTabs";
+import { ResponseTabs } from "./response/ResponseTabs";
+import { $layoutState, ViewMode } from "../../stores/layoutState";
+import { YamlView } from "./YamlView";
+---
+
+<div class="size-full flex flex-col">
+  <FileTabs client:load />
+  <div
+    id="api-view"
+    class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
+  >
+    <RequestBar client:only />
+    <RequestTabs client:only />
+    <ResponseTabs client:only />
+  </div>
+  <div
+    id="yaml-view"
+    class="flex flex-auto"
+    class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.RAW }]}
+  >
+    <YamlView client:only />
+  </div>
+</div>
+
+<script>
+  import { listenKeys } from "nanostores";
+  import { saveFile } from "../../stores/editorState";
+  import {
+    $layoutState,
+    setRequestTabVisible,
+    ViewMode,
+  } from "../../stores/layoutState";
+
+  const initializePage = () => {
+    const elem = document.getElementById("tab-content");
+    const resizer = document.getElementById("file-resizer");
+    const main = document.getElementById("main-panel");
+
+    let y = 0;
+    let h = 0;
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        saveFile();
+      }
+    });
+
+    const mouseDownHandler = function (e: MouseEvent) {
+      if (!elem) return;
+
+      y = e.clientY;
+      const styles = window.getComputedStyle(elem);
+      h = parseInt(styles.height, 10);
+
+      document.addEventListener("mousemove", mouseMoveHandler);
+      document.addEventListener("mouseup", mouseUpHandler);
+
+      resizer?.classList.add("border-indigo-400", "border-t-4");
+      main?.classList.add("cursor-row-resize");
+    };
+
+    const mouseMoveHandler = function (e: MouseEvent) {
+      if (!elem) return;
+
+      let dy = e.clientY - y;
+      let computedHeight = h + dy;
+      elem.style.height = `${computedHeight}px`;
+
+      if ($layoutState.value?.requestTabPanelVisible && computedHeight < 100) {
+        setRequestTabVisible(false);
+      } else if (
+        !$layoutState.value?.requestTabPanelVisible &&
+        computedHeight >= 100
+      ) {
+        setRequestTabVisible(true);
+      }
+    };
+
+    const mouseUpHandler = function () {
+      resizer?.classList.remove("border-indigo-400", "border-t-4");
+      main?.classList.remove("cursor-row-resize");
+      document.removeEventListener("mousemove", mouseMoveHandler);
+      document.removeEventListener("mouseup", mouseUpHandler);
+    };
+
+    resizer?.addEventListener("mousedown", mouseDownHandler);
+  };
+
+  listenKeys($layoutState, ["viewMode"], (layout) => {
+    const apiView = document.getElementById("api-view");
+    const yamlView = document.getElementById("yaml-view");
+    switch (layout.viewMode) {
+      case ViewMode.API:
+        apiView?.classList.remove("hidden");
+        yamlView?.classList.add("hidden");
+        break;
+      case ViewMode.RAW:
+        yamlView?.classList.remove("hidden");
+        apiView?.classList.add("hidden");
+        break;
+      case ViewMode.TEST:
+        apiView?.classList.add("hidden");
+        yamlView?.classList.add("hidden");
+        break;
+      default:
+    }
+  });
+
+  initializePage();
+</script>
+
+<style>
+  * {
+    --jse-font-size: 10px;
+    --jse-font-size-mono: 12px;
+  }
+</style>

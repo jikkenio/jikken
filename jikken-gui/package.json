@@ -1,0 +1,37 @@
+{
+  "name": "jikken",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@astrojs/solid-js": "^5.0.8",
+    "@nanostores/solid": "^0.4.2",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "js-yaml": "^4.1.0",
+    "monaco-editor": "^0.52.2",
+    "monaco-yaml": "^5.3.1",
+    "nanostores": "^0.9.5",
+    "solid-js": "^1.8.15",
+    "tailwindcss": "^3.4.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/tailwind": "^6.0.2",
+    "@tailwindcss/forms": "^0.5.7",
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "astro": "^5.6.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0"
+  }
+}

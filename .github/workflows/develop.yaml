@@ -18,7 +18,7 @@ jobs:
       - name: Compile Linux-musl
         uses: gmiam/rust-musl-action@master
         with:
-          args: cargo build --target x86_64-unknown-linux-musl --release
+          args: cargo build -p jikken --target x86_64-unknown-linux-musl --release
 
       - name: Compile Linux
         run: |
@@ -47,12 +47,12 @@ jobs:
           rustup target add x86_64-apple-darwin
           SDKROOT=$(xcrun -sdk macosx --show-sdk-path) \
           MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) \
-          cargo build --release --target=x86_64-apple-darwin
+          cargo build -p jikken --release --target=x86_64-apple-darwin
 
           rustup target add aarch64-apple-darwin
           SDKROOT=$(xcrun -sdk macosx --show-sdk-path) \
           MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version) \
-          cargo build --release --target=aarch64-apple-darwin
+          cargo build -p jikken --release --target=aarch64-apple-darwin
 
           mkdir -p target/universal-apple-darwin/release
           lipo -create \
@@ -88,7 +88,7 @@ jobs:
 
       - name: Compile Windows
         run: |
-          cargo build --release
+          cargo build -p jikken --release
 
       - name: Compress file
         shell: powershell
