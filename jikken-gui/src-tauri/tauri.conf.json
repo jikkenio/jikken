@@ -10,7 +10,7 @@
     "targets": "all",
     "icon": ["icons/logo.png"]
   },
-  "productName": "jikken-gui",
+  "productName": "Jikken",
   "mainBinaryName": "jikken-gui",
   "version": "0.1.0",
   "identifier": "io.jikken",
