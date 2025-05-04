@@ -108,8 +108,8 @@ import { $layoutState } from "../stores/layoutState";
     invoke("open_folder");
   });
 
-  listenKeys($layoutState, ["folderPanelVisible"], (layout, key) => {
-    if (!layout[key]) {
+  listenKeys($layoutState, ["folderPanelVisible"], (layout, _) => {
+    if (!layout.folderPanelVisible) {
       elem?.classList.add("text-white");
     } else {
       elem?.classList.remove("text-white");

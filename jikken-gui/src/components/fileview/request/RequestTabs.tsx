@@ -11,7 +11,7 @@ export const RequestTabs = () => {
     let [layout, setLayout] = createSignal($layoutState.get());
     let [isSaveable, setIsSaveable] = createSignal(false);
 
-    $layoutState.subscribe((value, key) => {
+    $layoutState.subscribe((value, _) => {
         setLayout({ ...value });
     });
 

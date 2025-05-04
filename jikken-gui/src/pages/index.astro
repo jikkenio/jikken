@@ -95,10 +95,10 @@ import { $layoutState } from "../stores/layoutState";
     resizer?.addEventListener("mousedown", mouseDownHandler);
   };
 
-  listenKeys($layoutState, ["folderPanelVisible"], (layout, key) => {
+  listenKeys($layoutState, ["folderPanelVisible"], (layout, _) => {
     const folder = document.getElementById("folder-panel");
     const content = document.getElementById("content-panel");
-    if (!layout[key]) {
+    if (!layout.folderPanelVisible) {
       folder?.classList.add("hidden");
       content?.classList.add("border-l");
     } else {
