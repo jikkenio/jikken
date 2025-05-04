@@ -67,8 +67,11 @@ export const Parameters = () => {
                         <li class="flex flex-row group text-neutral-300">
                             <div class="flex flex-row flex-1 items-center border border-1 border-b-0 group-last:border-b border-neutral-700 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600">
                                 <input placeholder="Key"
+<<<<<<< HEAD
                                     spellcheck={false}
                                     autocorrect="off"
+=======
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
                                     value={param.param}
                                     onInput={(_) => onParamInput(index())}
                                     onChange={(e) => onParamChange(index(), { param: e.currentTarget.value, value: param.value, generated: false })}
@@ -88,8 +91,11 @@ export const Parameters = () => {
                                 </Show>
                             </div>
                             <input placeholder="Value"
+<<<<<<< HEAD
                                 spellcheck={false}
                                 autocorrect="off"
+=======
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
                                 value={param.value}
                                 onInput={(_) => onParamInput(index())}
                                 onChange={(e) => onParamChange(index(), { param: param.param, value: e.currentTarget.value, generated: false })}

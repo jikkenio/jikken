@@ -108,8 +108,13 @@ import { $layoutState } from "../stores/layoutState";
     invoke("open_folder");
   });
 
+<<<<<<< HEAD
   listenKeys($layoutState, ["folderPanelVisible"], (layout, _) => {
     if (!layout.folderPanelVisible) {
+=======
+  listenKeys($layoutState, ["folderPanelVisible"], (layout, key) => {
+    if (!layout[key]) {
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
       elem?.classList.add("text-white");
     } else {
       elem?.classList.remove("text-white");

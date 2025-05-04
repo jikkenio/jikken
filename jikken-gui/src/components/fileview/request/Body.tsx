@@ -16,6 +16,7 @@ export const Body = () => {
     };
 
     let editorState = $editorState.get();
+<<<<<<< HEAD
     let currentFile = editorState.files[editorState.currentFile];
 
     let [body, setBody] = createSignal({ type: currentFile.testFile.request?.body ? BodyType.Json : BodyType.None, content: currentFile.testFile.request?.body });
@@ -29,6 +30,17 @@ export const Body = () => {
             setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
             currentFile = file;
         }
+=======
+    let currentFile = editorState.files[editorState.currentFile].testFile;
+
+    let [body, setBody] = createSignal({ type: currentFile.request?.body ? BodyType.Json : BodyType.None, content: currentFile.request?.body });
+
+    $editorState.subscribe((state) => {
+        let file = state.files[state.currentFile].testFile;
+        let stateBody = file.request?.body;
+        setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
+        currentFile = file;
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     });
 
     const onTypeChange = (type: BodyType) => {
@@ -62,7 +74,11 @@ export const Body = () => {
     };
 
     const toggleContentType = (enabled: boolean) => {
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
+=======
+        let request = { ...currentFile.request ?? {} as Request };
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         let headers = request.headers ?? [];
         let index = headers.findIndex(h => h.header.toLowerCase() === "content-type");
         console.log(`content header index ${index}`);
@@ -82,14 +98,22 @@ export const Body = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
+=======
+        let request = { ...currentFile.request ?? {} as Request };
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);
     };
 
     const updateBody = (body: Body) => {
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
+=======
+        let request = { ...currentFile.request ?? {} as Request };
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         request.body = body.content;
         updateRequest(request);
     };

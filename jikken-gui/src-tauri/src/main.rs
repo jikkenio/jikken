@@ -1,6 +1,11 @@
 use reqwest::{
+<<<<<<< HEAD
     Body, Client, Method,
     header::{HeaderMap, HeaderName, HeaderValue},
+=======
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Body, Client, Method,
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, error::Error, path::Path};
@@ -430,7 +435,11 @@ async fn save_existing_file(file: FileMetadata, test_file: TestFile) -> Option<F
 #[tauri::command]
 async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     let request = test_file.request.unwrap();
+<<<<<<< HEAD
     let method = match request.method.unwrap_or(HttpVerb::Get) {
+=======
+    let method = match request.method.unwrap() {
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         HttpVerb::Get => Method::GET,
         HttpVerb::Post => Method::POST,
         HttpVerb::Put => Method::PUT,
@@ -439,6 +448,10 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
         _ => Method::GET,
     };
 
+<<<<<<< HEAD
+=======
+    let body = Body::from(serde_json::to_string(&request.body.unwrap()).unwrap());
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     let mut headers = HeaderMap::new();
     request
         .headers
@@ -460,6 +473,7 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     let client = Client::new();
 
     let timer = SystemTime::now();
+<<<<<<< HEAD
     let mut client_request = client
         .request(method, request.url)
         .headers(headers)
@@ -469,6 +483,16 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     }
 
     match client_request.send().await {
+=======
+    match client
+        .request(method, request.url)
+        .headers(headers)
+        .query(&params)
+        .body(body)
+        .send()
+        .await
+    {
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         Ok(response) => {
             let end = timer.elapsed().unwrap();
             let headers = response

@@ -11,7 +11,11 @@ export const RequestTabs = () => {
     let [layout, setLayout] = createSignal($layoutState.get());
     let [isSaveable, setIsSaveable] = createSignal(false);
 
+<<<<<<< HEAD
     $layoutState.subscribe((value, _) => {
+=======
+    $layoutState.subscribe((value, key) => {
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         setLayout({ ...value });
     });
 

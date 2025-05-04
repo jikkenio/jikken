@@ -3,8 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { setRequestTabActive, setRequestTabCount, setResponseTabActive, setResponseTabCount } from './layoutState';
 import { AuthType, parseAuthData, type AuthState } from './authState';
 import { addSavedFile, selectEntity, selectEntityPath, type FolderEntity } from './folderState';
+<<<<<<< HEAD
 import { v4 as uuidv4 } from 'uuid';
 import { clearNotification, NotificationType, triggerBanner } from './notificationState';
+=======
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
 
 export type TestFile = {
     name?: string,
@@ -164,7 +167,10 @@ export type HttpResponse = {
 };
 
 export type FileState = {
+<<<<<<< HEAD
     id: string,
+=======
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     file?: File,
     testFile: TestFile,
     response?: HttpResponse,
@@ -176,9 +182,15 @@ export type EditorState = {
     files: FileState[],
 };
 
+<<<<<<< HEAD
 const getNewFile = () => {
     return {
         id: uuidv4(),
+=======
+const initState: EditorState = {
+    currentFile: 0,
+    files: [{
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         file: undefined,
         testFile: {
             request: {
@@ -187,12 +199,16 @@ const getNewFile = () => {
         },
         response: undefined,
         auth: { type: AuthType.None },
+<<<<<<< HEAD
     };
 }
 
 const initState: EditorState = {
     currentFile: 0,
     files: [getNewFile()]
+=======
+    }]
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
 };
 
 export const $editorState = atom(initState);
@@ -232,7 +248,18 @@ export const selectFile = (index: number) => {
 
 export const addNewFile = () => {
     let state = $editorState.get()
+<<<<<<< HEAD
     let file = getNewFile();
+=======
+    let file = {
+        testFile: {
+            request: {
+                method: HttpVerb.GET,
+            },
+        },
+        auth: { type: AuthType.None },
+    };
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     state.currentFile++;
     state.files.push(file);
 
@@ -267,7 +294,11 @@ export const openFile = async (entity: FolderEntity) => {
     // add auth data, if applicable
     let auth = parseAuthData(testFile.request?.headers);
 
+<<<<<<< HEAD
     let fileState = { id: uuidv4(), file: file, testFile: testFile, auth: auth }
+=======
+    let fileState = { file: file, testFile: testFile, auth: auth }
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     currentState.files.push(fileState);
     currentState.currentFile++;
 
@@ -316,7 +347,11 @@ export const closeFile = (index: number) => {
     if (state.files.length === 0) {
         state.currentFile = 0;
         console.log("new current file: 0");
+<<<<<<< HEAD
         state.files.push(getNewFile());
+=======
+        state.files.push({ testFile: {}, auth: { type: AuthType.None } });
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         resetTabs(state.files[0]);
         selectEntity(-1);
     } else if (index <= state.currentFile) {
@@ -338,6 +373,7 @@ export const makeRequest = async () => {
         console.log("no request url");
         return;
     }
+<<<<<<< HEAD
     let response: HttpResponse;
 
     clearNotification();
@@ -355,6 +391,10 @@ export const makeRequest = async () => {
         return;
     }
 
+=======
+
+    let response: HttpResponse = await invoke("make_request", { testFile: file.testFile });
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     console.log("http response: ", response);
     let size = response.headers.find(h => h.header.toLowerCase() === "content-length")?.value;
     response.size = size ? +size : undefined;

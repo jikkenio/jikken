@@ -14,9 +14,16 @@ export const Headers = () => {
     });
 
     return (
+<<<<<<< HEAD
         <div class="p-3 pt-1">
             <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
             <ul class="w-full">
+=======
+        <div id="tab-headers-panel" class="p-3 pt-1">
+            <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
+
+            <ul>
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
                 <For each={headers()}>
                     {(header) => (
                         <li class="grid grid-cols-5 group text-neutral-300">

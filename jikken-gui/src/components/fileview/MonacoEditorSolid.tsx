@@ -55,7 +55,11 @@ monaco.editor.defineTheme("vs-dark-custom", theme);
 
 export default function MonacoEditorSolid(props: MonacoEditorProps) {
     const containerRef = document.createElement("div");
+<<<<<<< HEAD
     containerRef.classList.add("w-full", "min-h-36", "flex", "flex-auto");
+=======
+    containerRef.classList.add("w-full", "min-h-36");
+>>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     let editorInstance: monaco.editor.IStandaloneCodeEditor | undefined;
     const [localValue, setLocalValue] = createSignal(props.value);
 
