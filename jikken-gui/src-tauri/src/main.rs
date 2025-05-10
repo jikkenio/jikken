@@ -1,6 +1,6 @@
 use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue},
     Body, Client, Method,
+    header::{HeaderMap, HeaderName, HeaderValue},
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, error::Error, path::Path};
@@ -430,7 +430,7 @@ async fn save_existing_file(file: FileMetadata, test_file: TestFile) -> Option<F
 #[tauri::command]
 async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     let request = test_file.request.unwrap();
-    let method = match request.method.unwrap() {
+    let method = match request.method.unwrap_or(HttpVerb::Get) {
         HttpVerb::Get => Method::GET,
         HttpVerb::Post => Method::POST,
         HttpVerb::Put => Method::PUT,
@@ -439,7 +439,6 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
         _ => Method::GET,
     };
 
-    let body = Body::from(serde_json::to_string(&request.body.unwrap()).unwrap());
     let mut headers = HeaderMap::new();
     request
         .headers
@@ -461,14 +460,15 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     let client = Client::new();
 
     let timer = SystemTime::now();
-    match client
+    let mut client_request = client
         .request(method, request.url)
         .headers(headers)
-        .query(&params)
-        .body(body)
-        .send()
-        .await
-    {
+        .query(&params);
+    if let Some(body) = request.body {
+        client_request = client_request.body(Body::from(serde_json::to_string(&body).unwrap()));
+    }
+
+    match client_request.send().await {
         Ok(response) => {
             let end = timer.elapsed().unwrap();
             let headers = response
