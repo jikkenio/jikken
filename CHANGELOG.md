@@ -1,5 +1,10 @@
 # Next (Version determined when release is cut)
 
+# Bug Fixes
+
+- Fixed error when executing tests with tag (`-t`) filter
+- Fixed error when combining tag (`-t`) filter with `requires`, and required test not having the tag
+
 # 0.8.2
 
 # Changes
