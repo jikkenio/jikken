@@ -416,7 +416,7 @@ impl Variable {
             UnvalidatedVariable::ValueSet(vs) => Some(vs.name.clone()),
         };
 
-        return match name {
+        match name {
             None => Err(validation::Error {
                 reason: "Name must be provided for variables".to_string(),
             }),
@@ -434,7 +434,7 @@ impl Variable {
                     })
                     .map_err(|e| validation::Error { reason: e })
             }
-        };
+        }
     }
 
     pub fn validate_variables_opt(
