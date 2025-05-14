@@ -143,7 +143,7 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
                     .to_string(),
             );
         }
-        return match (
+        match (
             unvalidated.value,
             unvalidated.any_of,
             unvalidated.one_of,
@@ -154,7 +154,7 @@ impl<T> TryFrom<UnvalidatedSpecification<T>> for Option<Specification<T>> {
             (_, _, Some(vs), _) => Ok(Some(Specification::OneOf(vs))),
             (_, _, _, Some(vs)) => Ok(Some(Specification::NoneOf(vs))),
             _ => Ok(None),
-        };
+        }
     }
 }
 
@@ -713,7 +713,7 @@ fn validate1<T: Copy>(
         if !pred(&v) {
             Validated::fail(message)
         } else {
-            Good(val.clone())
+            Good(*val)
         }
     })
     .unwrap_or(Validated::Good(None))
@@ -775,10 +775,7 @@ where
         min: Option<T>,
         max: Option<T>,
     ) -> Result<Self, String> {
-        let is_none_of = match specification.as_ref() {
-            Some(Specification::NoneOf(_)) => true,
-            _ => false,
-        };
+        let is_none_of = matches!(specification.as_ref(), Some(Specification::NoneOf(_)));
         let violation =
             specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
         if violation {
@@ -930,10 +927,7 @@ impl StringSpecification {
         max_length: Option<i64>,
         pattern: Option<String>,
     ) -> Result<Self, String> {
-        let is_none_of = match specification.as_ref() {
-            Some(Specification::NoneOf(_)) => true,
-            _ => false,
-        };
+        let is_none_of = matches!(specification.as_ref(), Some(Specification::NoneOf(_)));
         let violation = specification.is_some()
             && !is_none_of
             && length
@@ -1285,10 +1279,7 @@ impl DateSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
-        let is_none_of = match specification.as_ref() {
-            Some(Specification::NoneOf(_)) => true,
-            _ => false,
-        };
+        let is_none_of = matches!(specification.as_ref(), Some(Specification::NoneOf(_)));
 
         let violation =
             specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
@@ -1562,10 +1553,7 @@ impl DateTimeSpecification {
         format: Option<String>,
         modifier: Option<variable::Modifier>,
     ) -> Result<Self, String> {
-        let is_none_of = match specification.as_ref() {
-            Some(Specification::NoneOf(_)) => true,
-            _ => false,
-        };
+        let is_none_of = matches!(specification.as_ref(), Some(Specification::NoneOf(_)));
 
         let violation =
             specification.is_some() && !is_none_of && min.as_ref().or(max.as_ref()).is_some();
@@ -2309,15 +2297,16 @@ impl TryFrom<UnvalidatedDatumSchemaVariable> for DatumSchema {
                         }
                         //Simply make it a tagged variant and reapply simple transformation from above
                         UnvalidatedValuesOrSchema::UntaggedLiterals(literals) => {
-                            let foo = UnvalidatedSpecification::<Vec<Value>> {
-                                value: Some(literals),
-                                any_of: None,
-                                name: None,
-                                none_of: None,
-                                one_of: None,
-                            };
-                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(foo)
-                                .map(|a| a.map(ValuesOrSchema::Values))
+                            TryInto::<Option<Specification<Vec<Value>>>>::try_into(
+                                UnvalidatedSpecification::<Vec<Value>> {
+                                    value: Some(literals),
+                                    any_of: None,
+                                    name: None,
+                                    none_of: None,
+                                    one_of: None,
+                                },
+                            )
+                            .map(|a| a.map(ValuesOrSchema::Values))
                         }
                     },
                 };
