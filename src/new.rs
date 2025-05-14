@@ -657,7 +657,7 @@ mod openapi_v31 {
         schema.schema_type.map(|t| match t {
             oas3::spec::SchemaType::Array => {
                 UnvalidatedDatumSchemaVariable::List(test::file::UnvalidatedSequenceSpecification {
-                    name: name,
+                    name,
                     schema: schema.items.and_then(|items| {
                         items.resolve(spec).ok().and_then(|s| {
                             schema_to_unvalidated_datum(s, spec, None)
