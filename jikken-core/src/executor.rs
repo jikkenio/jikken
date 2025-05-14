@@ -829,10 +829,16 @@ fn construct_test_execution_graph_v2(
     tests_to_run: Vec<test::Definition>,
     tests_to_ignore: Vec<test::Definition>,
 ) -> Vec<Vec<Definition>> {
-    let tests_by_id: HashMap<String, test::Definition> = tests_to_run
+    let mut tests_ordered: Vec<test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore)
+        .collect();
+    tests_ordered.sort_by_key(|t| t.index);
+
+    let tests_by_id: HashMap<String, test::Definition> = tests_ordered
+        .clone()
+        .into_iter()
         .filter(|td| td.id.is_some())
         .map(|td| (td.id.clone().unwrap(), td))
         .collect();
@@ -895,7 +901,7 @@ fn construct_test_execution_graph_v2(
         .into_iter()
         .map(|hs| {
             hs.into_iter()
-                .map(|index| tests_to_run.get(index).unwrap().clone())
+                .map(|index| tests_ordered.get(index).unwrap().clone())
                 .collect::<Vec<Definition>>()
         })
         .collect();
