@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { setRequestTabActive, setRequestTabCount, setResponseTabActive, setResponseTabCount } from './layoutState';
 import { AuthType, parseAuthData, type AuthState } from './authState';
 import { addSavedFile, selectEntity, selectEntityPath, type FolderEntity } from './folderState';
+import { v4 as uuidv4 } from 'uuid';
 
 export type TestFile = {
     name?: string,
@@ -162,6 +163,7 @@ export type HttpResponse = {
 };
 
 export type FileState = {
+    id: string,
     file?: File,
     testFile: TestFile,
     response?: HttpResponse,
@@ -173,9 +175,9 @@ export type EditorState = {
     files: FileState[],
 };
 
-const initState: EditorState = {
-    currentFile: 0,
-    files: [{
+const getNewFile = () => {
+    return {
+        id: uuidv4(),
         file: undefined,
         testFile: {
             request: {
@@ -184,7 +186,12 @@ const initState: EditorState = {
         },
         response: undefined,
         auth: { type: AuthType.None },
-    }]
+    };
+}
+
+const initState: EditorState = {
+    currentFile: 0,
+    files: [getNewFile()]
 };
 
 export const $editorState = atom(initState);
@@ -224,14 +231,7 @@ export const selectFile = (index: number) => {
 
 export const addNewFile = () => {
     let state = $editorState.get()
-    let file = {
-        testFile: {
-            request: {
-                method: HttpVerb.GET,
-            },
-        },
-        auth: { type: AuthType.None },
-    };
+    let file = getNewFile();
     state.currentFile++;
     state.files.push(file);
 
@@ -266,7 +266,7 @@ export const openFile = async (entity: FolderEntity) => {
     // add auth data, if applicable
     let auth = parseAuthData(testFile.request?.headers);
 
-    let fileState = { file: file, testFile: testFile, auth: auth }
+    let fileState = { id: uuidv4(), file: file, testFile: testFile, auth: auth }
     currentState.files.push(fileState);
     currentState.currentFile++;
 
@@ -315,7 +315,7 @@ export const closeFile = (index: number) => {
     if (state.files.length === 0) {
         state.currentFile = 0;
         console.log("new current file: 0");
-        state.files.push({ testFile: {}, auth: { type: AuthType.None } });
+        state.files.push(getNewFile());
         resetTabs(state.files[0]);
         selectEntity(-1);
     } else if (index <= state.currentFile) {
