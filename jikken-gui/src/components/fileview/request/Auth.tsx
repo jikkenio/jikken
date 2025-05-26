@@ -115,13 +115,17 @@ export const Auth = () => {
                     <div class="flex items-center">
                         <label for="username-input" class="text-sm text-neutral-400">Username</label>
                     </div>
-                    <input id="username-input" placeholder="username" value={(auth().data as BasicAuthData)?.username ?? ""}
+                    <input id="username-input"
+                        spellcheck={false}
+                        autocorrect="off"
+                        placeholder="username"
+                        value={(auth().data as BasicAuthData)?.username ?? ""}
                         class="col-span-2 h-7 w-36 p-1 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBasicAuthFieldChange("username", e.currentTarget.value)} />
                     <div class="flex items-center">
                         <label for="password-input" class="text-sm text-neutral-400">Password</label>
                     </div>
-                    <input id="password-input" placeholder="password" value={(auth().data as BasicAuthData)?.password ?? ""} // TODO: mask value
+                    <input id="password-input" type="password" placeholder="password" value={(auth().data as BasicAuthData)?.password ?? ""} // TODO: mask value
                         class="col-span-2 h-7 w-36 p-1 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBasicAuthFieldChange("password", e.currentTarget.value)} />
                 </div>
@@ -132,7 +136,11 @@ export const Auth = () => {
                     <div class="flex items-center">
                         <label for="token-input" class="text-sm text-neutral-400">Token</label>
                     </div>
-                    <input id="token-input" placeholder="token" value={(auth().data as BearerAuthData)?.token ?? ""}
+                    <input id="token-input"
+                        spellcheck={false}
+                        autocorrect="off"
+                        placeholder="token"
+                        value={(auth().data as BearerAuthData)?.token ?? ""}
                         class="col-span-2 h-7 p-0 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBearerAuthTokenChange(e.currentTarget.value)} />
                 </div>

@@ -89,6 +89,8 @@ export const Headers = () => {
                         <li class="flex flex-row group text-neutral-300">
                             <div class="flex flex-row flex-1 items-center border border-1 border-b-0 group-last:border-b border-neutral-700 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600">
                                 <input placeholder="Key"
+                                    spellcheck={false}
+                                    autocorrect="off"
                                     value={header.header}
                                     onInput={(_) => onHeaderInput(index())}
                                     onChange={(e) => onHeaderChange(index(), { header: e.currentTarget.value, value: header.value, generated: false })}
@@ -108,6 +110,8 @@ export const Headers = () => {
                                 </Show>
                             </div>
                             <input placeholder="Value"
+                                spellcheck={false}
+                                autocorrect="off"
                                 value={header.value}
                                 onInput={(_) => onHeaderInput(index())}
                                 onChange={(e) => onHeaderChange(index(), { header: header.header, value: e.currentTarget.value, generated: false })}
