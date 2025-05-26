@@ -16,15 +16,19 @@ export const Body = () => {
     };
 
     let editorState = $editorState.get();
-    let currentFile = editorState.files[editorState.currentFile].testFile;
+    let currentFile = editorState.files[editorState.currentFile];
 
-    let [body, setBody] = createSignal({ type: currentFile.request?.body ? BodyType.Json : BodyType.None, content: currentFile.request?.body });
+    let [body, setBody] = createSignal({ type: currentFile.testFile.request?.body ? BodyType.Json : BodyType.None, content: currentFile.testFile.request?.body });
 
     $editorState.subscribe((state) => {
-        let file = state.files[state.currentFile].testFile;
-        let stateBody = file.request?.body;
-        setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
-        currentFile = file;
+        let file = state.files[state.currentFile];
+
+        // only update the data signal if the file changes
+        if (file.id !== currentFile.id) {
+            let stateBody = file.testFile.request?.body;
+            setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
+            currentFile = file;
+        }
     });
 
     const onTypeChange = (type: BodyType) => {
@@ -58,7 +62,7 @@ export const Body = () => {
     };
 
     const toggleContentType = (enabled: boolean) => {
-        let request = { ...currentFile.request ?? {} as Request };
+        let request = { ...currentFile.testFile.request ?? {} as Request };
         let headers = request.headers ?? [];
         let index = headers.findIndex(h => h.header.toLowerCase() === "content-type");
         console.log(`content header index ${index}`);
@@ -78,14 +82,14 @@ export const Body = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        let request = { ...currentFile.request ?? {} as Request };
+        let request = { ...currentFile.testFile.request ?? {} as Request };
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);
     };
 
     const updateBody = (body: Body) => {
-        let request = { ...currentFile.request ?? {} as Request };
+        let request = { ...currentFile.testFile.request ?? {} as Request };
         request.body = body.content;
         updateRequest(request);
     };
