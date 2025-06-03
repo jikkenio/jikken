@@ -10,22 +10,36 @@ export const NotificationPopup = () => {
             <Show when={notification().active && notification().type === NotificationType.Success}>
                 <div aria-live="assertive" class="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6">
                     <div class="flex w-full flex-col items-center space-y-4 sm:items-end">
-                        <div class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                        <div class="pointer-events-auto group w-full max-w-sm overflow-hidden rounded-lg bg-emerald-600 shadow-lg ring-1 ring-white ring-opacity-5">
                             <div class="p-4">
                                 <div class="flex items-start">
-                                    <div class="flex-shrink-0">
-                                        <i class="bi-check-circle text-lg mr-4 text-green-400"></i>
+                                    <div class="flex-shrink-0 my-auto">
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                            width="20"
+                                            height="20"
+                                            fill="currentColor"
+                                            class="bi bi-check-circle-fill text-lg mr-4 text-white"
+                                            viewBox="0 0 16 16">
+                                            <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z" />
+                                        </svg>
                                     </div>
                                     <div class="ml-3 w-0 flex-1 pt-0.5">
-                                        <p class="text-sm font-medium text-gray-900">Success!</p>
-                                        <p class="mt-1 text-sm text-gray-500">{notification().message}</p>
+                                        <p class="text-sm font-medium text-white">Success!</p>
+                                        <p class="mt-1 text-sm text-white/80">{notification().message}</p>
                                     </div>
                                     <div class="ml-4 flex flex-shrink-0">
                                         <button type="button"
                                             onClick={clearNotification}
-                                            class="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                                            class="inline-flex rounded-md">
                                             <span class="sr-only">Close</span>
-                                            <i class="bi-x-lg text-gray-700"></i>
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                width="12"
+                                                height="12"
+                                                fill="currentColor"
+                                                class="bi bi-x-lg stroke-1 stroke-white invisible group-hover:visible"
+                                                viewBox="0 0 16 16">
+                                                <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z" />
+                                            </svg>
                                         </button>
                                     </div>
                                 </div>

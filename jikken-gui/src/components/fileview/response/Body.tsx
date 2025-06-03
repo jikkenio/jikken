@@ -1,6 +1,7 @@
 import { createSignal, Show } from 'solid-js';
 import { $editorState, saveResponseBody } from '../../../stores/editorState';
 import MonacoEditorSolid from '../MonacoEditorSolid';
+import { NotificationType, triggerNotification } from '../../../stores/notificationState';
 
 export const Body = () => {
 
@@ -40,6 +41,7 @@ export const Body = () => {
 
         await navigator.clipboard.writeText(currentBody.content!);
         console.log("successfully copied to clipboard");
+        triggerNotification(NotificationType.Success, "Successfully copied to clipboard!");
     };
 
     return (
