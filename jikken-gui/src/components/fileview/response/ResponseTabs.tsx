@@ -27,19 +27,19 @@ export const ResponseTabs = () => {
     });
 
     const formatSize = () => {
-        if (!response()?.size) return "";
+        if (response()?.size === undefined) return "";
 
         let size = response()!.size!;
         if (size < 1000) {
             return `${size} bytes`;
         }
 
-        if (size < 1000000) {
+        if (size < 1e6) {
             return `${size / 1000} KB`;
         }
 
         if (size < 1e9) {
-            return `${size / 1000000} MB`;
+            return `${size / 1e6} MB`;
         }
 
         return `${size / 1e9} GB`;
@@ -53,20 +53,30 @@ export const ResponseTabs = () => {
                 return ["200 (OK)", StatusType.SUCCESS];
             case 201:
                 return ["201 (Created)", StatusType.SUCCESS];
+            case 204:
+                return ["204 (No Content)", StatusType.SUCCESS];
+            case 301:
+                return ["301 (Moved Permanently)", StatusType.WARN];
+            case 302:
+                return ["302 (Found)", StatusType.WARN];
+            case 307:
+                return ["307 (Temporary Redirect)", StatusType.WARN];
+            case 308:
+                return ["308 (Permanent Redirect)", StatusType.WARN];
             case 400:
                 return ["400 (Bad Request)", StatusType.FAIL];
             case 401:
                 return ["401 (Unauthorized)", StatusType.FAIL];
             case 403:
-                return ["403 (Forbidden", StatusType.FAIL];
+                return ["403 (Forbidden)", StatusType.FAIL];
             case 404:
                 return ["404 (Not Found)", StatusType.FAIL];
             case 500:
-                return ["500 (Internal Server Error", StatusType.FAIL];
+                return ["500 (Internal Server Error)", StatusType.FAIL];
             case 504:
                 return ["504 (Gateway Timeout)", StatusType.FAIL];
             default:
-                return ["", StatusType.FAIL];
+                return [response()?.status.toString(), StatusType.FAIL];
         }
     };
 
@@ -142,9 +152,9 @@ export const ResponseTabs = () => {
                 <Show when={response()}>
                     <div class="flex space-x-2 items-center text-xs text-neutral-400 mr-2">
                         <span classList={{
-                            "text-green-400/60": formatStatus()[1] === StatusType.SUCCESS,
-                            "text-red-400/60": formatStatus()[1] === StatusType.FAIL,
-                            "text-yellow-400/60": formatStatus()[1] === StatusType.WARN,
+                            "text-emerald-500/80": formatStatus()[1] === StatusType.SUCCESS,
+                            "text-rose-500/70": formatStatus()[1] === StatusType.FAIL,
+                            "text-amber-400/70": formatStatus()[1] === StatusType.WARN,
                         }}>
                             {formatStatus()[0]}
                         </span>
@@ -157,11 +167,11 @@ export const ResponseTabs = () => {
             </div>
 
             <div id="tab-content"
-                class="select-none min-h-32 overflow-y-scroll"
+                class="select-none min-h-32 overflow-y-scroll flex"
                 classList={{ hidden: !layout().responseTabPanelVisible }}
             >
                 <Show when={layout().responseTabIndex === 1}>
-                    <div id="tab-body-panel">
+                    <div id="tab-body-panel" class="flex flex-auto">
                         <Body />
                     </div>
                 </Show>
