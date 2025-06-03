@@ -4,6 +4,7 @@ import { setRequestTabActive, setRequestTabCount, setResponseTabActive, setRespo
 import { AuthType, parseAuthData, type AuthState } from './authState';
 import { addSavedFile, selectEntity, selectEntityPath, type FolderEntity } from './folderState';
 import { v4 as uuidv4 } from 'uuid';
+import { clearNotification, NotificationType, triggerBanner } from './notificationState';
 
 export type TestFile = {
     name?: string,
@@ -337,8 +338,23 @@ export const makeRequest = async () => {
         console.log("no request url");
         return;
     }
+    let response: HttpResponse;
 
-    let response: HttpResponse = await invoke("make_request", { testFile: file.testFile });
+    clearNotification();
+    try {
+        response = await invoke("make_request", { testFile: file.testFile });
+    } catch (ex) {
+        triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+        console.log("Failed to make network request: ", ex);
+        return;
+    }
+
+    if (!response) {
+        triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+        console.log("Failed to make network request, null response");
+        return;
+    }
+
     console.log("http response: ", response);
     let size = response.headers.find(h => h.header.toLowerCase() === "content-length")?.value;
     response.size = size ? +size : undefined;

@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import Sidebar from "../components/Sidebar.astro";
 import { FolderView } from "../components/FolderView.tsx";
 import Fileview from "../components/fileview/Fileview.astro";
+import { NotificationPopup } from "../components/fileview/NotificationPopup.tsx";
 // import Homeview from "../components/Homeview.astro";
 
 import { $layoutState } from "../stores/layoutState";
@@ -36,6 +37,7 @@ import { $layoutState } from "../stores/layoutState";
     ]}
   >
     <Fileview />
+    <NotificationPopup client:load />
   </div>
 </Layout>
 
