@@ -17,6 +17,7 @@ export const YamlView = () => {
 
     $editorState.subscribe((state) => {
         let file = state.files[state.currentFile];
+        console.log(file.testFile);
 
         // only update the data signal if the file changes
         if (file.id !== currentFile.id) {

@@ -11,11 +11,18 @@ import { YamlView } from "./YamlView";
   <FileTabs client:load />
   <div
     id="api-view"
+    class="flex flex-col flex-auto"
     class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
   >
     <RequestBar client:only />
-    <RequestTabs client:only />
-    <ResponseTabs client:only />
+    <div class="flex flex-col flex-auto justify-between">
+      <div class="flex-1">
+        <RequestTabs client:only />
+      </div>
+      <div class="flex-1">
+        <ResponseTabs client:only />
+      </div>
+    </div>
   </div>
   <div
     id="yaml-view"

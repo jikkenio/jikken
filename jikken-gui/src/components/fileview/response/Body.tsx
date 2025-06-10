@@ -45,8 +45,8 @@ export const Body = () => {
     };
 
     return (
-        <div id="tab-body-panel" class="p-3 pt-0 flex flex-auto">
-            <div class="group flex flex-col flex-auto m-1">
+        <div class="p-3 pt-0 flex flex-auto">
+            <div class="group flex flex-col flex-auto">
                 <Show when={body().content}>
                     <div class="flex w-full justify-end pointer-events-none">
                         <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-neutral-800 invisible group-hover:visible">
