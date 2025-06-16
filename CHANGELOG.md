@@ -1,5 +1,7 @@
 # Next (Version determined when release is cut)
 
+# 0.8.3
+
 # Bug Fixes
 
 - Fixed error when executing tests with tag (`-t`) filter
