@@ -21,7 +21,7 @@ use hyper::{body::Incoming, header::HeaderValue, Request};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, error, info, trace, warn};
-use rustls::ClientConfig;
+use rustls::{ClientConfig, crypto::aws_lc_rs};
 use rustls_platform_verifier::Verifier;
 use serde::Serialize;
 use std::{
@@ -1939,7 +1939,7 @@ fn http_request_from_test_spec(
 pub fn get_rustls_config_dangerous() -> Result<ClientConfig, Box<dyn Error + Send + Sync>> {
     let config = ClientConfig::builder()
         .dangerous() // The `Verifier` we're using is actually safe
-        .with_custom_certificate_verifier(Arc::new(Verifier::new()))
+        .with_custom_certificate_verifier(Arc::new(Verifier::new(aws_lc_rs::default_provider().into())?))
         .with_no_client_auth();
 
     Ok(config)

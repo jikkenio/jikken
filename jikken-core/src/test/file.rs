@@ -11,7 +11,7 @@ use chrono::{
 use log::{debug, error, trace};
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
 use num::{Num, Signed};
-use rand::{distributions::uniform::SampleUniform, rngs::ThreadRng, Rng};
+use rand::{distr::uniform::SampleUniform, rngs::ThreadRng, Rng};
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -362,10 +362,10 @@ impl Specification<Box<DatumSchema>> {
             Specification::Value(v) => generate_value_from_schema(v, 1),
             Specification::UnTaggedValue(v) => generate_value_from_schema(v, 1),
             Specification::OneOf(oneofs) => oneofs
-                .get(rng.gen_range(0..oneofs.len()))
+                .get(rng.random_range(0..oneofs.len()))
                 .and_then(|s| generate_value_from_schema(s, 1)),
             Specification::AnyOf(oneofs) => oneofs
-                .get(rng.gen_range(0..oneofs.len()))
+                .get(rng.random_range(0..oneofs.len()))
                 .and_then(|s| generate_value_from_schema(s, 1)),
             _ => None,
         }
@@ -579,8 +579,8 @@ where
         match &self {
             Specification::Value(v) => Some(v.clone()),
             Specification::UnTaggedValue(v) => Some(v.clone()),
-            Specification::OneOf(oneofs) => oneofs.get(rng.gen_range(0..oneofs.len())).cloned(),
-            Specification::AnyOf(anyofs) => anyofs.get(rng.gen_range(0..anyofs.len())).cloned(),
+            Specification::OneOf(oneofs) => oneofs.get(rng.random_range(0..oneofs.len())).cloned(),
+            Specification::AnyOf(anyofs) => anyofs.get(rng.random_range(0..anyofs.len())).cloned(),
             Specification::NoneOf(_) => None,
         }
     }
@@ -2968,7 +2968,7 @@ where
     T: num::Num
         + num::Bounded
         + Copy
-        + rand::distributions::uniform::SampleUniform
+        + rand::distr::uniform::SampleUniform
         + std::cmp::PartialOrd
         + std::default::Default
         + Clone
@@ -2978,7 +2978,7 @@ where
         + fmt::Debug,
     Specification<T>: Checker<Item = T>,
 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..max_attempts)
         .map(|_| {
             spec.specification
@@ -2999,7 +2999,7 @@ where
 }
 
 pub fn generate_bool(spec: &BooleanSpecification, max_attempts: u16) -> Option<bool> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for _ in 0..max_attempts {
         let ret = spec
@@ -3034,14 +3034,14 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
                             abcdefghijklmnopqrstuvwxyz\
                             "; // 0123456789)(*&^%$#@!~";
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let min_length = spec
         .min_length
         .unwrap_or(min(5, spec.max_length.map(|m| m / 2).unwrap_or(5)));
     let max_length = spec.max_length.unwrap_or(max(min_length * 2, 20));
     let string_length = spec
         .length
-        .unwrap_or(rng.gen_range(min_length..=max_length));
+        .unwrap_or(rng.random_range(min_length..=max_length));
 
     for _ in 0..max_attempts {
         let ret = spec
@@ -3051,7 +3051,7 @@ pub fn generate_string(spec: &StringSpecification, max_attempts: u16) -> Option<
             .unwrap_or(
                 (0..string_length)
                     .map(|_| {
-                        let idx = rng.gen_range(0..CHARSET.len());
+                        let idx = rng.random_range(0..CHARSET.len());
                         CHARSET[idx] as char
                     })
                     .collect::<String>(),
@@ -3076,7 +3076,7 @@ fn generate_number_in_range<T: Num + SampleUniform + PartialOrd + Copy + Debug>(
     if min >= max {
         min
     } else {
-        rng.gen_range(min..=max)
+        rng.random_range(min..=max)
     }
 }
 
@@ -3102,7 +3102,7 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 .unwrap(),
         );
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     (0..max_attempts)
         .map(|_| {
@@ -3117,7 +3117,7 @@ pub fn generate_date(spec: &DateSpecification, max_attempts: u16) -> Option<Stri
                 })
                 .unwrap_or_else(|| {
                     let days_diff = (max - min).num_days();
-                    let new_date = min + Duration::days(rng.gen_range(0..=days_diff));
+                    let new_date = min + Duration::days(rng.random_range(0..=days_diff));
                     spec.time_to_str(&new_date)
                 })
         })
@@ -3151,7 +3151,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                 .unwrap(),
         );
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     (0..max_attempts)
         .map(|_| {
@@ -3166,7 +3166,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
                 })
                 .unwrap_or_else(|| {
                     let seconds_diff = (max - min).num_seconds();
-                    let new_date_time = min + Duration::seconds(rng.gen_range(0..=seconds_diff));
+                    let new_date_time = min + Duration::seconds(rng.random_range(0..=seconds_diff));
                     spec.time_to_str(&new_date_time)
                 })
         })
@@ -3179,7 +3179,7 @@ pub fn generate_datetime(spec: &DateTimeSpecification, max_attempts: u16) -> Opt
 }
 
 pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..max_attempts)
         .map(|_| {
             spec.specification
@@ -3189,8 +3189,8 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
                 .unwrap_or_else(|| {
                     format!(
                         "{} {}",
-                        GIVEN_NAMES.get(rng.gen_range(0..20)).unwrap(),
-                        SURNAMES.get(rng.gen_range(0..20)).unwrap()
+                        GIVEN_NAMES.get(rng.random_range(0..20)).unwrap(),
+                        SURNAMES.get(rng.random_range(0..20)).unwrap()
                     )
                 })
         })
@@ -3204,21 +3204,21 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
 }
 
 pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     generate_string(&spec.specification, max_attempts)
-        .map(|s| format!("{}@{}", s, EMAIL_DOMAINS.get(rng.gen_range(0..3)).unwrap()))
+        .map(|s| format!("{}@{}", s, EMAIL_DOMAINS.get(rng.random_range(0..3)).unwrap()))
 }
 
 pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<Value> {
     // what ever shall I generate??? -> Went with ints for now
     // you should instead have a list of generators you random access into
     trace!("generate_list({:?})", spec);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let min_length = spec.min_length.unwrap_or(1);
     let max_length = spec.max_length.unwrap_or(max(min_length * 2, 10));
     let actual_length = spec
         .length
-        .unwrap_or(rng.gen_range(min_length..=max_length));
+        .unwrap_or(rng.random_range(min_length..=max_length));
 
     (0..max_attempts)
         .map(|_| {
@@ -4807,14 +4807,14 @@ mod tests {
 
     #[test]
     fn number_generation_max_greater_than_min() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let res = generate_number_in_range(10, 0, &mut rng);
         assert_eq!(10, res);
     }
 
     #[test]
     fn number_generation_range_of_1() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let res = generate_number_in_range(10, 10, &mut rng);
         assert_eq!(10, res);
     }

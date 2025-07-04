@@ -1,6 +1,6 @@
 use log::trace;
 use sha2::{Digest, Sha256};
-use sysinfo::{CpuExt, CpuRefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, System};
 
 pub fn new() -> Machine {
     let mut system = System::new();
@@ -26,9 +26,9 @@ impl Machine {
             ""
         };
 
-        let system_os = self.system.long_os_version().unwrap_or_default();
-        let system_kernel = self.system.kernel_version().unwrap_or_default();
-        let system_hostname = self.system.host_name().unwrap_or_default();
+        let system_os = System::long_os_version().unwrap_or_default();
+        let system_kernel = System::kernel_version().unwrap_or_default();
+        let system_hostname = System::host_name().unwrap_or_default();
 
         let machine_id = format!(
             "{}:{}:{}:{}:{}",

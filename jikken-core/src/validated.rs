@@ -110,9 +110,8 @@ fn nons<E, I>(mut a: NEVec<E>, rest: I) -> NEVec<E>
 where
     I: Iterator<Item = NEVec<E>>,
 {
-    for mut i in rest {
-        a.push(i.head);
-        a.append(&mut i.tail)
+    for i in rest {
+        a.extend(i);
     }
 
     a

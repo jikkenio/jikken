@@ -610,6 +610,9 @@ fn report_to_exit_code(report: executor::Report) -> std::process::ExitCode {
 async fn main() -> std::process::ExitCode {
     let _ = enable_ansi_support::enable_ansi_support();
 
+    // Install default crypto provider for rustls
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
     let cli = Cli::parse();
     let cli_args = Box::new(serde_json::to_value(&cli).unwrap());
 

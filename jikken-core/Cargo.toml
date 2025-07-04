@@ -6,33 +6,33 @@ edition = "2024"
 [dependencies]
 adjacent-pair-iterator = { version = "1.0.0" }
 assert-json-diff = { version = "2.0" }
-bytes = { version = "1.7.2" }
-chrono = { version = "0.4.31" }
-clap = { version = "4.4", features = ["derive"] }
-dirs = { version = "5.0" }
+bytes = { version = "1.10" }
+chrono = { version = "0.4.41" }
+clap = { version = "4.5", features = ["derive"] }
+dirs = { version = "6.0" }
 enable-ansi-support = "0.2.1"
-glob = { version = "0.3.1" }
+glob = { version = "0.3.2" }
 hex = { version = "0.4" }
-http-body-util = { version = "0.1.2" }
-hyper = { version = "1.4.1", features = ["http1", "http2"] }
-hyper-rustls = { version = "0.27.3", features = [
+http-body-util = { version = "0.1.3" }
+hyper = { version = "1.6", features = ["http1", "http2"] }
+hyper-rustls = { version = "0.27.7", features = [
     "http2",
     "rustls-platform-verifier",
 ] }
-hyper-util = { version = "0.1.9" }
-indicatif = { version = "0.17", features = ["rayon"] }
+hyper-util = { version = "0.1.14" }
+indicatif = { version = "0.18", features = ["rayon"] }
 log = { version = "0.4", features = ["std"] }
-nonempty-collections = { version = "0.2.5" }
-num = { version = "0.4.1" }
+nonempty-collections = { version = "1.0" }
+num = { version = "0.4.3" }
 oas3 = { version = "0.4.0" }
 openapiv3-extended = { version = "6.0.0", features = ["v2"] }
-rand = { version = "0.8.5" }
-regex = { version = "1.10.4" }
-remove_dir_all = { version = "0.8" }
-reqwest = { version = "0.11" }
-rustls = { version = "0.23.14" }
-rustls-platform-verifier = { version = "0.3.4" }
-self_update = { version = "0.37", features = [
+rand = { version = "0.9" }
+regex = { version = "1.11" }
+remove_dir_all = { version = "1.0" }
+reqwest = { version = "0.12" }
+rustls = { version = "0.23.28" }
+rustls-platform-verifier = { version = "0.6" }
+self_update = { version = "0.42", features = [
     "archive-tar",
     "archive-zip",
     "compression-flate2",
@@ -42,15 +42,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
 sha2 = { version = "0.10" }
-sysinfo = { version = "0.29" }
-tempfile = { version = "3.9" }
-tokio = { version = "1.35", features = ["full"] }
-toml = { version = "0.7" }
-ulid = { version = "1.1.3", features = ["serde"] }
+sysinfo = { version = "0.35" }
+tempfile = { version = "3.20" }
+tokio = { version = "1.46", features = ["full"] }
+toml = { version = "0.8" }
+ulid = { version = "1.2", features = ["serde"] }
 url = { version = "2.5" }
-uuid = { version = "1.6", features = ["v4"] }
-validated = { version = "0.4.0" }
-walkdir = { version = "2.4" }
+uuid = { version = "1.17", features = ["v4"] }
+validated = { version = "1.0" }
+walkdir = { version = "2.5" }
 
 [lib]
 crate-type = ["lib"]
