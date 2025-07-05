@@ -3,10 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import Sidebar from "../components/Sidebar.astro";
 import { FolderView } from "../components/FolderView.tsx";
 import Fileview from "../components/fileview/Fileview.astro";
-<<<<<<< HEAD
 import { NotificationPopup } from "../components/fileview/NotificationPopup.tsx";
-=======
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
 // import Homeview from "../components/Homeview.astro";
 
 import { $layoutState } from "../stores/layoutState";
@@ -40,10 +37,7 @@ import { $layoutState } from "../stores/layoutState";
     ]}
   >
     <Fileview />
-<<<<<<< HEAD
     <NotificationPopup client:load />
-=======
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
   </div>
 </Layout>
 
@@ -103,17 +97,10 @@ import { $layoutState } from "../stores/layoutState";
     resizer?.addEventListener("mousedown", mouseDownHandler);
   };
 
-<<<<<<< HEAD
   listenKeys($layoutState, ["folderPanelVisible"], (layout, _) => {
     const folder = document.getElementById("folder-panel");
     const content = document.getElementById("content-panel");
     if (!layout.folderPanelVisible) {
-=======
-  listenKeys($layoutState, ["folderPanelVisible"], (layout, key) => {
-    const folder = document.getElementById("folder-panel");
-    const content = document.getElementById("content-panel");
-    if (!layout[key]) {
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
       folder?.classList.add("hidden");
       content?.classList.add("border-l");
     } else {

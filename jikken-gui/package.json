@@ -20,22 +20,11 @@
     "@tauri-apps/plugin-shell": "^2.3.0",
     "js-yaml": "^4.1.0",
     "monaco-editor": "^0.52.2",
-<<<<<<< HEAD
-    "monaco-yaml": "^5.3.1",
-    "nanostores": "^0.9.5",
-    "solid-js": "^1.8.15",
-<<<<<<< HEAD
-    "tailwindcss": "^3.4.1",
-=======
     "monaco-yaml": "^5.4.0",
     "nanostores": "^1.0.1",
     "solid-js": "^1.9.7",
     "tailwindcss": "^4.1.11",
->>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
     "uuid": "^11.1.0"
-=======
-    "tailwindcss": "^3.4.1"
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",

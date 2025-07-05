@@ -10,11 +10,7 @@
     "targets": "all",
     "icon": ["icons/logo.png"]
   },
-<<<<<<< HEAD
   "productName": "Jikken",
-=======
-  "productName": "jikken-gui",
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
   "mainBinaryName": "jikken-gui",
   "version": "0.1.0",
   "identifier": "io.jikken",

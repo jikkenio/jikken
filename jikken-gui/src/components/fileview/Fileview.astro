@@ -11,7 +11,6 @@ import { YamlView } from "./YamlView";
   <FileTabs client:load />
   <div
     id="api-view"
-<<<<<<< HEAD
     class="flex flex-col flex-auto"
     class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
   >
@@ -24,13 +23,6 @@ import { YamlView } from "./YamlView";
         <ResponseTabs client:only />
       </div>
     </div>
-=======
-    class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
-  >
-    <RequestBar client:only />
-    <RequestTabs client:only />
-    <ResponseTabs client:only />
->>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
   </div>
   <div
     id="yaml-view"
