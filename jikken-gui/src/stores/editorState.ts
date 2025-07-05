@@ -250,6 +250,7 @@ export const addNewFile = () => {
     let state = $editorState.get()
 <<<<<<< HEAD
     let file = getNewFile();
+<<<<<<< HEAD
 =======
     let file = {
         testFile: {
@@ -264,6 +265,13 @@ export const addNewFile = () => {
     state.files.push(file);
 
     $editorState.set({ ...state });
+=======
+    
+    $editorState.set({ 
+        currentFile: state.currentFile + 1,
+        files: [...state.files, file]
+    });
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
     resetTabs(file);
     selectEntity(-1);
 };
@@ -296,6 +304,7 @@ export const openFile = async (entity: FolderEntity) => {
 
 <<<<<<< HEAD
     let fileState = { id: uuidv4(), file: file, testFile: testFile, auth: auth }
+<<<<<<< HEAD
 =======
     let fileState = { file: file, testFile: testFile, auth: auth }
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
@@ -303,6 +312,13 @@ export const openFile = async (entity: FolderEntity) => {
     currentState.currentFile++;
 
     $editorState.set({ ...currentState });
+=======
+    
+    $editorState.set({ 
+        currentFile: currentState.currentFile + 1,
+        files: [...currentState.files, fileState]
+    });
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
     resetTabs(fileState);
     selectEntityPath(file.path);
 };
@@ -341,28 +357,43 @@ export const saveFile = async () => {
 export const closeFile = (index: number) => {
     console.log("closing file at index ", index);
     let state = $editorState.get();
-    state.files.splice(index, 1);
+    let newFiles = state.files.filter((_, i) => i !== index);
 
     // if there are no files left, open a new scratch pad
-    if (state.files.length === 0) {
-        state.currentFile = 0;
+    if (newFiles.length === 0) {
+        let newFile = getNewFile();
+        $editorState.set({
+            currentFile: 0,
+            files: [newFile]
+        });
         console.log("new current file: 0");
+<<<<<<< HEAD
 <<<<<<< HEAD
         state.files.push(getNewFile());
 =======
         state.files.push({ testFile: {}, auth: { type: AuthType.None } });
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
         resetTabs(state.files[0]);
+=======
+        resetTabs(newFile);
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
         selectEntity(-1);
     } else if (index <= state.currentFile) {
         // adjust the selected index, if applicable
-        state.currentFile = Math.max(state.currentFile - 1, 0);
-        console.log("new current file: ", state.currentFile);
-        resetTabs(state.files[state.currentFile]);
-        selectEntityPath(state.files[state.currentFile].file?.path);
+        let newCurrentFile = Math.max(state.currentFile - 1, 0);
+        console.log("new current file: ", newCurrentFile);
+        $editorState.set({
+            currentFile: newCurrentFile,
+            files: newFiles
+        });
+        resetTabs(newFiles[newCurrentFile]);
+        selectEntityPath(newFiles[newCurrentFile].file?.path);
+    } else {
+        $editorState.set({
+            currentFile: state.currentFile,
+            files: newFiles
+        });
     }
-
-    $editorState.set({ ...state });
 };
 
 export const makeRequest = async () => {

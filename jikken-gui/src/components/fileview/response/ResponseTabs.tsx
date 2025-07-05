@@ -1,30 +1,21 @@
-import { createSignal, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
+import { useStore } from "@nanostores/solid";
 import { $layoutState, setResponseTabActive } from "../../../stores/layoutState";
 import { Headers } from "../response/Headers";
 import { Body } from '../response/Body';
 import { $editorState } from "../../../stores/editorState";
 
 export const ResponseTabs = () => {
-
     enum StatusType {
         SUCCESS,
         WARN,
         FAIL,
     };
 
-    let editorState = $editorState.get();
-    let [response, setResponse] = createSignal(editorState.files[editorState.currentFile].response);
-
-    $editorState.subscribe((state) => {
-        let response = state.files[state.currentFile].response;
-        setResponse(response);
-    });
-
-    let [layout, setLayout] = createSignal($layoutState.get());
-
-    $layoutState.subscribe((value) => {
-        setLayout({ ...value });
-    });
+    const editorState = useStore($editorState);
+    const layout = useStore($layoutState);
+    
+    const response = () => editorState().files[editorState().currentFile].response;
 
     const formatSize = () => {
 <<<<<<< HEAD

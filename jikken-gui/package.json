@@ -11,19 +11,27 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@astrojs/solid-js": "^5.0.8",
-    "@nanostores/solid": "^0.4.2",
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-dialog": "^2.0.0",
-    "@tauri-apps/plugin-fs": "^2.0.0",
-    "@tauri-apps/plugin-shell": "^2.0.0",
+    "@astrojs/solid-js": "^5.1.0",
+    "@nanostores/solid": "^1.0.0",
+    "@tailwindcss/postcss": "^4.1.11",
+    "@tauri-apps/api": "^2.6.0",
+    "@tauri-apps/plugin-dialog": "^2.3.0",
+    "@tauri-apps/plugin-fs": "^2.4.0",
+    "@tauri-apps/plugin-shell": "^2.3.0",
     "js-yaml": "^4.1.0",
     "monaco-editor": "^0.52.2",
+<<<<<<< HEAD
     "monaco-yaml": "^5.3.1",
     "nanostores": "^0.9.5",
     "solid-js": "^1.8.15",
 <<<<<<< HEAD
     "tailwindcss": "^3.4.1",
+=======
+    "monaco-yaml": "^5.4.0",
+    "nanostores": "^1.0.1",
+    "solid-js": "^1.9.7",
+    "tailwindcss": "^4.1.11",
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
     "uuid": "^11.1.0"
 =======
     "tailwindcss": "^3.4.1"
@@ -31,12 +39,10 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
-    "@astrojs/tailwind": "^6.0.2",
-    "@tailwindcss/forms": "^0.5.7",
-    "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/cli": "^2.6.2",
     "@types/js-yaml": "^4.0.9",
-    "astro": "^5.6.2",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.0"
+    "astro": "^5.11.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
   }
 }

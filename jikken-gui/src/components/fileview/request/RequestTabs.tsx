@@ -1,4 +1,5 @@
-import { createSignal, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
+import { useStore } from "@nanostores/solid";
 import { $layoutState, setRequestTabActive } from "../../../stores/layoutState";
 import { Parameters } from "./Parameters";
 import { Headers } from "./Headers";
@@ -7,6 +8,7 @@ import { Auth } from './Auth';
 import { $editorState, saveFile } from "../../../stores/editorState";
 
 export const RequestTabs = () => {
+<<<<<<< HEAD
 
     let [layout, setLayout] = createSignal($layoutState.get());
     let [isSaveable, setIsSaveable] = createSignal(false);
@@ -22,6 +24,12 @@ export const RequestTabs = () => {
     $editorState.subscribe((state) => {
         setIsSaveable(state.files[state.currentFile].testFile.request?.url ? true : false);
     });
+=======
+    const layout = useStore($layoutState);
+    const editorState = useStore($editorState);
+    
+    const isSaveable = () => editorState().files[editorState().currentFile].testFile.request?.url ? true : false;
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
 
     return (
         <div>

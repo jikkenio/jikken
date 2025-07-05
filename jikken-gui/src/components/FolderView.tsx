@@ -1,15 +1,10 @@
-import { createSignal, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
+import { useStore } from "@nanostores/solid";
 import { $folderState, loadFolder, openFolderDialog, removeFolder, selectEntity, toggleFolder, type FolderEntity } from "../stores/folderState";
 import { openFile } from "../stores/editorState";
 
 export const FolderView = () => {
-
-    let folderState = $folderState.get();
-    let [state, setState] = createSignal(folderState);
-
-    $folderState.subscribe((state) => {
-        setState(state);
-    });
+    const state = useStore($folderState);
 
     const selectFile = (index: number, file: FolderEntity) => {
         selectEntity(index);

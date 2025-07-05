@@ -1,4 +1,8 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@import "tailwindcss";
+
+@source "../**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}";
+
+@theme {
+  --color-neutral-850: #1c1c1c;
+}
 

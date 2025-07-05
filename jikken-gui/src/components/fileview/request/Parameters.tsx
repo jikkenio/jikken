@@ -1,19 +1,31 @@
 import { createSignal, For, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../stores/layoutState';
 import { $editorState, updateRequest, type HttpParameter, type Request } from '../../../stores/editorState';
+import { useStore } from '@nanostores/solid';
 
 export const Parameters = () => {
+    const editorState = useStore($editorState);
+    
+    const currentFile = () => editorState().files[editorState().currentFile].testFile;
+    const [params, setParams] = createSignal<HttpParameter[]>((() => {
+        const file = currentFile();
+        const stateParams = file.request?.params ?? [];
+        return [...stateParams, { param: "", value: "", generated: false }];
+    })());
 
-    let editorState = $editorState.get();
-    let currentFile = editorState.files[editorState.currentFile].testFile;
-    let [params, setParams] = createSignal(currentFile.request?.params ?? []);
-
-    $editorState.subscribe((state) => {
-        let file = state.files[state.currentFile].testFile;
-        let stateParams = file.request?.params ?? [];
+    // Update params when editorState changes
+    const updateParamsFromState = () => {
+        const file = currentFile();
+        const stateParams = file.request?.params ?? [];
         setParams([...stateParams, { param: "", value: "", generated: false }]);
-        currentFile = file;
-    });
+    };
+    
+    // Track state changes
+    const [prevFileId, setPrevFileId] = createSignal(editorState().files[editorState().currentFile].id);
+    if (editorState().files[editorState().currentFile].id !== prevFileId()) {
+        updateParamsFromState();
+        setPrevFileId(editorState().files[editorState().currentFile].id);
+    }
 
     const onParamInput = (index: number) => {
         let currentParams = params();
@@ -51,7 +63,8 @@ export const Parameters = () => {
     };
 
     const updateParams = (params: HttpParameter[]) => {
-        let request = { ...currentFile.request ?? {} as Request };
+        const file = currentFile();
+        let request = { ...file.request ?? {} as Request };
         params.splice(-1, 1);
         request.params = params;
         updateRequest(request);

@@ -2,8 +2,10 @@ import { createSignal, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../stores/layoutState';
 import { $editorState, updateRequest, type HttpHeader, type Request } from '../../../stores/editorState';
 import MonacoEditorSolid from '../MonacoEditorSolid';
+import { useStore } from '@nanostores/solid';
 
 export const Body = () => {
+    const editorState = useStore($editorState);
 
     enum BodyType {
         None,
@@ -15,6 +17,7 @@ export const Body = () => {
         content?: Object,
     };
 
+<<<<<<< HEAD
     let editorState = $editorState.get();
 <<<<<<< HEAD
     let currentFile = editorState.files[editorState.currentFile];
@@ -42,6 +45,22 @@ export const Body = () => {
         currentFile = file;
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
     });
+=======
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const [body, setBody] = createSignal<Body>((() => {
+        const file = currentFile();
+        const stateBody = file.testFile.request?.body;
+        return { type: stateBody ? BodyType.Json : BodyType.None, content: stateBody };
+    })());
+
+    // Track state changes
+    const [prevFileId, setPrevFileId] = createSignal(currentFile().id);
+    if (currentFile().id !== prevFileId()) {
+        const stateBody = currentFile().testFile.request?.body;
+        setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
+        setPrevFileId(currentFile().id);
+    }
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
 
     const onTypeChange = (type: BodyType) => {
         console.log("type change");
@@ -75,10 +94,15 @@ export const Body = () => {
 
     const toggleContentType = (enabled: boolean) => {
 <<<<<<< HEAD
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
 =======
         let request = { ...currentFile.request ?? {} as Request };
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
+=======
+        const file = currentFile();
+        let request = { ...file.testFile.request ?? {} as Request };
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
         let headers = request.headers ?? [];
         let index = headers.findIndex(h => h.header.toLowerCase() === "content-type");
         console.log(`content header index ${index}`);
@@ -99,10 +123,15 @@ export const Body = () => {
 
     const updateHeaders = (headers: HttpHeader[]) => {
 <<<<<<< HEAD
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
 =======
         let request = { ...currentFile.request ?? {} as Request };
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
+=======
+        const file = currentFile();
+        let request = { ...file.testFile.request ?? {} as Request };
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);
@@ -110,10 +139,15 @@ export const Body = () => {
 
     const updateBody = (body: Body) => {
 <<<<<<< HEAD
+<<<<<<< HEAD
         let request = { ...currentFile.testFile.request ?? {} as Request };
 =======
         let request = { ...currentFile.request ?? {} as Request };
 >>>>>>> 330f865 (JK-594: initial move of jikken-gui project into repo)
+=======
+        const file = currentFile();
+        let request = { ...file.testFile.request ?? {} as Request };
+>>>>>>> d5b23c1 (JK-592: upgrade frontend packages and migrate to tailwind 4. this may have broken some functionality)
         request.body = body.content;
         updateRequest(request);
     };

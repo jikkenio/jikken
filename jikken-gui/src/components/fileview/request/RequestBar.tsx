@@ -1,7 +1,8 @@
-import { createSignal } from "solid-js";
+import { useStore } from "@nanostores/solid";
 import { $editorState, HttpVerb, makeRequest, updateRequest, type Request } from "../../../stores/editorState";
 
 export const RequestBar = () => {
+    const editorState = useStore($editorState);
 
     const getDisplayUrl = (request: Request | undefined) => {
         let url = request?.url ?? "";
@@ -11,22 +12,13 @@ export const RequestBar = () => {
         return `${url}?${params.map((p) => `${p.param}=${p.value}`).join("&")}`;
     }
 
-    let editorStore = $editorState.get()
-    let request = editorStore.files[editorStore.currentFile].testFile.request;
-    const [url, setUrl] = createSignal(request?.url);
-    const [displayUrl, setDisplayUrl] = createSignal(getDisplayUrl(request));
-    const [method, setMethod] = createSignal(editorStore.files[editorStore.currentFile].testFile.request?.method ?? HttpVerb.GET)
-
-    $editorState.subscribe((newState) => {
-        let newRequest = newState.files[newState.currentFile].testFile.request;
-        setUrl(newRequest?.url);
-        setDisplayUrl(getDisplayUrl(newRequest));
-        setMethod(newRequest?.method ?? HttpVerb.GET);
-        request = newRequest;
-    });
+    const request = () => editorState().files[editorState().currentFile].testFile.request;
+    const url = () => request()?.url;
+    const displayUrl = () => getDisplayUrl(request());
+    const method = () => request()?.method ?? HttpVerb.GET;
 
     const updateMethod = (value: string) => {
-        let currentRequest = request || {};
+        let currentRequest = request() || {};
         currentRequest.method = value as HttpVerb;
         updateRequest(currentRequest);
     }
@@ -50,7 +42,7 @@ export const RequestBar = () => {
     }
 
     const updateUrl = (value: string) => {
-        let currentRequest = request || {};
+        let currentRequest = request() || {};
         currentRequest.url = value.split("?")[0];
         updateParamsFromUrl(value, currentRequest);
         updateRequest(currentRequest);
@@ -62,7 +54,8 @@ export const RequestBar = () => {
                 class="flex grow rounded-[4px] shadow-sm ring-1 ring-inset ring-neutral-500 focus-within:ring-neutral-300"
             >
                 <select
-                    class="flex-none select-none items-center pl-3 text-white text-sm border-none bg-transparent focus:ring-0"
+                    class="flex-none select-none items-center pl-3 text-white text-sm border-none bg-transparent focus:ring-0 appearance-none outline-none"
+                    style="box-shadow: none;"
                     value={method()}
                     onChange={(e) => updateMethod(e.currentTarget.value)}
                 >

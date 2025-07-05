@@ -1,26 +1,11 @@
-import { createSignal, For } from "solid-js";
+import { For } from "solid-js";
+import { useStore } from "@nanostores/solid";
 import { $editorState, addNewFile, closeFile, selectFile, type FileState } from "../../stores/editorState";
 import { $layoutState, setViewMode, ViewMode } from "../../stores/layoutState";
 
 export const FileTabs = () => {
-
-    let editorState = $editorState.get()
-    let layoutState = $layoutState.get();
-
-    let [state, setState] = createSignal(editorState);
-    let [files, setFiles] = createSignal(editorState.files);
-    let [viewMode, setLocalViewMode] = createSignal(layoutState.viewMode);
-
-    $editorState.subscribe((newState) => {
-        setState(newState);
-        setFiles([...newState.files.map(f => ({ ...f }))]);
-    });
-
-    $layoutState.subscribe((newState, key) => {
-        if (key === "viewMode") {
-            setLocalViewMode(newState.viewMode);
-        }
-    });
+    const state = useStore($editorState);
+    const layoutState = useStore($layoutState);
 
     const trySelectFile = (index: number) => {
         if (index === state().currentFile) return;
@@ -46,7 +31,7 @@ export const FileTabs = () => {
     return (
         <div>
             <nav class="flex divide-x divide-neutral-700 shadow select-none h-12">
-                <For each={files()}>
+                <For each={state().files}>
                     {(file, index) => (
                         <div
                             class="group flex flex-[2_1_auto] justify-between min-w-8 max-w-72 w-8 overflow-hidden pl-4 pr-2 text-center text-sm font-medium focus:z-10"
@@ -91,8 +76,8 @@ export const FileTabs = () => {
                             onClick={() => setViewMode(ViewMode.API)}
                             class="w-10 flex items-center rounded-l-md px-3 py-2 text-sm font-semibold focus:z-10"
                             classList={{
-                                "bg-indigo-600 text-white cursor-default": viewMode() === ViewMode.API,
-                                "bg-transparent text-neutral-400 border border-1 border-r-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": viewMode() !== ViewMode.API,
+                                "bg-indigo-600 text-white cursor-default": layoutState().viewMode === ViewMode.API,
+                                "bg-transparent text-neutral-400 border border-1 border-r-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": layoutState().viewMode !== ViewMode.API,
                             }}>
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"
@@ -107,8 +92,8 @@ export const FileTabs = () => {
                             onClick={() => setViewMode(ViewMode.RAW)}
                             class="w-10 flex items-center -ml-px rounded-r-md px-3 py-2 text-sm font-semibold focus:z-10"
                             classList={{
-                                "bg-indigo-600 text-white": viewMode() === ViewMode.RAW,
-                                "bg-transparent text-neutral-400 border border-1 border-l-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": viewMode() !== ViewMode.RAW,
+                                "bg-indigo-600 text-white": layoutState().viewMode === ViewMode.RAW,
+                                "bg-transparent text-neutral-400 border border-1 border-l-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": layoutState().viewMode !== ViewMode.RAW,
                             }}>
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"

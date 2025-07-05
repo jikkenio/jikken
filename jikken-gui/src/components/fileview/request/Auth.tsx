@@ -2,18 +2,20 @@ import { createSignal, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../stores/layoutState';
 import { $editorState, updateRequest, updateAuth, type HttpHeader, type Request } from '../../../stores/editorState';
 import { AuthType, type AuthState, type BasicAuthData, type BearerAuthData } from '../../../stores/authState';
+import { useStore } from '@nanostores/solid';
 
 export const Auth = () => {
+    const editorState = useStore($editorState);
+    
+    const currentFile = () => editorState().files[editorState().currentFile].testFile;
+    const [auth, setAuth] = createSignal<AuthState>(editorState().files[editorState().currentFile].auth);
 
-    let editorState = $editorState.get();
-    let currentFile = editorState.files[editorState.currentFile].testFile;
-
-    let [auth, setAuth] = createSignal(editorState.files[editorState.currentFile].auth);
-
-    $editorState.subscribe((state) => {
-        currentFile = state.files[state.currentFile].testFile;
-        setAuth(state.files[state.currentFile].auth);
-    });
+    // Track state changes
+    const [prevFileId, setPrevFileId] = createSignal(editorState().files[editorState().currentFile].id);
+    if (editorState().files[editorState().currentFile].id !== prevFileId()) {
+        setAuth(editorState().files[editorState().currentFile].auth);
+        setPrevFileId(editorState().files[editorState().currentFile].id);
+    }
 
     const onTypeChange = (index: number) => {
         let auth = {
@@ -35,18 +37,19 @@ export const Auth = () => {
 
         currentAuth.data = { ...currentData }
         updateAuth({ ...currentAuth });
-        resolveHeaders(currentAuth);
+        resolveHeaders({ ...currentAuth });
     };
 
     const onBearerAuthTokenChange = (token: string) => {
         let currentAuth = auth();
         currentAuth.data = { token: token } as BearerAuthData;
         updateAuth({ ...currentAuth });
-        resolveHeaders(currentAuth);
+        resolveHeaders({ ...currentAuth });
     };
 
     const resolveHeaders = (auth: AuthState) => {
-        let headers = currentFile.request?.headers ?? [];
+        const file = currentFile();
+        let headers = file.request?.headers ?? [];
 
         switch (auth.type) {
             case AuthType.None:
@@ -92,7 +95,8 @@ export const Auth = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        let request = { ...currentFile.request ?? {} as Request };
+        const file = currentFile();
+        let request = { ...file.request ?? {} as Request };
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);

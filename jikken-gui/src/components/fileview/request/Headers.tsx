@@ -2,19 +2,31 @@ import { setRequestTabCount } from '../../../stores/layoutState';
 import { createSignal, For, Show } from 'solid-js';
 import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../stores/editorState';
 import { AuthType, parseBasicAuthHeader, type AuthState } from '../../../stores/authState';
+import { useStore } from '@nanostores/solid';
 
 export const Headers = () => {
+    const editorState = useStore($editorState);
+    
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const [headers, setHeaders] = createSignal<HttpHeader[]>((() => {
+        const file = currentFile();
+        const stateHeaders = file.testFile.request?.headers ?? [];
+        return [...stateHeaders, { header: "", value: "", generated: false }];
+    })());
 
-    let editorState = $editorState.get();
-    let currentFile = editorState.files[editorState.currentFile];
-    let [headers, setHeaders] = createSignal(currentFile.testFile.request?.headers ?? []);
-
-    $editorState.subscribe((state) => {
-        let file = state.files[state.currentFile];
-        let stateHeaders = file.testFile.request?.headers ?? [];
+    // Update headers when editorState changes
+    const updateHeadersFromState = () => {
+        const file = currentFile();
+        const stateHeaders = file.testFile.request?.headers ?? [];
         setHeaders([...stateHeaders, { header: "", value: "", generated: false }]);
-        currentFile = file;
-    });
+    };
+    
+    // Track state changes
+    const [prevFileId, setPrevFileId] = createSignal(currentFile().id);
+    if (currentFile().id !== prevFileId()) {
+        updateHeadersFromState();
+        setPrevFileId(currentFile().id);
+    }
 
     const onHeaderInput = (index: number) => {
         let currentHeaders = headers();
@@ -73,7 +85,8 @@ export const Headers = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        let request = { ...currentFile.testFile.request ?? {} as Request };
+        const file = currentFile();
+        let request = { ...file.testFile.request ?? {} as Request };
         headers.splice(-1, 1);
         request.headers = headers;
         updateRequest(request);
