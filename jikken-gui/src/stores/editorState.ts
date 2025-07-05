@@ -5,6 +5,7 @@ import {
   setRequestTabCount,
   setResponseTabActive,
   setResponseTabCount,
+  $layoutState,
 } from "./layoutState";
 import { AuthType, parseAuthData, type AuthState } from "./authState";
 import {
@@ -408,10 +409,18 @@ export const makeRequest = async () => {
   )?.value;
   response.size = size ? +size : undefined;
 
-  file.response = response;
-  $editorState.set({ ...state });
+  // Create a new file state object to ensure reactivity
+  const updatedFile = { ...file, response };
+  const updatedFiles = [...state.files];
+  updatedFiles[state.currentFile] = updatedFile;
+  
+  $editorState.set({ ...state, files: updatedFiles });
   setResponseTabCount("tab-body", response.body ? 1 : 0);
   setResponseTabCount("tab-headers", response.headers.length);
+  
+  // Ensure response panel is visible after successful request
+  $layoutState.setKey("responseTabPanelVisible", true);
+  $layoutState.setKey("responseTabIndex", 1);
 };
 
 export const saveResponseBody = async () => {
