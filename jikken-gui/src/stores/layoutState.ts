@@ -148,6 +148,11 @@ export const setResponseTabActive = (index: number, allowToggle: boolean = true)
     return true;
 };
 
+export const setResponseTabVisible = (visible: boolean) => {
+    $layoutState.setKey("responseTabPanelVisible", visible);
+    return true;
+};
+
 export const setResponseTabCount = (id: string, count: number) => {
     console.log(`setResponseTabCount ${id} ${count}`);
     if (!responseTabIndexByName.has(id)) return;

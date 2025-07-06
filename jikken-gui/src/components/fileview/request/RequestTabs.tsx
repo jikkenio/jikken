@@ -14,8 +14,8 @@ export const RequestTabs = () => {
     const isSaveable = () => editorState().files[editorState().currentFile].testFile.request?.url ? true : false;
 
     return (
-        <div>
-            <div class="block">
+        <div class="h-full flex flex-col">
+            <div class="flex-none">
                 <div class="flex items-center justify-between border-b border-neutral-800 m-3 mt-1">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                         <For each={layout().requestTabs}>
@@ -77,7 +77,7 @@ export const RequestTabs = () => {
             </div>
             <div
                 id="tab-content"
-                class="select-none min-h-32 overflow-y-scroll"
+                class="select-none flex-1 overflow-y-auto"
                 classList={{ hidden: !layout().requestTabPanelVisible }}
             >
                 <Show when={layout().requestTabIndex === 1}>

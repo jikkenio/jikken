@@ -106,12 +106,17 @@ export const Auth = () => {
         <div id="tab-auth-panel" class="p-3 pt-0">
             <div>
                 <label for="type-select" class="text-xs text-neutral-400 mr-3">Auth Type</label>
-                <select id="type-select" class="h-7 w-28 p-0 px-2 mb-4 rounded-[3px] bg-transparent text-xs text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400"
-                    onChange={(e) => onTypeChange(+e.currentTarget.value)} value={auth().type}>
-                    <option selected value={AuthType.None}>None</option>
-                    <option value={AuthType.Basic}>Basic Auth</option>
-                    <option value={AuthType.Bearer}>Bearer Token</option>
-                </select>
+                <div class="relative inline-block">
+                    <select id="type-select" class="h-7 w-32 p-0 pl-2 pr-7 mb-4 bg-transparent text-xs text-neutral-300 border border-neutral-700 rounded-[3px] focus:ring-0 focus:border-neutral-500 appearance-none outline-none"
+                        onChange={(e) => onTypeChange(+e.currentTarget.value)} value={auth().type}>
+                        <option selected value={AuthType.None}>None</option>
+                        <option value={AuthType.Basic}>Basic Auth</option>
+                        <option value={AuthType.Bearer}>Bearer Token</option>
+                    </select>
+                    <svg class="absolute right-1 top-1.5 pointer-events-none h-4 w-4 text-neutral-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </div>
             </div>
 
             <Show when={auth().type === AuthType.Basic}>

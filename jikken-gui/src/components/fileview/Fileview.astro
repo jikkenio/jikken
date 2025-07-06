@@ -15,11 +15,11 @@ import { YamlView } from "./YamlView";
     class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
   >
     <RequestBar client:only />
-    <div class="flex flex-col flex-auto justify-between">
-      <div class="flex-1">
+    <div class="flex flex-col flex-auto">
+      <div id="request-panel" class="flex-none">
         <RequestTabs client:only />
       </div>
-      <div class="flex-1">
+      <div class="flex-auto">
         <ResponseTabs client:only />
       </div>
     </div>
@@ -39,6 +39,7 @@ import { YamlView } from "./YamlView";
   import {
     $layoutState,
     setRequestTabVisible,
+    setResponseTabVisible,
     ViewMode,
   } from "../../stores/layoutState";
 
@@ -46,6 +47,12 @@ import { YamlView } from "./YamlView";
     const elem = document.getElementById("tab-content");
     const resizer = document.getElementById("file-resizer");
     const main = document.getElementById("main-panel");
+    
+    // Set initial height for request panel
+    const requestPanel = document.getElementById("request-panel");
+    if (requestPanel) {
+      requestPanel.style.height = "300px";  // Default height
+    }
 
     let y = 0;
     let h = 0;
@@ -96,6 +103,93 @@ import { YamlView } from "./YamlView";
     };
 
     resizer?.addEventListener("mousedown", mouseDownHandler);
+
+    // Response panel resizer - resizes the request panel above it
+    let responseY = 0;
+    let requestH = 0;
+    let initialAvailableHeight = 0;
+    let responseResizerAttached = false;
+
+    const responseMouseDownHandler = function (e: MouseEvent) {
+      const requestPanel = document.getElementById("request-panel");
+      if (!requestPanel) return;
+
+      responseY = e.clientY;
+      const styles = window.getComputedStyle(requestPanel);
+      requestH = parseInt(styles.height, 10);
+
+      // Capture the available height at the start of the drag
+      const apiView = document.getElementById("api-view");
+      if (apiView) {
+        const requestBarHeight = 80; // Approximate RequestBar height
+        initialAvailableHeight = apiView.getBoundingClientRect().height - requestBarHeight;
+      }
+
+      document.addEventListener("mousemove", responseMouseMoveHandler);
+      document.addEventListener("mouseup", responseMouseUpHandler);
+
+      const responseResizer = document.getElementById("response-resizer");
+      responseResizer?.classList.add("border-indigo-400", "border-t-4");
+      main?.classList.add("cursor-row-resize");
+    };
+
+    const responseMouseMoveHandler = function (e: MouseEvent) {
+      const requestPanel = document.getElementById("request-panel");
+      if (!requestPanel) return;
+
+      let dy = e.clientY - responseY;  // Positive dy means dragging down (expanding request panel)
+      let computedHeight = requestH + dy;
+      
+      // Use the captured available height from mousedown
+      const minRequestHeight = 250;  // Minimum height for request panel
+      const minResponseHeight = 250; // Minimum height for response panel
+      const maxRequestHeight = initialAvailableHeight - minResponseHeight;
+      
+      console.log('Initial available height:', initialAvailableHeight, 'Max request height:', maxRequestHeight, 'Computed height:', computedHeight);
+      
+      // Enforce minimum and maximum constraints
+      if (computedHeight < minRequestHeight) {
+        computedHeight = minRequestHeight;
+      } else if (computedHeight > maxRequestHeight && maxRequestHeight > minRequestHeight) {
+        computedHeight = maxRequestHeight;
+        console.log('Clamped to max height:', computedHeight);
+      }
+      
+      requestPanel.style.height = `${computedHeight}px`;
+    };
+
+    const responseMouseUpHandler = function () {
+      const responseResizer = document.getElementById("response-resizer");
+      responseResizer?.classList.remove("border-indigo-400", "border-t-4");
+      main?.classList.remove("cursor-row-resize");
+      document.removeEventListener("mousemove", responseMouseMoveHandler);
+      document.removeEventListener("mouseup", responseMouseUpHandler);
+    };
+
+    // Check periodically for the response resizer and attach event listener when it appears
+    const attachResponseResizer = () => {
+      if (!responseResizerAttached) {
+        const responseResizer = document.getElementById("response-resizer");
+        if (responseResizer) {
+          responseResizer.addEventListener("mousedown", responseMouseDownHandler);
+          responseResizerAttached = true;
+        }
+      }
+    };
+
+    // Use MutationObserver to detect when response panel appears
+    const observer = new MutationObserver(() => {
+      attachResponseResizer();
+    });
+
+    // Start observing the document body for changes
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Also try to attach immediately in case it's already there
+    attachResponseResizer();
   };
 
   listenKeys($layoutState, ["viewMode"], (layout) => {

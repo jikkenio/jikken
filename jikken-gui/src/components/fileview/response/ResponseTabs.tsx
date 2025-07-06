@@ -88,18 +88,20 @@ export const ResponseTabs = () => {
     }
 
     return (
-        <div
-            class="mb-4"
-            classList={{
-                hidden: !response()
-            }}>
+        <div class="mb-4 h-full flex flex-col">
             <div
-                id="file-resizer"
-                class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4"
+                id="response-resizer"
+                class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4 flex-none"
+                classList={{
+                    hidden: !response()
+                }}
             >
             </div>
-            <div class="flex flex-auto flex-col">
-                <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between">
+            <div class="flex flex-auto flex-col"
+                classList={{
+                    hidden: !response()
+                }}>
+                <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between flex-none">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                         <For each={layout().responseTabs}>
                             {(tab) => (
@@ -160,17 +162,17 @@ export const ResponseTabs = () => {
                     </Show>
                 </div>
 
-                <div id="tab-content"
-                    class="select-none min-h-32 size-full overflow-y-scroll flex flex-auto"
+                <div id="response-tab-content"
+                    class="select-none flex-1 overflow-y-auto"
                     classList={{ hidden: !layout().responseTabPanelVisible }}
                 >
                     <Show when={layout().responseTabIndex === 1}>
-                        <div id="tab-body-panel" class="flex flex-auto">
+                        <div id="tab-body-panel" class="h-full">
                             <Body />
                         </div>
                     </Show>
                     <Show when={layout().responseTabIndex === 2}>
-                        <div id="tab-headers-panel" class="w-full">
+                        <div id="tab-headers-panel" class="h-full">
                             <Headers />
                         </div>
                     </Show>

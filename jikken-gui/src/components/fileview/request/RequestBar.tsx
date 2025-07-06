@@ -53,18 +53,23 @@ export const RequestBar = () => {
             <div
                 class="flex grow rounded-[4px] shadow-sm ring-1 ring-inset ring-neutral-500 focus-within:ring-neutral-300"
             >
-                <select
-                    class="flex-none select-none items-center pl-3 text-white text-sm border-none bg-transparent focus:ring-0 appearance-none outline-none"
-                    style="box-shadow: none;"
-                    value={method()}
-                    onChange={(e) => updateMethod(e.currentTarget.value)}
-                >
-                    <option value={HttpVerb.GET}>GET</option>
-                    <option value={HttpVerb.POST}>POST</option>
-                    <option value={HttpVerb.PUT}>PUT</option>
-                    <option value={HttpVerb.PATCH}>PATCH</option>
-                    <option value={HttpVerb.DELETE}>DELETE</option>
-                </select>
+                <div class="relative flex items-center">
+                    <select
+                        class="flex-none select-none items-center pl-3 pr-8 text-white text-sm border-none bg-transparent focus:ring-0 appearance-none outline-none"
+                        style="box-shadow: none;"
+                        value={method()}
+                        onChange={(e) => updateMethod(e.currentTarget.value)}
+                    >
+                        <option value={HttpVerb.GET}>GET</option>
+                        <option value={HttpVerb.POST}>POST</option>
+                        <option value={HttpVerb.PUT}>PUT</option>
+                        <option value={HttpVerb.PATCH}>PATCH</option>
+                        <option value={HttpVerb.DELETE}>DELETE</option>
+                    </select>
+                    <svg class="absolute right-2 pointer-events-none h-4 w-4 text-neutral-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </div>
                 <input
                     type="text"
                     id="url-input"
