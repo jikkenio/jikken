@@ -252,7 +252,7 @@ export const addNewFile = () => {
   let file = getNewFile();
 
   $editorState.set({
-    currentFile: state.currentFile + 1,
+    currentFile: state.files.length,
     files: [...state.files, file],
   });
 
@@ -300,7 +300,7 @@ export const openFile = async (entity: FolderEntity) => {
   let fileState = { id: uuidv4(), file: file, testFile: testFile, auth: auth };
 
   $editorState.set({
-    currentFile: currentState.currentFile + 1,
+    currentFile: currentState.files.length,
     files: [...currentState.files, fileState],
   });
 
