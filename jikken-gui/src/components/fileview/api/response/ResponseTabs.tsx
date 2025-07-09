@@ -1,21 +1,36 @@
-import { For, Show } from "solid-js";
-import { useStore } from "@nanostores/solid";
-import { $layoutState, setResponseTabActive } from "../../../stores/layoutState";
-import { Headers } from "../response/Headers";
-import { Body } from '../response/Body';
-import { $editorState } from "../../../stores/editorState";
+import { createSignal, For, Show } from "solid-js";
+import { $layoutState, setResponseTabActive } from "../../../../stores/layoutState";
+import { Headers } from "./Headers";
+import { Body } from './Body';
+import { $editorState } from "../../../../stores/editorState";
+import { EntityType } from "../../../../stores/enum";
 
 export const ResponseTabs = () => {
+
     enum StatusType {
         SUCCESS,
         WARN,
         FAIL,
     };
 
-    const editorState = useStore($editorState);
-    const layout = useStore($layoutState);
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
-    const response = () => editorState().files[editorState().currentFile].response;
+    let [response, setResponse] = createSignal(currentTestFile?.response);
+
+    $editorState.subscribe((state) => {
+        let currentFile = state.files[state.currentFile];
+        let currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        let response = currentTestFile?.response;
+        setResponse(response);
+    });
+
+    let [layout, setLayout] = createSignal($layoutState.get());
+
+    $layoutState.subscribe((value) => {
+        setLayout({ ...value });
+    });
 
     const formatSize = () => {
         if (response()?.size === undefined) return "";
@@ -88,20 +103,18 @@ export const ResponseTabs = () => {
     }
 
     return (
-        <div class="mb-4 h-full flex flex-col">
+        <div
+            class="mb-4"
+            classList={{
+                hidden: !response()
+            }}>
             <div
-                id="response-resizer"
-                class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4 flex-none"
-                classList={{
-                    hidden: !response()
-                }}
+                id="file-resizer"
+                class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4"
             >
             </div>
-            <div class="flex flex-auto flex-col"
-                classList={{
-                    hidden: !response()
-                }}>
-                <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between flex-none">
+            <div class="flex flex-auto flex-col">
+                <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                         <For each={layout().responseTabs}>
                             {(tab) => (
@@ -162,17 +175,17 @@ export const ResponseTabs = () => {
                     </Show>
                 </div>
 
-                <div id="response-tab-content"
-                    class="select-none flex-1 overflow-y-auto"
+                <div id="tab-content"
+                    class="select-none min-h-32 size-full overflow-y-scroll flex flex-auto"
                     classList={{ hidden: !layout().responseTabPanelVisible }}
                 >
                     <Show when={layout().responseTabIndex === 1}>
-                        <div id="tab-body-panel" class="h-full">
+                        <div id="tab-body-panel" class="flex flex-auto">
                             <Body />
                         </div>
                     </Show>
                     <Show when={layout().responseTabIndex === 2}>
-                        <div id="tab-headers-panel" class="h-full">
+                        <div id="tab-headers-panel" class="w-full">
                             <Headers />
                         </div>
                     </Show>

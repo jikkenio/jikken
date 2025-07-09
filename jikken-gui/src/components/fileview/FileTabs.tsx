@@ -1,14 +1,16 @@
 import { For } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { $editorState, addNewFile, closeFile, selectFile, type FileState } from "../../stores/editorState";
-import { $layoutState, setViewMode, ViewMode } from "../../stores/layoutState";
+import { $layoutState, setViewMode } from "../../stores/layoutState";
+import { EntityType, ViewMode } from "../../stores/enum";
 
 export const FileTabs = () => {
-    const state = useStore($editorState);
+
+    const editorState = useStore($editorState);
     const layoutState = useStore($layoutState);
 
     const trySelectFile = (index: number) => {
-        if (index === state().currentFile) return;
+        if (index === editorState().currentFile) return;
         selectFile(index);
     };
 
@@ -20,9 +22,10 @@ export const FileTabs = () => {
     const getTabName = (file: FileState) => {
         if (file?.file) return file.file.name;
 
-        if (file?.testFile.request?.url) {
-            let method = file.testFile.request.method?.toUpperCase().concat(" ") || "";
-            return `${method}${file.testFile.request.url}`;
+        let testFile = file.type === EntityType.Test ? editorState().testFiles[file.index]?.testFile : undefined;
+        if (testFile && testFile.request?.url) {
+            let method = testFile!.request.method?.toUpperCase().concat(" ") || "";
+            return `${method}${testFile!.request.url}`;
         }
 
         return "Scratch Pad";
@@ -31,17 +34,35 @@ export const FileTabs = () => {
     return (
         <div>
             <nav class="flex divide-x divide-neutral-700 shadow select-none h-12">
-                <For each={state().files}>
+                <For each={editorState().files}>
                     {(file, index) => (
                         <div
-                            class="group flex flex-[2_1_auto] justify-between min-w-8 max-w-72 w-8 overflow-hidden pl-4 pr-2 text-center text-sm font-medium focus:z-10"
+                            class="group flex flex-[2_1_auto] justify-between min-w-8 max-w-72 w-8 overflow-hidden pl-2 pr-2 text-center text-sm font-medium focus:z-10"
                             classList={{
-                                "border-b border-neutral-700 cursor-pointer bg-neutral-900 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300": index() !== state().currentFile,
-                                "cursor-default bg-neutral-850 text-neutral-300": index() === state().currentFile
+                                "border-b border-neutral-700 cursor-pointer bg-neutral-900 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300": index() !== editorState().currentFile,
+                                "cursor-default bg-neutral-850 text-neutral-300": index() === editorState().currentFile
                             }}
                             onClick={[trySelectFile, index()]}
                         >
-                            <span class="my-auto select-none truncate">{getTabName(file)}</span>
+                            <span class="flex flex-row">
+                                <span class="my-auto mr-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        fill="currentColor"
+                                        class="bi bi-dot"
+                                        classList={{
+                                            "text-indigo-500": file.type === EntityType.Test && index() === editorState().currentFile,
+                                            "text-indigo-500/80 group-hover:text-indigo-500": file.type === EntityType.Test && index() !== editorState().currentFile,
+                                            "text-neutral-300": file.type === EntityType.Config && index() === editorState().currentFile,
+                                            "test-neutral-400 group-hover:text-neutral-300": file.type === EntityType.Config && index() !== editorState().currentFile,
+                                        }}
+                                        viewBox="0 0 16 16">
+                                        <path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6" />
+                                    </svg>
+                                </span>
+                                <span class="my-auto select-none truncate">{getTabName(file)}</span>
+                            </span>
                             <span class="p-1 my-auto text-neutral-400 invisible cursor-pointer group-hover:visible hover:text-white"
                                 onClick={(e) => tryCloseFile(e, index())}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-x" viewBox="0 0 16 16">
@@ -71,7 +92,7 @@ export const FileTabs = () => {
                     </span>
                 </div>
                 <div class="flex flex-1 bg-neutral-900 border-b border-neutral-700 items-center">
-                    <div class="flex rounded-md ml-auto h-8 mr-3">
+                    <div class="flex rounded-md ml-auto h-8 px-3">
                         <button type="button" title="API Mode"
                             onClick={() => setViewMode(ViewMode.API)}
                             class="w-10 flex items-center rounded-l-md px-3 py-2 text-sm font-semibold focus:z-10"

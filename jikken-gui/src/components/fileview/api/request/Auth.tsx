@@ -1,21 +1,17 @@
-import { createSignal, Show } from 'solid-js';
-import { setRequestTabCount } from '../../../stores/layoutState';
-import { $editorState, updateRequest, updateAuth, type HttpHeader, type Request } from '../../../stores/editorState';
-import { AuthType, type AuthState, type BasicAuthData, type BearerAuthData } from '../../../stores/authState';
+import { Show } from 'solid-js';
+import { setRequestTabCount } from '../../../../stores/layoutState';
+import { $editorState, updateRequest, updateAuth, type HttpHeader, type Request } from '../../../../stores/editorState';
+import { type AuthState, type BasicAuthData, type BearerAuthData } from '../../../../stores/authState';
+import { AuthType, EntityType } from '../../../../stores/enum';
 import { useStore } from '@nanostores/solid';
 
 export const Auth = () => {
+
     const editorState = useStore($editorState);
 
-    const currentFile = () => editorState().files[editorState().currentFile].testFile;
-    const [auth, setAuth] = createSignal<AuthState>(editorState().files[editorState().currentFile].auth);
-
-    // Track state changes
-    const [prevFileId, setPrevFileId] = createSignal(editorState().files[editorState().currentFile].id);
-    if (editorState().files[editorState().currentFile].id !== prevFileId()) {
-        setAuth(editorState().files[editorState().currentFile].auth);
-        setPrevFileId(editorState().files[editorState().currentFile].id);
-    }
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    const auth = () => currentTestFile()?.auth;
 
     const onTypeChange = (index: number) => {
         let auth = {
@@ -27,7 +23,7 @@ export const Auth = () => {
     };
 
     const onBasicAuthFieldChange = (field: string, value: string) => {
-        let currentAuth = auth();
+        let currentAuth = auth()!;
         let currentData = (currentAuth.data ?? {}) as BasicAuthData;
         if (field === "username") {
             currentData.username = value;
@@ -41,15 +37,15 @@ export const Auth = () => {
     };
 
     const onBearerAuthTokenChange = (token: string) => {
-        let currentAuth = auth();
+        let currentAuth = auth()!;
         currentAuth.data = { token: token } as BearerAuthData;
         updateAuth({ ...currentAuth });
         resolveHeaders({ ...currentAuth });
     };
 
     const resolveHeaders = (auth: AuthState) => {
-        const file = currentFile();
-        let headers = file.request?.headers ?? [];
+        const file = currentTestFile()?.testFile;
+        let headers = file?.request?.headers ?? [];
 
         switch (auth.type) {
             case AuthType.None:
@@ -95,8 +91,8 @@ export const Auth = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        const file = currentFile();
-        let request = { ...file.request ?? {} as Request };
+        const file = currentTestFile()?.testFile;
+        let request = { ...file?.request ?? {} as Request };
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);
@@ -108,7 +104,7 @@ export const Auth = () => {
                 <label for="type-select" class="text-xs text-neutral-400 mr-3">Auth Type</label>
                 <div class="relative inline-block">
                     <select id="type-select" class="h-7 w-32 p-0 pl-2 pr-7 mb-4 bg-transparent text-xs text-neutral-300 border border-neutral-700 rounded-[3px] focus:ring-0 focus:border-neutral-500 appearance-none outline-none"
-                        onChange={(e) => onTypeChange(+e.currentTarget.value)} value={auth().type}>
+                        onChange={(e) => onTypeChange(+e.currentTarget.value)} value={auth()?.type ?? AuthType.None}>
                         <option selected value={AuthType.None}>None</option>
                         <option value={AuthType.Basic}>Basic Auth</option>
                         <option value={AuthType.Bearer}>Bearer Token</option>
@@ -119,7 +115,7 @@ export const Auth = () => {
                 </div>
             </div>
 
-            <Show when={auth().type === AuthType.Basic}>
+            <Show when={auth()?.type === AuthType.Basic}>
                 <div class="inline-grid grid-cols-3 gap-y-2 w-72">
                     <div class="flex items-center">
                         <label for="username-input" class="text-sm text-neutral-400">Username</label>
@@ -128,19 +124,19 @@ export const Auth = () => {
                         spellcheck={false}
                         autocorrect="off"
                         placeholder="username"
-                        value={(auth().data as BasicAuthData)?.username ?? ""}
+                        value={(auth()?.data as BasicAuthData)?.username ?? ""}
                         class="col-span-2 h-7 w-36 p-1 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBasicAuthFieldChange("username", e.currentTarget.value)} />
                     <div class="flex items-center">
                         <label for="password-input" class="text-sm text-neutral-400">Password</label>
                     </div>
-                    <input id="password-input" type="password" placeholder="password" value={(auth().data as BasicAuthData)?.password ?? ""} // TODO: mask value
+                    <input id="password-input" type="password" placeholder="password" value={(auth()?.data as BasicAuthData)?.password ?? ""} // TODO: mask value
                         class="col-span-2 h-7 w-36 p-1 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBasicAuthFieldChange("password", e.currentTarget.value)} />
                 </div>
             </Show>
 
-            <Show when={auth().type === AuthType.Bearer}>
+            <Show when={auth()?.type === AuthType.Bearer}>
                 <div class="inline-grid grid-cols-3 gap-y-2 w-84">
                     <div class="flex items-center">
                         <label for="token-input" class="text-sm text-neutral-400">Token</label>
@@ -149,7 +145,7 @@ export const Auth = () => {
                         spellcheck={false}
                         autocorrect="off"
                         placeholder="token"
-                        value={(auth().data as BearerAuthData)?.token ?? ""}
+                        value={(auth()?.data as BearerAuthData)?.token ?? ""}
                         class="col-span-2 h-7 p-0 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBearerAuthTokenChange(e.currentTarget.value)} />
                 </div>

@@ -1,12 +1,9 @@
 import type { HttpHeader } from "./editorState";
+import { AuthType } from "./enum";
 
 const AUTH_TYPE_PREFIXES = new Set(["basic", "bearer"]);
 
-export enum AuthType {
-    None,
-    Basic,
-    Bearer,
-};
+
 
 const NO_AUTH = {
     type: AuthType.None,

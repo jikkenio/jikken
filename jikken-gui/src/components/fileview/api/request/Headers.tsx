@@ -1,32 +1,21 @@
-import { setRequestTabCount } from '../../../stores/layoutState';
+import { setRequestTabCount } from '../../../../stores/layoutState';
 import { createSignal, For, Show } from 'solid-js';
-import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../stores/editorState';
-import { AuthType, parseBasicAuthHeader, type AuthState } from '../../../stores/authState';
+import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
+import { parseBasicAuthHeader, type AuthState } from '../../../../stores/authState';
+import { AuthType, EntityType } from '../../../../stores/enum';
 import { useStore } from '@nanostores/solid';
 
 export const Headers = () => {
+
     const editorState = useStore($editorState);
 
     const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+
     const [headers, setHeaders] = createSignal<HttpHeader[]>((() => {
-        const file = currentFile();
-        const stateHeaders = file.testFile.request?.headers ?? [];
-        return [...stateHeaders, { header: "", value: "", generated: false }];
+        const headers = currentTestFile()?.testFile.request?.headers ?? [];
+        return [...headers, { header: "", value: "", generated: false }];
     })());
-
-    // Update headers when editorState changes
-    const updateHeadersFromState = () => {
-        const file = currentFile();
-        const stateHeaders = file.testFile.request?.headers ?? [];
-        setHeaders([...stateHeaders, { header: "", value: "", generated: false }]);
-    };
-
-    // Track state changes
-    const [prevFileId, setPrevFileId] = createSignal(currentFile().id);
-    if (currentFile().id !== prevFileId()) {
-        updateHeadersFromState();
-        setPrevFileId(currentFile().id);
-    }
 
     const onHeaderInput = (index: number) => {
         let currentHeaders = headers();
@@ -85,8 +74,7 @@ export const Headers = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        const file = currentFile();
-        let request = { ...file.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile()?.testFile.request ?? {} as Request };
         headers.splice(-1, 1);
         request.headers = headers;
         updateRequest(request);

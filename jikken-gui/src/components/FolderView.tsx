@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { $folderState, loadFolder, openFolderDialog, removeFolder, selectEntity, toggleFolder, type FolderEntity } from "../stores/folderState";
 import { openFile } from "../stores/editorState";
+import { EntityType } from "../stores/enum";
 
 export const FolderView = () => {
     const state = useStore($folderState);
@@ -49,7 +50,7 @@ export const FolderView = () => {
                                 <div class="py-px" classList={{
                                     "bg-neutral-700/70 text-neutral-200": state().activeIndex === index()
                                 }}>
-                                    <Show when={entity.isDirectory && !entity.isHidden}>
+                                    <Show when={entity.type === EntityType.Directory && !entity.isHidden}>
                                         <li class="group flex flex-row items-center cursor-pointer hover:text-neutral-200"
                                             style={{ "margin-left": `calc(1.5em*${entity.indentationLevel})` }}
                                             onClick={() => toggleFolder(entity)}>
@@ -109,7 +110,7 @@ export const FolderView = () => {
                                             </Show>
                                         </li>
                                     </Show>
-                                    <Show when={!entity.isDirectory && !entity.isHidden}>
+                                    <Show when={entity.type !== EntityType.Directory && !entity.isHidden}>
                                         <li class="group flex flex-row items-center cursor-pointer hover:text-neutral-200"
                                             style={{ "margin-left": `calc(1.5em*${entity.indentationLevel})` }}
                                             onClick={() => selectFile(index(), entity)}>
@@ -118,9 +119,12 @@ export const FolderView = () => {
                                                     width="12"
                                                     height="12"
                                                     fill="currentColor"
-                                                    class="bi bi-dot text-indigo-400/80 group-hover:text-indigo-400"
+                                                    class="bi bi-dot"
                                                     classList={{
-                                                        "text-indigo-400": state().activeIndex === index()
+                                                        "text-indigo-400/80 group-hover:text-indigo-400": entity.type === EntityType.Test && state().activeIndex !== index(),
+                                                        "text-indigo-400": entity.type === EntityType.Test && state().activeIndex === index(),
+                                                        "text-neutral-200": entity.type === EntityType.Config && state().activeIndex === index(),
+                                                        "text-neutral-400 group-hover:text-neutral-200": entity.type === EntityType.Config && state().activeIndex !== index()
                                                     }}
                                                     viewBox="0 0 16 16">
                                                     <path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6" />

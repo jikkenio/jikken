@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, error::Error, path::Path};
 use std::{fs, time::SystemTime};
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+use toml::Table;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -263,6 +264,39 @@ pub struct HttpRequestResponse {
     pub body: Option<String>,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ConfigToml {
+    pub settings: Option<ConfigTomlSettings>,
+    pub globals: Option<Table>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ConfigTomlSettings {
+    pub api_key: Option<String>,
+    pub bypass_cert_verification: Option<bool>,
+    pub continue_on_failure: Option<bool>,
+    pub dev_mode: Option<bool>,
+    pub environment: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ConfigFile {
+    pub api_key: Option<String>,
+    pub bypass_cert_verification: bool,
+    pub continue_on_failure: bool,
+    pub environment: Option<String>,
+    pub globals: Vec<GlobalVariable>,
+}
+
+#[derive(Serialize)]
+pub struct GlobalVariable {
+    pub key: String,
+    pub value: String,
+}
+
 #[tauri::command]
 async fn open_folder_dialog(app: tauri::AppHandle) -> Option<FolderEntity> {
     use tauri_plugin_dialog::DialogExt;
@@ -307,7 +341,7 @@ pub fn open_folder(path: &Path) -> Option<FolderEntity> {
             });
         }
 
-        if !file_name.ends_with(".jkt") {
+        if !file_name.ends_with(".jkt") && !file_name.ends_with(".jikken") {
             continue;
         }
 
@@ -329,7 +363,7 @@ pub fn open_folder(path: &Path) -> Option<FolderEntity> {
     });
 }
 
-pub fn load(filename: &str) -> Result<TestFile, Box<dyn Error + Send + Sync>> {
+pub fn load_test(filename: &str) -> Result<TestFile, Box<dyn Error + Send + Sync>> {
     let file_data = fs::read_to_string(filename)?;
     let result: Result<TestFile, serde_yaml::Error> = serde_yaml::from_str(&file_data);
     match result {
@@ -351,16 +385,62 @@ pub struct FileMetadata {
 }
 
 #[tauri::command]
-async fn open_file(file: FileMetadata) -> Option<TestFile> {
-    println!("received open_file() call: {:?}", file);
+async fn open_test_file(file: FileMetadata) -> Option<TestFile> {
+    println!("received open_test_file() call: {:?}", file);
 
-    match load(&file.path) {
+    match load_test(&file.path) {
         Ok(f) => Some(f),
         Err(e) => {
             println!("failed to open file: {}", e);
             None
         }
     }
+}
+
+#[tauri::command]
+async fn open_config_file(file: FileMetadata) -> Option<ConfigFile> {
+    println!("received open_config_file() call: {:?}", file);
+
+    let Ok(file_data) = fs::read_to_string(file.path) else {
+        println!("failed to load file");
+        return None;
+    };
+
+    println!("{:?}", file_data);
+
+    let Ok(config) = toml::from_str::<ConfigToml>(&file_data) else {
+        println!("failed to parse toml");
+        return None;
+    };
+
+    let mut globals: Vec<GlobalVariable> = Vec::new();
+    if let Some(global_map) = config.globals {
+        globals = global_map
+            .iter()
+            .map(|e| GlobalVariable {
+                key: e.0.to_string(),
+                value: e.1.as_str().unwrap_or_default().to_string(),
+            })
+            .collect();
+    }
+
+    Some(ConfigFile {
+        api_key: config.settings.clone().map(|s| s.api_key).flatten(),
+        bypass_cert_verification: config
+            .settings
+            .clone()
+            .map(|s| s.bypass_cert_verification)
+            .flatten()
+            .unwrap_or(false),
+        continue_on_failure: config
+            .settings
+            .clone()
+            .map(|s| s.continue_on_failure)
+            .flatten()
+            .unwrap_or(false),
+        environment: config.settings.map(|s| s.environment).flatten(),
+        globals,
+    })
 }
 
 #[tauri::command]
@@ -566,7 +646,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             open_folder_path,
             open_folder_dialog,
-            open_file,
+            open_test_file,
+            open_config_file,
             save_new_file,
             save_existing_file,
             make_request,

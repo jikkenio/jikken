@@ -1,57 +1,72 @@
 ---
 import { FileTabs } from "./FileTabs";
-import { RequestBar } from "./request/RequestBar";
-import { RequestTabs } from "./request/RequestTabs";
-import { ResponseTabs } from "./response/ResponseTabs";
-import { $layoutState, ViewMode } from "../../stores/layoutState";
-import { YamlView } from "./YamlView";
+import { RequestBar } from "./api/request/RequestBar";
+import { RequestTabs } from "./api/request/RequestTabs";
+import { ResponseTabs } from "./api/response/ResponseTabs";
+import { $layoutState } from "../../stores/layoutState";
+import { YamlView } from "./api/YamlView";
+import { EntityType, ViewMode } from "../../stores/enum";
+import { $editorState } from "../../stores/editorState";
+import { ConfigView } from "./config/ConfigView";
+
+let editorState = $editorState.value;
+let currentFile = editorState?.files[editorState.currentFile];
 ---
 
 <div class="size-full flex flex-col">
-  <FileTabs client:load />
+  <FileTabs client:only editorState={editorState} />
   <div
-    id="api-view"
-    class="flex flex-col flex-auto"
-    class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
+    id="test-view"
+    class="flex flex-auto"
+    class:list={[{ hidden: currentFile?.type !== EntityType.Test }]}
   >
-    <RequestBar client:only />
-    <div class="flex flex-col flex-auto">
-      <div id="request-panel" class="flex-none">
-        <RequestTabs client:only />
+    <div
+      id="api-view"
+      class="flex flex-col flex-auto"
+      class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
+    >
+      <RequestBar client:only />
+      <div class="flex flex-col flex-auto">
+        <div class="flex-none">
+          <RequestTabs client:only />
+        </div>
+        <div class="flex-auto">
+          <ResponseTabs client:only />
+        </div>
       </div>
-      <div class="flex-auto">
-        <ResponseTabs client:only />
-      </div>
+    </div>
+    <div
+      id="yaml-view"
+      class="flex flex-auto"
+      class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.RAW }]}
+    >
+      <YamlView client:only />
     </div>
   </div>
   <div
-    id="yaml-view"
+    id="config-view"
     class="flex flex-auto"
-    class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.RAW }]}
+    class:list={[{ hidden: currentFile?.type !== EntityType.Config }]}
   >
-    <YamlView client:only />
+    <ConfigView client:only />
   </div>
 </div>
 
 <script>
   import { listenKeys } from "nanostores";
-  import { saveFile } from "../../stores/editorState";
-  import {
-    $layoutState,
-    setRequestTabVisible,
-    setResponseTabVisible,
-    ViewMode,
-  } from "../../stores/layoutState";
+  import { $editorState, saveFile } from "../../stores/editorState";
+  import { $layoutState, setRequestTabVisible } from "../../stores/layoutState";
+  import { EntityType, ViewMode } from "../../stores/enum";
 
   const initializePage = () => {
     const elem = document.getElementById("tab-content");
     const resizer = document.getElementById("file-resizer");
     const main = document.getElementById("main-panel");
-    
+
     // Set initial height for request panel
     const requestPanel = document.getElementById("request-panel");
     if (requestPanel) {
-      requestPanel.style.height = "300px";  // Default height
+      requestPanel.style.height = "300px"; // Default height
     }
 
     let y = 0;
@@ -122,7 +137,8 @@ import { YamlView } from "./YamlView";
       const apiView = document.getElementById("api-view");
       if (apiView) {
         const requestBarHeight = 80; // Approximate RequestBar height
-        initialAvailableHeight = apiView.getBoundingClientRect().height - requestBarHeight;
+        initialAvailableHeight =
+          apiView.getBoundingClientRect().height - requestBarHeight;
       }
 
       document.addEventListener("mousemove", responseMouseMoveHandler);
@@ -137,24 +153,34 @@ import { YamlView } from "./YamlView";
       const requestPanel = document.getElementById("request-panel");
       if (!requestPanel) return;
 
-      let dy = e.clientY - responseY;  // Positive dy means dragging down (expanding request panel)
+      let dy = e.clientY - responseY; // Positive dy means dragging down (expanding request panel)
       let computedHeight = requestH + dy;
-      
+
       // Use the captured available height from mousedown
-      const minRequestHeight = 200;  // Minimum height for request panel
+      const minRequestHeight = 200; // Minimum height for request panel
       const minResponseHeight = 250; // Minimum height for response panel
       const maxRequestHeight = initialAvailableHeight - minResponseHeight;
-      
-      console.log('Initial available height:', initialAvailableHeight, 'Max request height:', maxRequestHeight, 'Computed height:', computedHeight);
-      
+
+      console.log(
+        "Initial available height:",
+        initialAvailableHeight,
+        "Max request height:",
+        maxRequestHeight,
+        "Computed height:",
+        computedHeight,
+      );
+
       // Enforce minimum and maximum constraints
       if (computedHeight < minRequestHeight) {
         computedHeight = minRequestHeight;
-      } else if (computedHeight > maxRequestHeight && maxRequestHeight > minRequestHeight) {
+      } else if (
+        computedHeight > maxRequestHeight &&
+        maxRequestHeight > minRequestHeight
+      ) {
         computedHeight = maxRequestHeight;
-        console.log('Clamped to max height:', computedHeight);
+        console.log("Clamped to max height:", computedHeight);
       }
-      
+
       requestPanel.style.height = `${computedHeight}px`;
     };
 
@@ -171,7 +197,10 @@ import { YamlView } from "./YamlView";
       if (!responseResizerAttached) {
         const responseResizer = document.getElementById("response-resizer");
         if (responseResizer) {
-          responseResizer.addEventListener("mousedown", responseMouseDownHandler);
+          responseResizer.addEventListener(
+            "mousedown",
+            responseMouseDownHandler,
+          );
           responseResizerAttached = true;
         }
       }
@@ -185,7 +214,7 @@ import { YamlView } from "./YamlView";
     // Start observing the document body for changes
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
 
     // Also try to attach immediately in case it's already there
@@ -209,6 +238,25 @@ import { YamlView } from "./YamlView";
         yamlView?.classList.add("hidden");
         break;
       default:
+    }
+  });
+
+  $editorState.subscribe((state) => {
+    const testView = document.getElementById("test-view");
+    const configView = document.getElementById("config-view");
+    const currentFile = state.files[state.currentFile];
+    switch (currentFile.type) {
+      case EntityType.Test:
+        testView?.classList.remove("hidden");
+        configView?.classList.add("hidden");
+        break;
+      case EntityType.Config:
+        configView?.classList.remove("hidden");
+        testView?.classList.add("hidden");
+        break;
+      default:
+        testView?.classList.add("hidden");
+        configView?.classList.add("hidden");
     }
   });
 

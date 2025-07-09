@@ -1,25 +1,11 @@
 import { atom } from "nanostores";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  setRequestTabActive,
-  setRequestTabCount,
-  setResponseTabActive,
-  setResponseTabCount,
-  $layoutState,
-} from "./layoutState";
-import { AuthType, parseAuthData, type AuthState } from "./authState";
-import {
-  addSavedFile,
-  selectEntity,
-  selectEntityPath,
-  type FolderEntity,
-} from "./folderState";
-import { v4 as uuidv4 } from "uuid";
-import {
-  clearNotification,
-  NotificationType,
-  triggerBanner,
-} from "./notificationState";
+import { setRequestTabActive, setRequestTabCount, setResponseTabActive, setResponseTabCount } from './layoutState';
+import { parseAuthData, type AuthState } from './authState';
+import { addSavedFile, selectEntity, selectEntityPath, type FolderEntity } from './folderState';
+import { v4 as uuidv4 } from 'uuid';
+import { clearNotification, NotificationType, triggerBanner } from './notificationState';
+import { AuthType, EntityType, HttpVerb } from './enum';
 
 export type TestFile = {
   name?: string;
@@ -110,14 +96,6 @@ export type Variable = {
   schema?: Object;
 };
 
-export enum HttpVerb {
-  GET = "Get",
-  POST = "Post",
-  PUT = "Put",
-  PATCH = "Patch",
-  DELETE = "Delete",
-}
-
 export type HttpParameter = {
   param: string;
   value: string;
@@ -135,7 +113,7 @@ export type Extract = {
   field?: string;
 };
 
-export enum VariableType {
+enum VariableType {
   INTEGER = "Int",
   STRING = "String",
   DATE = "Date",
@@ -146,7 +124,7 @@ export enum VariableType {
   EMAIL = "Email",
   NAME = "Name",
   DATETIME = "Datetime",
-}
+};
 
 export type VariableModifier = {
   type?: VariableModifierType;
@@ -154,16 +132,29 @@ export type VariableModifier = {
   unit?: VariableModifierUnit;
 };
 
-export enum VariableModifierType {
+enum VariableModifierType {
   ADD = "add",
   SUBTRACT = "subtract",
-}
+};
 
-export enum VariableModifierUnit {
+enum VariableModifierUnit {
   DAYS = "days",
   WEEKS = "weeks",
   MONTHS = "months",
-}
+};
+
+export type ConfigFile = {
+  apiKey?: string,
+  bypassCertVerification: boolean,
+  continueOnFailure: boolean,
+  environment?: string,
+  globals: GlobalVariable[],
+};
+
+export type GlobalVariable = {
+  key?: string,
+  value?: string,
+};
 
 export type File = {
   name: string;
@@ -179,22 +170,36 @@ export type HttpResponse = {
 };
 
 export type FileState = {
-  id: string;
-  file?: File;
-  testFile: TestFile;
-  response?: HttpResponse;
-  auth: AuthState;
+  id: string,
+  file?: File,
+  type: EntityType,
+  index: number,
 };
+
+export type TestFileState = {
+  testFile: TestFile,
+  response?: HttpResponse,
+  auth: AuthState,
+}
 
 export type EditorState = {
-  currentFile: number;
-  files: FileState[];
+  currentFile: number,
+  files: FileState[],
+  testFiles: TestFileState[],
+  configFiles: ConfigFile[],
 };
 
-const getNewFile = () => {
+const getNewFileState = (index: number) => {
   return {
     id: uuidv4(),
     file: undefined,
+    type: EntityType.Test,
+    index: index,
+  };
+}
+
+const getNewTestFile = () => {
+  return {
     testFile: {
       request: {
         method: HttpVerb.GET,
@@ -203,66 +208,76 @@ const getNewFile = () => {
     response: undefined,
     auth: { type: AuthType.None },
   };
-};
+}
 
 const initState: EditorState = {
   currentFile: 0,
-  files: [getNewFile()],
+  files: [getNewFileState(0)],
+  testFiles: [getNewTestFile()],
+  configFiles: [],
 };
 
 export const $editorState = atom(initState);
 
-export const updateFile = (file: TestFile) => {
-  console.log("editor state - updating file: ", file);
+export const updateTestFile = (file: TestFile) => {
+  console.log("editor state - updating test file: ", file);
   let currentState = $editorState.get();
-  let currentFile = currentState.files[currentState.currentFile];
+  let index = currentState.files[currentState.currentFile].index;
+  let currentFile = currentState.testFiles[index];
   currentFile.testFile = { ...file };
   $editorState.set({ ...currentState });
   resetTabCounts(currentFile);
-};
+}
 
 export const updateRequest = (request: Request) => {
-  console.log("editor state - updating request: ", request.params);
+  console.log("editor state - updating request: ", request);
   let currentState = $editorState.get();
-  currentState.files[currentState.currentFile].testFile.request = {
-    ...request,
-  };
+  let index = currentState.files[currentState.currentFile].index;
+  let currentFile = currentState.testFiles[index];
+  currentFile.testFile.request = { ...request };
   $editorState.set({ ...currentState });
 };
 
 export const updateAuth = (auth: AuthState) => {
   console.log("editor state - updating auth: ", auth);
   let currentState = $editorState.get();
-  currentState.files[currentState.currentFile].auth = { ...auth };
+  let index = currentState.files[currentState.currentFile].index;
+  let currentFile = currentState.testFiles[index];
+  currentFile.auth = { ...auth };
   $editorState.set({ ...currentState });
   setRequestTabCount("tab-auth", auth.type === AuthType.None ? 0 : 1);
 };
 
 export const selectFile = (index: number) => {
-  console.log("selecting test file at index ", index);
+  console.log("editor state - selecting file at index ", index);
   let state = $editorState.get();
   state.currentFile = index;
+  let file = state.files[index];
   $editorState.set({ ...state });
-  resetTabs(state.files[state.currentFile]);
+  resetTabs(file.type === EntityType.Test ? state.testFiles[file.index] : undefined);
   selectEntityPath(state.files[state.currentFile].file?.path);
 };
 
 export const addNewFile = () => {
+  console.log("editor state - adding new scratch pad");
   let state = $editorState.get();
-  let file = getNewFile();
 
-  $editorState.set({
-    currentFile: state.files.length,
-    files: [...state.files, file],
-  });
+  let newIndex = state.testFiles.length;
+  let newFile = getNewFileState(newIndex);
+  let newTestFile = getNewTestFile();
+  state.files.push(newFile);
+  state.testFiles.push(newTestFile);
 
-  resetTabs(file);
+  state.currentFile++;
+  $editorState.set({ ...state });
+  resetTabs(newTestFile);
   selectEntity(-1);
+  console.log("after add: ", $editorState.get());
 };
 
 export const openFile = async (entity: FolderEntity) => {
-  if (entity.isDirectory) return;
-  console.log("opening file at path ", entity.path);
+  if (entity.type === EntityType.Directory) return;
+  console.log("editor state - opening file at path ", entity.path);
 
   let currentState = $editorState.get();
   let foundIndex = currentState.files.findIndex(
@@ -275,8 +290,18 @@ export const openFile = async (entity: FolderEntity) => {
   }
 
   let file: File = { name: entity.name, path: entity.path };
-  let testFile: TestFile = await invoke("open_file", { file: file });
-  console.log("file contents: ", testFile);
+  if (entity.type === EntityType.Test) {
+    openTestFile(file);
+  } else {
+    openConfigFile(file);
+  }
+
+  selectEntityPath(file.path);
+};
+
+const openTestFile = async (file: File) => {
+  let testFile: TestFile = await invoke("open_test_file", { file: file });
+  console.log("test file contents: ", testFile);
 
   // add content-type header, if applicable
   if (
@@ -297,30 +322,47 @@ export const openFile = async (entity: FolderEntity) => {
   // add auth data, if applicable
   let auth = parseAuthData(testFile.request?.headers);
 
-  let fileState = { id: uuidv4(), file: file, testFile: testFile, auth: auth };
+  let currentState = $editorState.get();
+  let newIndex = currentState.testFiles.length;
+  let fileState = { id: uuidv4(), file: file, type: EntityType.Test, index: newIndex };
+  let testFileState = { testFile: testFile, auth: auth };
+  currentState.files.push(fileState);
+  currentState.testFiles.push(testFileState);
+  currentState.currentFile++;
 
-  $editorState.set({
-    currentFile: currentState.files.length,
-    files: [...currentState.files, fileState],
-  });
-
-  resetTabs(fileState);
-  selectEntityPath(file.path);
+  $editorState.set({ ...currentState });
+  resetTabs(testFileState);
 };
+
+const openConfigFile = async (file: File) => {
+  let configFile: ConfigFile = await invoke("open_config_file", { file: file });
+  console.log("config file contents: ", configFile);
+
+  let currentState = $editorState.get();
+  let newIndex = currentState.configFiles.length;
+  let fileState = { id: uuidv4(), file: file, type: EntityType.Config, index: newIndex };
+  currentState.files.push(fileState);
+  currentState.configFiles.push(configFile);
+  currentState.currentFile++;
+
+  $editorState.set({ ...currentState });
+  resetTabs(undefined);
+};
+
 
 export const saveFile = async () => {
   let state = $editorState.get();
-  console.log("saving file at index ", state.currentFile);
+  if (state.files[state.currentFile].type !== EntityType.Test) return;
+  console.log("editor state - saving file at index ", state.currentFile);
+
   let file = state.files[state.currentFile];
-  let modifiedFile = pruneGeneratedValues(file);
+  let testFile = state.testFiles[file.index];
+  let modifiedFile: TestFileState = pruneGeneratedValues(testFile);
   let savedFile: File | undefined;
 
-  if (modifiedFile.file) {
+  if (file.file) {
     console.log("saving existing file");
-    savedFile = await invoke("save_existing_file", {
-      file: modifiedFile.file!,
-      testFile: modifiedFile.testFile,
-    });
+    savedFile = await invoke("save_existing_file", { file: file.file!, testFile: modifiedFile.testFile });
     if (savedFile) {
       console.log("successfully saved file");
     } else {
@@ -345,44 +387,46 @@ export const saveFile = async () => {
 };
 
 export const closeFile = (index: number) => {
-  console.log("closing file at index ", index);
+  console.log("editor state - closing file at index ", index);
   let state = $editorState.get();
-  let newFiles = state.files.filter((_, i) => i !== index);
+  let fileType = state.files[index].type;
+  let fileIndex = state.files[index].index;
+  state.files.splice(index, 1);
+
+  if (fileType === EntityType.Test) {
+    state.testFiles.splice(fileIndex, 1);
+  } else {
+    state.configFiles.splice(fileIndex, 1);
+  }
+
+  console.log("after remove: ", $editorState.get());
 
   // if there are no files left, open a new scratch pad
-  if (newFiles.length === 0) {
-    let newFile = getNewFile();
-    $editorState.set({
-      currentFile: 0,
-      files: [newFile],
-    });
+  if (state.files.length === 0) {
+    state.currentFile = 0;
     console.log("new current file: 0");
-
-    resetTabs(newFile);
+    state.files.push(getNewFileState(0));
+    state.testFiles.push(getNewTestFile());
+    resetTabs(state.testFiles[0]);
     selectEntity(-1);
   } else if (index <= state.currentFile) {
     // adjust the selected index, if applicable
-    let newCurrentFile = Math.max(state.currentFile - 1, 0);
-    console.log("new current file: ", newCurrentFile);
-    $editorState.set({
-      currentFile: newCurrentFile,
-      files: newFiles,
-    });
-    resetTabs(newFiles[newCurrentFile]);
-    selectEntityPath(newFiles[newCurrentFile].file?.path);
-  } else {
-    $editorState.set({
-      currentFile: state.currentFile,
-      files: newFiles,
-    });
+    state.currentFile = Math.max(state.currentFile - 1, 0);
+    console.log("new current file: ", state.currentFile);
+    let file = state.files[state.currentFile];
+    resetTabs(file.type === EntityType.Test ? state.testFiles[file.index] : undefined);
+    selectEntityPath(state.files[state.currentFile].file?.path);
   }
+
+  $editorState.set({ ...state });
 };
 
 export const makeRequest = async () => {
   let state = $editorState.get();
   let file = state.files[state.currentFile];
-  console.log("making http request: ", file.testFile.request);
-  if (!file.testFile.request?.url) {
+  let testFile = state.testFiles[file.index];
+  console.log("making http request: ", testFile.testFile.request);
+  if (!testFile.testFile.request?.url) {
     console.log("no request url");
     return;
   }
@@ -390,7 +434,7 @@ export const makeRequest = async () => {
 
   clearNotification();
   try {
-    response = await invoke("make_request", { testFile: file.testFile });
+    response = await invoke("make_request", { testFile: testFile.testFile });
   } catch (ex) {
     triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
     console.log("Failed to make network request: ", ex);
@@ -409,24 +453,18 @@ export const makeRequest = async () => {
   )?.value;
   response.size = size ? +size : undefined;
 
-  // Create a new file state object to ensure reactivity
-  const updatedFile = { ...file, response };
-  const updatedFiles = [...state.files];
-  updatedFiles[state.currentFile] = updatedFile;
-  
-  $editorState.set({ ...state, files: updatedFiles });
+  testFile.response = response;
+  $editorState.set({ ...state });
   setResponseTabCount("tab-body", response.body ? 1 : 0);
   setResponseTabCount("tab-headers", response.headers.length);
-  
-  // Ensure response panel is visible after successful request
-  $layoutState.setKey("responseTabPanelVisible", true);
-  $layoutState.setKey("responseTabIndex", 1);
 };
+
 
 export const saveResponseBody = async () => {
   let state = $editorState.get();
   console.log("saving response body from file at index ", state.currentFile);
-  let body = state.files[state.currentFile].response?.body;
+  let index = state.files[state.currentFile].index;
+  let body = state.testFiles[index].response?.body;
   if (!body) {
     console.log("no response body found");
     return;
@@ -443,29 +481,22 @@ export const saveResponseBody = async () => {
   console.log("successfully saved response body at path ", savedFile.path);
 };
 
-const resetTabCounts = (file: FileState) => {
-  console.log(file);
-  setRequestTabCount("tab-params", file.testFile.request?.params?.length ?? 0);
-  setRequestTabCount(
-    "tab-headers",
-    file.testFile.request?.headers?.length ?? 0
-  );
-  setRequestTabCount(
-    "tab-auth",
-    (file.auth ?? {}).type !== AuthType.None ? 1 : 0
-  );
-  setRequestTabCount("tab-body", file.testFile.request?.body ? 1 : 0);
-  setResponseTabCount("tab-body", file.response?.body ? 1 : 0);
-  setResponseTabCount("tab-headers", file.response?.headers?.length ?? 0);
+const resetTabCounts = (file: TestFileState | undefined) => {
+  setRequestTabCount("tab-params", file?.testFile.request?.params?.length ?? 0);
+  setRequestTabCount("tab-headers", file?.testFile.request?.headers?.length ?? 0);
+  setRequestTabCount("tab-auth", (file?.auth ?? {}).type !== AuthType.None ? 1 : 0);
+  setRequestTabCount("tab-body", file?.testFile.request?.body ? 1 : 0);
+  setResponseTabCount("tab-body", file?.response?.body ? 1 : 0);
+  setResponseTabCount("tab-headers", file?.response?.headers?.length ?? 0);
 };
 
-const resetTabs = (file: FileState) => {
-  resetTabCounts(file);
+const resetTabs = (testFile: TestFileState | undefined) => {
+  resetTabCounts(testFile);
   setRequestTabActive(1, false);
   setResponseTabActive(1, false);
-};
+}
 
-const pruneGeneratedValues = (file: FileState) => {
+const pruneGeneratedValues = (file: TestFileState) => {
   let headers = file.testFile.request?.headers;
   let params = file.testFile.request?.params;
   if (!headers && !params) return file;

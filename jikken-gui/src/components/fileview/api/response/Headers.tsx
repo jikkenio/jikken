@@ -1,17 +1,15 @@
-import { createSignal, For } from 'solid-js';
-import { $editorState } from '../../../stores/editorState';
+import { For } from 'solid-js';
+import { $editorState } from '../../../../stores/editorState';
+import { EntityType } from '../../../../stores/enum';
+import { useStore } from '@nanostores/solid';
 
 export const Headers = () => {
 
-    let editorState = $editorState.get();
-    let currentResponse = editorState.files[editorState.currentFile].response;
-    let [headers, setHeaders] = createSignal(currentResponse?.headers ?? []);
+    const editorState = useStore($editorState);
 
-    $editorState.subscribe((state) => {
-        let response = state.files[state.currentFile].response;
-        setHeaders(response?.headers ?? []);
-        currentResponse = response;
-    });
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    const headers = () => currentTestFile()?.response?.headers ?? [];
 
     return (
         <div class="p-3 pt-1">

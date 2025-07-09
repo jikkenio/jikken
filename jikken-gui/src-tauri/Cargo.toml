@@ -27,6 +27,7 @@ tauri = { version = "2.6.2", features = [] }
 tauri-plugin-fs = "2.4.0"
 tauri-plugin-shell = "2.3.0"
 tauri-plugin-dialog = "2.3.0"
+toml = "0.8.23"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

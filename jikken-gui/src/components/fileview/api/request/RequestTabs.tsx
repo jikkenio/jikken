@@ -1,30 +1,34 @@
 import { For, Show } from "solid-js";
-import { useStore } from "@nanostores/solid";
-import { $layoutState, setRequestTabActive } from "../../../stores/layoutState";
+import { $layoutState, setRequestTabActive } from "../../../../stores/layoutState";
 import { Parameters } from "./Parameters";
 import { Headers } from "./Headers";
 import { Body } from './Body';
 import { Auth } from './Auth';
-import { $editorState, saveFile } from "../../../stores/editorState";
+import { $editorState, saveFile } from "../../../../stores/editorState";
+import { useStore } from "@nanostores/solid";
+import { EntityType } from "../../../../stores/enum";
 
 export const RequestTabs = () => {
-    const layout = useStore($layoutState);
+
+    const layoutState = useStore($layoutState);
     const editorState = useStore($editorState);
 
-    const isSaveable = () => editorState().files[editorState().currentFile].testFile.request?.url ? true : false;
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    const isSaveable = () => currentTestFile()?.testFile.request?.url ? true : false;
 
     return (
         <div class="h-full flex flex-col">
             <div class="flex-none">
                 <div class="flex items-center justify-between border-b border-neutral-800 m-3 mt-1">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                        <For each={layout().requestTabs}>
+                        <For each={layoutState().requestTabs}>
                             {(tab) => (
                                 <div
                                     class="group flex min-w-12 justify-center whitespace-nowrap border-b-2 py-2 text-sm cursor-pointer font-medium"
                                     classList={{
-                                        "border-indigo-500 text-neutral-300": tab.index === layout().requestTabIndex,
-                                        "border-transparent text-neutral-400 hover:text-neutral-200": tab.index !== layout().requestTabIndex
+                                        "border-indigo-500 text-neutral-300": tab.index === layoutState().requestTabIndex,
+                                        "border-transparent text-neutral-400 hover:text-neutral-200": tab.index !== layoutState().requestTabIndex
                                     }}
                                     onClick={() => setRequestTabActive(tab.index)}
                                 >
@@ -34,8 +38,8 @@ export const RequestTabs = () => {
                                         <span
                                             class="ml-1.5 my-auto rounded-[4px] px-[5px] py-px text-xs font-medium inline-block"
                                             classList={{
-                                                "bg-indigo-500 text-white": tab.index === layout().requestTabIndex,
-                                                "bg-neutral-850 ring-1 ring-inset ring-neutral-600 text-neutral-300 group-hover:text-black group-hover:bg-neutral-300 group-hover:ring-0": tab.index !== layout().requestTabIndex,
+                                                "bg-indigo-500 text-white": tab.index === layoutState().requestTabIndex,
+                                                "bg-neutral-850 ring-1 ring-inset ring-neutral-600 text-neutral-300 group-hover:text-black group-hover:bg-neutral-300 group-hover:ring-0": tab.index !== layoutState().requestTabIndex,
                                             }}
                                         >
                                             {tab.items}
@@ -46,8 +50,8 @@ export const RequestTabs = () => {
                                         <span
                                             class="ml-0.5 my-auto inline-block"
                                             classList={{
-                                                "text-indigo-500": tab.index === layout().requestTabIndex,
-                                                "text-neutral-300 group-hover:text-neutral-300": tab.index !== layout().requestTabIndex,
+                                                "text-indigo-500": tab.index === layoutState().requestTabIndex,
+                                                "text-neutral-300 group-hover:text-neutral-300": tab.index !== layoutState().requestTabIndex,
                                             }}
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
@@ -78,24 +82,24 @@ export const RequestTabs = () => {
             <div
                 id="tab-content"
                 class="select-none flex-1 overflow-y-auto"
-                classList={{ hidden: !layout().requestTabPanelVisible }}
+                classList={{ hidden: !layoutState().requestTabPanelVisible }}
             >
-                <Show when={layout().requestTabIndex === 1}>
+                <Show when={layoutState().requestTabIndex === 1}>
                     <div id="tab-params-panel">
                         <Parameters />
                     </div>
                 </Show>
-                <Show when={layout().requestTabIndex === 2}>
+                <Show when={layoutState().requestTabIndex === 2}>
                     <div id="tab-headers-panel">
                         <Headers />
                     </div>
                 </Show>
-                <Show when={layout().requestTabIndex === 3}>
+                <Show when={layoutState().requestTabIndex === 3}>
                     <div id="tab-auth-panel">
                         <Auth />
                     </div>
                 </Show>
-                <Show when={layout().requestTabIndex === 4}>
+                <Show when={layoutState().requestTabIndex === 4}>
                     <div id="tab-body-panel">
                         <Body />
                     </div>

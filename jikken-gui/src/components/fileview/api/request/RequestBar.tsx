@@ -1,7 +1,9 @@
+import { $editorState, makeRequest, updateRequest, type Request } from "../../../../stores/editorState";
+import { EntityType, HttpVerb } from "../../../../stores/enum";
 import { useStore } from "@nanostores/solid";
-import { $editorState, HttpVerb, makeRequest, updateRequest, type Request } from "../../../stores/editorState";
 
 export const RequestBar = () => {
+
     const editorState = useStore($editorState);
 
     const getDisplayUrl = (request: Request | undefined) => {
@@ -12,7 +14,9 @@ export const RequestBar = () => {
         return `${url}?${params.map((p) => `${p.param}=${p.value}`).join("&")}`;
     }
 
-    const request = () => editorState().files[editorState().currentFile].testFile.request;
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    const request = () => currentTestFile()?.testFile.request;
     const url = () => request()?.url;
     const displayUrl = () => getDisplayUrl(request());
     const method = () => request()?.method ?? HttpVerb.GET;

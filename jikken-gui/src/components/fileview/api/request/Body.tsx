@@ -1,11 +1,11 @@
 import { createSignal, Show } from 'solid-js';
-import { setRequestTabCount } from '../../../stores/layoutState';
-import { $editorState, updateRequest, type HttpHeader, type Request } from '../../../stores/editorState';
-import MonacoEditorSolid from '../MonacoEditorSolid';
+import { setRequestTabCount } from '../../../../stores/layoutState';
+import { $editorState, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
+import MonacoEditorSolid from '../../api/MonacoEditorSolid';
 import { useStore } from '@nanostores/solid';
+import { EntityType } from '../../../../stores/enum';
 
 export const Body = () => {
-    const editorState = useStore($editorState);
 
     enum BodyType {
         None,
@@ -17,20 +17,27 @@ export const Body = () => {
         content?: Object,
     };
 
-    const currentFile = () => editorState().files[editorState().currentFile];
+    const editorState = useStore($editorState);
+
+    let currentFile = editorState().files[editorState().currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState().testFiles[currentFile.index] : undefined;
+
     const [body, setBody] = createSignal<Body>((() => {
-        const file = currentFile();
-        const stateBody = file.testFile.request?.body;
-        return { type: stateBody ? BodyType.Json : BodyType.None, content: stateBody };
+        const body = currentTestFile?.testFile.request?.body;
+        return { type: body ? BodyType.Json : BodyType.None, content: body };
     })());
 
-    // Track state changes
-    const [prevFileId, setPrevFileId] = createSignal(currentFile().id);
-    if (currentFile().id !== prevFileId()) {
-        const stateBody = currentFile().testFile.request?.body;
-        setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
-        setPrevFileId(currentFile().id);
-    }
+    $editorState.subscribe((state) => {
+        let file = state.files[state.currentFile];
+
+        // only update the data signal if the file changes
+        if (file.id !== currentFile.id) {
+            currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+            let stateBody = currentTestFile?.testFile.request?.body;
+            setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody });
+            currentFile = file;
+        }
+    });
 
     const onTypeChange = (type: BodyType) => {
         console.log("type change");
@@ -63,8 +70,7 @@ export const Body = () => {
     };
 
     const toggleContentType = (enabled: boolean) => {
-        const file = currentFile();
-        let request = { ...file.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
         let headers = request.headers ?? [];
         let index = headers.findIndex(h => h.header.toLowerCase() === "content-type");
         console.log(`content header index ${index}`);
@@ -84,16 +90,14 @@ export const Body = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        const file = currentFile();
-        let request = { ...file.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
         request.headers = headers;
         updateRequest(request);
         setRequestTabCount("tab-headers", headers.length);
     };
 
     const updateBody = (body: Body) => {
-        const file = currentFile();
-        let request = { ...file.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
         request.body = body.content;
         updateRequest(request);
     };

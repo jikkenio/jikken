@@ -1,7 +1,9 @@
-import { createSignal, Show } from 'solid-js';
-import { $editorState, saveResponseBody } from '../../../stores/editorState';
+import { Show } from 'solid-js';
+import { $editorState, saveResponseBody } from '../../../../stores/editorState';
 import MonacoEditorSolid from '../MonacoEditorSolid';
-import { NotificationType, triggerNotification } from '../../../stores/notificationState';
+import { NotificationType, triggerNotification } from '../../../../stores/notificationState';
+import { EntityType } from '../../../../stores/enum';
+import { useStore } from '@nanostores/solid';
 
 export const Body = () => {
 
@@ -15,16 +17,12 @@ export const Body = () => {
         content?: string,
     };
 
-    let editorState = $editorState.get();
-    let currentResponse = editorState.files[editorState.currentFile].response;
-    let [body, setBody] = createSignal({ type: currentResponse ? BodyType.Json : BodyType.None, content: currentResponse } as Body);
+    const editorState = useStore($editorState);
 
-    $editorState.subscribe((state) => {
-        let response = state.files[state.currentFile].response;
-        let stateBody = response?.body;
-        setBody({ type: stateBody ? BodyType.Json : BodyType.None, content: stateBody ? JSON.stringify(JSON.parse(stateBody), undefined, 2) : undefined });
-        currentResponse = response;
-    });
+    const currentFile = () => editorState().files[editorState().currentFile];
+    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    const currentResponse = () => currentTestFile()?.testFile.response;
+    const body = () => ({ type: currentResponse() ? BodyType.Json : BodyType.None, content: currentResponse()?.body } as Body);
 
     const copy = async () => {
         console.log("copying response body to clipboard");
@@ -79,7 +77,7 @@ export const Body = () => {
                         <MonacoEditorSolid value={body().content} language="json" readonly />
                     </div>
                 </Show>
-                <Show when={currentResponse?.status && !body().content}>
+                <Show when={currentResponse()?.status && !body().content}>
                     <div class="flex flex-auto justify-center items-center">
                         <span class="text-sm text-neutral-600">This response has no body.</span>
                     </div>

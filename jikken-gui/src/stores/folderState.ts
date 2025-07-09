@@ -1,6 +1,7 @@
 import { atom } from 'nanostores';
 import { invoke } from "@tauri-apps/api/core";
 import { $editorState, type File } from './editorState';
+import { EntityType } from './enum';
 
 export type FolderResult = {
     name: string,
@@ -12,7 +13,7 @@ export type FolderResult = {
 export type FolderEntity = {
     name: string,
     path: string,
-    isDirectory: boolean,
+    type: EntityType,
     indentationLevel: number,
     isHidden: boolean,
     isExpanded: boolean,
@@ -54,7 +55,7 @@ const generateEntities = (folderResult: FolderResult, startingIndentation: numbe
             entities.push({
                 name: entity.name,
                 path: entity.path,
-                isDirectory: entity.isDirectory,
+                type: getEntityType(entity),
                 indentationLevel: pathParts.length + startingIndentation - 1,
                 isHidden: false,
                 isExpanded: entity.isDirectory && entity.path === folderResult.path,
@@ -76,6 +77,12 @@ const generateEntities = (folderResult: FolderResult, startingIndentation: numbe
 
     return entities;
 };
+
+const getEntityType = (entity: FolderResult) => {
+    if (entity.isDirectory) return EntityType.Directory;
+    if (entity.name.endsWith(".jikken")) return EntityType.Config;
+    return EntityType.Test;
+}
 
 export const selectEntity = (index: number) => {
     console.log("selecting entity at index ", index);
@@ -218,7 +225,7 @@ export const addSavedFile = async (file: File) => {
 
     // expand all loaded collapsed ancestor directories
     // (only need to do the highest level found as it will expand all its children)
-    let highestCollapsedParent = matchingEntities.find((e) => e.isDirectory && e.isLoaded && !e.isExpanded);
+    let highestCollapsedParent = matchingEntities.find((e) => e.type === EntityType.Directory && e.isLoaded && !e.isExpanded);
     if (highestCollapsedParent) {
         toggleFolder(highestCollapsedParent);
     }
@@ -240,7 +247,7 @@ export const addSavedFile = async (file: File) => {
         }
 
         // reload state to catch any nested folders created during file save
-        unloadedEntities = $folderState.get().entities.filter((e) => file.path.startsWith(e.path) && e.isDirectory && !e.isLoaded);
+        unloadedEntities = $folderState.get().entities.filter((e) => file.path.startsWith(e.path) && e.type === EntityType.Directory && !e.isLoaded);
     }
 
     console.log("all ancestors loaded");

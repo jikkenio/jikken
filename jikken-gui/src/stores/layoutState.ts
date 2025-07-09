@@ -1,4 +1,5 @@
 import { map } from "nanostores";
+import { ViewMode } from "./enum";
 
 export type RequestResponseTab = {
     label: string,
@@ -17,12 +18,6 @@ export type LayoutState = {
     responseTabs: RequestResponseTab[],
     requestTabIndex: number,
     responseTabIndex: number,
-};
-
-export enum ViewMode {
-    API,
-    RAW,
-    TEST,
 };
 
 const initState: LayoutState = {
