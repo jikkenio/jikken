@@ -1,8 +1,8 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/forms";
 
 @source "../**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}";
 
 @theme {
   --color-neutral-850: #1c1c1c;
 }
-
