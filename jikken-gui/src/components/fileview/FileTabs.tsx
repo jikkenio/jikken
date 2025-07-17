@@ -1,13 +1,20 @@
-import { For } from "solid-js";
-import { useStore } from "@nanostores/solid";
+import { createSignal, For } from "solid-js";
 import { $editorState, addNewFile, closeFile, selectFile, type FileState } from "../../stores/editorState";
 import { $layoutState, setViewMode } from "../../stores/layoutState";
 import { EntityType, ViewMode } from "../../stores/enum";
 
 export const FileTabs = () => {
 
-    const editorState = useStore($editorState);
-    const layoutState = useStore($layoutState);
+    const [layoutState, setLayoutState] = createSignal($layoutState.get());
+    const [editorState, setEditorState] = createSignal($editorState.get());
+
+    $layoutState.subscribe((state) => {
+        setLayoutState(state);
+    });
+
+    $editorState.subscribe((state) => {
+        setEditorState(state);
+    });
 
     const trySelectFile = (index: number) => {
         if (index === editorState().currentFile) return;

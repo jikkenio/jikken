@@ -1,9 +1,8 @@
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { $editorState, saveResponseBody } from '../../../../stores/editorState';
 import MonacoEditorSolid from '../MonacoEditorSolid';
 import { NotificationType, triggerNotification } from '../../../../stores/notificationState';
 import { EntityType } from '../../../../stores/enum';
-import { useStore } from '@nanostores/solid';
 
 export const Body = () => {
 
@@ -17,12 +16,23 @@ export const Body = () => {
         content?: string,
     };
 
-    const editorState = useStore($editorState);
+    const pretty = (body: string | undefined) => {
+        if (!body) return undefined;
+        return JSON.stringify(JSON.parse(body), null, 2);
+    }
 
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
-    const currentResponse = () => currentTestFile()?.testFile.response;
-    const body = () => ({ type: currentResponse() ? BodyType.Json : BodyType.None, content: currentResponse()?.body } as Body);
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
+    let currentResponse = currentTestFile?.response;
+
+    const [body, setBody] = createSignal({ type: currentResponse ? BodyType.Json : BodyType.None, content: pretty(currentResponse?.body) } as Body)
+
+    $editorState.subscribe((state) => {
+        currentFile = state.files[state.currentFile];
+        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        setBody({ type: currentTestFile?.response ? BodyType.Json : BodyType.None, content: pretty(currentTestFile?.response?.body) } as Body);
+    });
 
     const copy = async () => {
         console.log("copying response body to clipboard");
@@ -77,7 +87,7 @@ export const Body = () => {
                         <MonacoEditorSolid value={body().content} language="json" readonly />
                     </div>
                 </Show>
-                <Show when={currentResponse()?.status && !body().content}>
+                <Show when={currentTestFile?.response?.status && !body().content}>
                     <div class="flex flex-auto justify-center items-center">
                         <span class="text-sm text-neutral-600">This response has no body.</span>
                     </div>

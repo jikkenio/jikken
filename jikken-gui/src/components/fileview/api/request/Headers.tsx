@@ -3,19 +3,25 @@ import { createSignal, For, Show } from 'solid-js';
 import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
 import { parseBasicAuthHeader, type AuthState } from '../../../../stores/authState';
 import { AuthType, EntityType } from '../../../../stores/enum';
-import { useStore } from '@nanostores/solid';
 
 export const Headers = () => {
 
-    const editorState = useStore($editorState);
-
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
     const [headers, setHeaders] = createSignal<HttpHeader[]>((() => {
-        const headers = currentTestFile()?.testFile.request?.headers ?? [];
+        const headers = currentTestFile?.testFile.request?.headers ?? [];
         return [...headers, { header: "", value: "", generated: false }];
     })());
+
+    $editorState.subscribe((state) => {
+        currentFile = state.files[state.currentFile];
+        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        const headers = currentTestFile?.testFile.request?.headers ?? [];
+        setHeaders([...headers, { header: "", value: "", generated: false }]);
+    });
+
 
     const onHeaderInput = (index: number) => {
         let currentHeaders = headers();
@@ -74,7 +80,7 @@ export const Headers = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        let request = { ...currentTestFile()?.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
         headers.splice(-1, 1);
         request.headers = headers;
         updateRequest(request);

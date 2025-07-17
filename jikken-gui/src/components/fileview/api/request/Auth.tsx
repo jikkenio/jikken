@@ -1,17 +1,22 @@
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../../stores/layoutState';
 import { $editorState, updateRequest, updateAuth, type HttpHeader, type Request } from '../../../../stores/editorState';
 import { type AuthState, type BasicAuthData, type BearerAuthData } from '../../../../stores/authState';
 import { AuthType, EntityType } from '../../../../stores/enum';
-import { useStore } from '@nanostores/solid';
 
 export const Auth = () => {
 
-    const editorState = useStore($editorState);
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
-    const auth = () => currentTestFile()?.auth;
+    const [auth, setAuth] = createSignal(currentTestFile?.auth);
+
+    $editorState.subscribe((state) => {
+        currentFile = state.files[state.currentFile];
+        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        setAuth(currentTestFile?.auth);
+    });
 
     const onTypeChange = (index: number) => {
         let auth = {
@@ -44,7 +49,7 @@ export const Auth = () => {
     };
 
     const resolveHeaders = (auth: AuthState) => {
-        const file = currentTestFile()?.testFile;
+        const file = currentTestFile?.testFile;
         let headers = file?.request?.headers ?? [];
 
         switch (auth.type) {
@@ -91,7 +96,7 @@ export const Auth = () => {
     };
 
     const updateHeaders = (headers: HttpHeader[]) => {
-        const file = currentTestFile()?.testFile;
+        const file = currentTestFile?.testFile;
         let request = { ...file?.request ?? {} as Request };
         request.headers = headers;
         updateRequest(request);
@@ -125,7 +130,7 @@ export const Auth = () => {
                         autocorrect="off"
                         placeholder="username"
                         value={(auth()?.data as BasicAuthData)?.username ?? ""}
-                        class="col-span-2 h-7 w-36 p-1 px-2 rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
+                        class="col-span-2 h-7 w-36 p-1 px-2 form-input rounded-[3px] bg-transparent text-sm text-neutral-300 border-neutral-600 focus:ring-0 focus:border-neutral-400 placeholder:text-neutral-500"
                         onChange={(e) => onBasicAuthFieldChange("username", e.currentTarget.value)} />
                     <div class="flex items-center">
                         <label for="password-input" class="text-sm text-neutral-400">Password</label>

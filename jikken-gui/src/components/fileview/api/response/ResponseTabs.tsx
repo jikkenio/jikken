@@ -22,8 +22,7 @@ export const ResponseTabs = () => {
     $editorState.subscribe((state) => {
         let currentFile = state.files[state.currentFile];
         let currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
-        let response = currentTestFile?.response;
-        setResponse(response);
+        setResponse(currentTestFile?.response);
     });
 
     let [layout, setLayout] = createSignal($layoutState.get());

@@ -2,7 +2,6 @@ import { createSignal, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../../stores/layoutState';
 import { $editorState, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
 import MonacoEditorSolid from '../../api/MonacoEditorSolid';
-import { useStore } from '@nanostores/solid';
 import { EntityType } from '../../../../stores/enum';
 
 export const Body = () => {
@@ -17,10 +16,9 @@ export const Body = () => {
         content?: Object,
     };
 
-    const editorState = useStore($editorState);
-
-    let currentFile = editorState().files[editorState().currentFile];
-    let currentTestFile = currentFile.type === EntityType.Test ? editorState().testFiles[currentFile.index] : undefined;
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
     const [body, setBody] = createSignal<Body>((() => {
         const body = currentTestFile?.testFile.request?.body;

@@ -1,20 +1,25 @@
 import { createSignal, For, Show } from 'solid-js';
 import { setRequestTabCount } from '../../../../stores/layoutState';
 import { $editorState, updateRequest, type HttpParameter, type Request } from '../../../../stores/editorState';
-import { useStore } from '@nanostores/solid';
 import { EntityType } from '../../../../stores/enum';
 
 export const Parameters = () => {
 
-    const editorState = useStore($editorState);
-
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
     const [params, setParams] = createSignal<HttpParameter[]>((() => {
-        const params = currentTestFile()?.testFile.request?.params ?? [];
+        const params = currentTestFile?.testFile.request?.params ?? [];
         return [...params, { param: "", value: "", generated: false }];
     })());
+
+    $editorState.subscribe((state) => {
+        currentFile = state.files[state.currentFile];
+        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        const params = currentTestFile?.testFile.request?.params ?? [];
+        setParams([...params, { param: "", value: "", generated: false }]);
+    });
 
     const onParamInput = (index: number) => {
         let currentParams = params();
@@ -52,7 +57,7 @@ export const Parameters = () => {
     };
 
     const updateParams = (params: HttpParameter[]) => {
-        let request = { ...currentTestFile()?.testFile.request ?? {} as Request };
+        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
         params.splice(-1, 1);
         request.params = params;
         updateRequest(request);

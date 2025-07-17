@@ -1,10 +1,8 @@
+import { createSignal } from "solid-js";
 import { $editorState, makeRequest, updateRequest, type Request } from "../../../../stores/editorState";
 import { EntityType, HttpVerb } from "../../../../stores/enum";
-import { useStore } from "@nanostores/solid";
 
 export const RequestBar = () => {
-
-    const editorState = useStore($editorState);
 
     const getDisplayUrl = (request: Request | undefined) => {
         let url = request?.url ?? "";
@@ -14,12 +12,17 @@ export const RequestBar = () => {
         return `${url}?${params.map((p) => `${p.param}=${p.value}`).join("&")}`;
     }
 
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
-    const request = () => currentTestFile()?.testFile.request;
-    const url = () => request()?.url;
-    const displayUrl = () => getDisplayUrl(request());
-    const method = () => request()?.method ?? HttpVerb.GET;
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
+
+    const [request, setRequest] = createSignal(currentTestFile?.testFile.request);
+
+    $editorState.subscribe((state) => {
+        currentFile = state.files[state.currentFile];
+        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
+        setRequest(currentTestFile?.testFile.request);
+    });
 
     const updateMethod = (value: string) => {
         let currentRequest = request() || {};
@@ -61,7 +64,7 @@ export const RequestBar = () => {
                     <select
                         class="flex-none select-none items-center pl-3 pr-8 text-white text-sm border-none bg-transparent focus:ring-0 appearance-none outline-none"
                         style="box-shadow: none;"
-                        value={method()}
+                        value={request()?.method ?? HttpVerb.GET}
                         onChange={(e) => updateMethod(e.currentTarget.value)}
                     >
                         <option value={HttpVerb.GET}>GET</option>
@@ -79,14 +82,14 @@ export const RequestBar = () => {
                     id="url-input"
                     class="grow border-0 bg-transparent py-1.5 pl-1 text-neutral-300 text-sm placeholder:text-neutral-500 focus:ring-0"
                     placeholder="https://api.jikken.io"
-                    value={displayUrl() || ""}
+                    value={getDisplayUrl(request()) || ""}
                     onChange={(e) => updateUrl(e.currentTarget.value)}
                 />
             </div>
             <button
                 id="send-button"
                 onClick={makeRequest}
-                disabled={!url()}
+                disabled={!request()?.url}
                 class="flex-none w-20 rounded-[4px] bg-indigo-600 px-3 py-2 mx-2.5 text-sm font-semibold text-white shadow-sm disabled:bg-neutral-600 hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
             >
                 Send
