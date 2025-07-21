@@ -272,7 +272,6 @@ export const addNewFile = () => {
   $editorState.set({ ...state });
   resetTabs(newTestFile);
   selectEntity(-1);
-  console.log("after add: ", $editorState.get());
 };
 
 export const openFile = async (entity: FolderEntity) => {
@@ -398,8 +397,6 @@ export const closeFile = (index: number) => {
   } else {
     state.configFiles.splice(fileIndex, 1);
   }
-
-  console.log("after remove: ", $editorState.get());
 
   // if there are no files left, open a new scratch pad
   if (state.files.length === 0) {

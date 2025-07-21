@@ -406,8 +406,6 @@ async fn open_config_file(file: FileMetadata) -> Option<ConfigFile> {
         return None;
     };
 
-    println!("{:?}", file_data);
-
     let Ok(config) = toml::from_str::<ConfigToml>(&file_data) else {
         println!("failed to parse toml");
         return None;

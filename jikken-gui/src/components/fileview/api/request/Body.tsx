@@ -105,13 +105,13 @@ export const Body = () => {
             <div class="flex space-x-4 items-center text-neutral-500 mb-3 text-xs font-medium">
                 <div class="group flex items-center space-x-1">
                     <input type="radio" name="body-type" id="none" value={BodyType.None} checked={body().type === BodyType.None}
-                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600"
+                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
                         onClick={(_) => onTypeChange(BodyType.None)} />
                     <label for="none" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">none</label>
                 </div>
                 <div class="group flex flex-row items-center space-x-1">
                     <input type="radio" name="body-type" id="json" value={BodyType.Json} checked={body().type === BodyType.Json}
-                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600"
+                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
                         onClick={(_) => onTypeChange(BodyType.Json)} />
                     <label for="json" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">JSON</label>
                 </div>

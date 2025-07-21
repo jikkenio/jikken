@@ -6,3 +6,11 @@
 @theme {
   --color-neutral-850: #1c1c1c;
 }
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+select:not(:disabled) {
+  cursor: pointer;
+}
