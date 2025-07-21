@@ -268,7 +268,7 @@ export const addNewFile = () => {
   state.files.push(newFile);
   state.testFiles.push(newTestFile);
 
-  state.currentFile++;
+  state.currentFile = state.files.length - 1;
   $editorState.set({ ...state });
   resetTabs(newTestFile);
   selectEntity(-1);
