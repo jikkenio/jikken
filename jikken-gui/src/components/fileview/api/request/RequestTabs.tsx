@@ -1,21 +1,30 @@
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { $layoutState, setRequestTabActive } from "../../../../stores/layoutState";
 import { Parameters } from "./Parameters";
 import { Headers } from "./Headers";
 import { Body } from './Body';
 import { Auth } from './Auth';
 import { $editorState, saveFile } from "../../../../stores/editorState";
-import { useStore } from "@nanostores/solid";
 import { EntityType } from "../../../../stores/enum";
 
 export const RequestTabs = () => {
 
-    const layoutState = useStore($layoutState);
-    const editorState = useStore($editorState);
+    let editorState = $editorState.get();
+    let currentFile = editorState.files[editorState.currentFile];
+    let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
-    const currentFile = () => editorState().files[editorState().currentFile];
-    const currentTestFile = () => currentFile().type === EntityType.Test ? editorState().testFiles[currentFile().index] : undefined;
-    const isSaveable = () => currentTestFile()?.testFile.request?.url ? true : false;
+    const [isSaveable, setIsSaveable] = createSignal(currentTestFile?.testFile.request?.url ? true : false);
+    const [layoutState, setLayoutState] = createSignal($layoutState.get());
+
+    $editorState.subscribe((state) => {
+        let file = state.files[state.currentFile];
+        let testFile = file.type === EntityType.Test ? state.testFiles[file.index] : undefined;
+        setIsSaveable(testFile?.testFile.request?.url ? true : false);
+    });
+
+    $layoutState.subscribe((state) => {
+        setLayoutState(state);
+    });
 
     return (
         <div class="h-full flex flex-col">
