@@ -178,6 +178,7 @@ export type FileState = {
 
 export type TestFileState = {
   testFile: TestFile,
+  executing: boolean,
   response?: HttpResponse,
   auth: AuthState,
 }
@@ -205,6 +206,7 @@ const getNewTestFile = () => {
         method: HttpVerb.GET,
       },
     },
+    executing: false,
     response: undefined,
     auth: { type: AuthType.None },
   };
@@ -324,7 +326,7 @@ const openTestFile = async (file: File) => {
   let currentState = $editorState.get();
   let newIndex = currentState.testFiles.length;
   let fileState = { id: uuidv4(), file: file, type: EntityType.Test, index: newIndex };
-  let testFileState = { testFile: testFile, auth: auth };
+  let testFileState = { testFile: testFile, executing: false, auth: auth };
   currentState.files.push(fileState);
   currentState.testFiles.push(testFileState);
   currentState.currentFile++;
@@ -347,7 +349,6 @@ const openConfigFile = async (file: File) => {
   $editorState.set({ ...currentState });
   resetTabs(undefined);
 };
-
 
 export const saveFile = async () => {
   let state = $editorState.get();
@@ -422,6 +423,10 @@ export const makeRequest = async () => {
   let state = $editorState.get();
   let file = state.files[state.currentFile];
   let testFile = state.testFiles[file.index];
+  testFile.response = undefined;
+  testFile.executing = true;
+  $editorState.set({ ...state });
+
   console.log("making http request: ", testFile.testFile.request);
   if (!testFile.testFile.request?.url) {
     console.log("no request url");
@@ -430,6 +435,7 @@ export const makeRequest = async () => {
   let response: HttpResponse;
 
   clearNotification();
+
   try {
     response = await invoke("make_request", { testFile: testFile.testFile });
   } catch (ex) {
@@ -451,11 +457,11 @@ export const makeRequest = async () => {
   response.size = size ? +size : undefined;
 
   testFile.response = response;
+  testFile.executing = false;
   $editorState.set({ ...state });
   setResponseTabCount("tab-body", response.body ? 1 : 0);
   setResponseTabCount("tab-headers", response.headers.length);
 };
-
 
 export const saveResponseBody = async () => {
   let state = $editorState.get();

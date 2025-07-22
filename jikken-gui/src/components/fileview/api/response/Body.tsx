@@ -92,6 +92,11 @@ export const Body = () => {
                         <span class="text-sm text-neutral-600">This response has no body.</span>
                     </div>
                 </Show>
+                <Show when={currentTestFile?.executing}>
+                    <div class="flex flex-auto justify-center items-center">
+                        <span class="text-sm text-neutral-600">Executing request...</span>
+                    </div>
+                </Show>
             </div>
         </div>
     );
