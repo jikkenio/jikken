@@ -356,12 +356,12 @@ pub fn open_folder(path: &Path) -> Option<FolderEntity> {
 
     entities.sort_by(|a, b| a.name.cmp(&b.name));
     entities.sort_by(|a, b| a.is_directory.cmp(&b.is_directory));
-    return Some(FolderEntity {
+    Some(FolderEntity {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         path: path.to_string_lossy().to_string(),
         is_directory: true,
         entities,
-    });
+    })
 }
 
 pub fn load_test(filename: &str) -> Result<TestFile, Box<dyn Error + Send + Sync>> {
@@ -424,21 +424,19 @@ async fn open_config_file(file: FileMetadata) -> Option<ConfigFile> {
     }
 
     Some(ConfigFile {
-        api_key: config.settings.clone().map(|s| s.api_key).flatten(),
+        api_key: config.settings.clone().and_then(|s| s.api_key),
         bypass_cert_verification: config
             .settings
             .clone()
-            .map(|s| s.bypass_cert_verification)
-            .flatten()
+            .and_then(|s| s.bypass_cert_verification)
             .unwrap_or(false),
         continue_on_failure: config
             .settings
             .clone()
-            .map(|s| s.continue_on_failure)
-            .flatten()
+            .and_then(|s| s.continue_on_failure)
             .unwrap_or(false),
-        dev_mode: config.settings.clone().map(|s| s.dev_mode).flatten(),
-        environment: config.settings.map(|s| s.environment).flatten(),
+        dev_mode: config.settings.clone().and_then(|s| s.dev_mode),
+        environment: config.settings.and_then(|s| s.environment),
         globals,
     })
 }
@@ -589,7 +587,7 @@ fn convert_config_to_toml(file: ConfigFile) -> ConfigToml {
     });
 
     let mut globals: Option<Table> = None;
-    if file.globals.len() > 0 {
+    if !file.globals.is_empty() {
         let mut table = Table::new();
         file.globals.iter().for_each(|g| {
             table.insert(g.key.clone(), toml::Value::String(g.value.clone()));
