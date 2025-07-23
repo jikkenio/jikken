@@ -1,5 +1,5 @@
 import { createSignal, For } from 'solid-js';
-import { $editorState, type GlobalVariable } from '../../../stores/editorState';
+import { $editorState, updateConfigFile, type GlobalVariable } from '../../../stores/editorState';
 import { EntityType } from '../../../stores/enum';
 
 export const ConfigView = () => {
@@ -19,27 +19,35 @@ export const ConfigView = () => {
     });
 
     const toggleBypassCertVerification = (value: boolean) => {
-        currentConfigFile!.bypassCertVerification = value;
-        console.log("set config: ", currentConfigFile);
-        setConfig(currentConfigFile);
+        let current = config();
+        current!.bypassCertVerification = value;
+        console.log("set config: ", current);
+        setConfig(current);
+        updateConfig();
     }
 
     const toggleContinueOnFailure = (value: boolean) => {
-        currentConfigFile!.continueOnFailure = value;
-        console.log("set config: ", currentConfigFile);
-        setConfig(currentConfigFile);
+        let current = config();
+        current!.continueOnFailure = value;
+        console.log("set config: ", current);
+        setConfig(current);
+        updateConfig();
     }
 
     const updateApiKey = (value: string) => {
-        currentConfigFile!.apiKey = value;
-        console.log("set config: ", currentConfigFile);
-        setConfig(currentConfigFile);
+        let current = config();
+        current!.apiKey = value;
+        console.log("set config: ", current);
+        setConfig(current);
+        updateConfig();
     }
 
     const updateEnvironment = (value: string) => {
-        currentConfigFile!.environment = value;
-        console.log("set config: ", currentConfigFile);
-        setConfig(currentConfigFile);
+        let current = config();
+        current!.environment = value;
+        console.log("set config: ", current);
+        setConfig(current);
+        updateConfig();
     }
 
     const onGlobalInput = (index: number) => {
@@ -63,7 +71,7 @@ export const ConfigView = () => {
         }
 
         setGlobals([...currentGlobals]);
-        // updateGlobals(currentGlobals);
+        updateConfig();
     }
 
     const deleteGlobal = (index: number) => {
@@ -72,8 +80,17 @@ export const ConfigView = () => {
         currentGlobals.splice(index, 1);
 
         setGlobals([...currentGlobals]);
-        // updateGlobals(currentGlobals);
+        updateConfig();
     };
+
+    const updateConfig = () => {
+        let file = config();
+        if (!config) return;
+
+        file!.globals = globals();
+        file!.globals.splice(-1, 1);
+        updateConfigFile({ ...file! });
+    }
 
     return (
         <div class="p-3 flex flex-auto flex-col">

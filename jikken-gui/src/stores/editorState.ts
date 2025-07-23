@@ -147,6 +147,7 @@ export type ConfigFile = {
   apiKey?: string,
   bypassCertVerification: boolean,
   continueOnFailure: boolean,
+  devMode?: boolean,
   environment?: string,
   globals: GlobalVariable[],
 };
@@ -248,6 +249,14 @@ export const updateAuth = (auth: AuthState) => {
   currentFile.auth = { ...auth };
   $editorState.set({ ...currentState });
   setRequestTabCount("tab-auth", auth.type === AuthType.None ? 0 : 1);
+};
+
+export const updateConfigFile = (file: ConfigFile) => {
+  console.log("editor state - updating config file: ", file);
+  let currentState = $editorState.get();
+  let index = currentState.files[currentState.currentFile].index;
+  currentState.configFiles[index] = file;
+  $editorState.set({ ...currentState });
 };
 
 export const selectFile = (index: number) => {
@@ -352,8 +361,15 @@ const openConfigFile = async (file: File) => {
 
 export const saveFile = async () => {
   let state = $editorState.get();
-  if (state.files[state.currentFile].type !== EntityType.Test) return;
-  console.log("editor state - saving file at index ", state.currentFile);
+  if (state.files[state.currentFile].type === EntityType.Test) {
+    saveTestFile(state);
+  } else {
+    saveConfigFile(state);
+  }
+};
+
+export const saveTestFile = async (state: EditorState) => {
+  console.log("editor state - saving test file at index ", state.currentFile);
 
   let file = state.files[state.currentFile];
   let testFile = state.testFiles[file.index];
@@ -361,29 +377,62 @@ export const saveFile = async () => {
   let savedFile: File | undefined;
 
   if (file.file) {
-    console.log("saving existing file");
-    savedFile = await invoke("save_existing_file", { file: file.file!, testFile: modifiedFile.testFile });
+    console.log("saving existing test file");
+    savedFile = await invoke("save_existing_test_file", { file: file.file!, testFile: modifiedFile.testFile });
     if (savedFile) {
-      console.log("successfully saved file");
+      console.log("successfully saved test file");
     } else {
-      console.log("failed to save file");
+      console.log("failed to save test file");
     }
     return;
   }
 
-  console.log("saving new file");
-  savedFile = await invoke("save_new_file", {
+  console.log("saving new test file");
+  savedFile = await invoke("save_new_test_file", {
     testFile: modifiedFile.testFile,
   });
   if (!savedFile) {
-    console.log("failed to save file");
+    console.log("failed to save test file");
     return;
   }
 
   file.file = savedFile;
   $editorState.set({ ...state });
   await addSavedFile(savedFile!);
-  console.log("successfully saved file");
+  console.log("successfully saved test file");
+};
+
+export const saveConfigFile = async (state: EditorState) => {
+  console.log("editor state - saving config file at index ", state.currentFile);
+
+  let file = state.files[state.currentFile];
+  let configFile = state.configFiles[file.index];
+  let savedFile: File | undefined;
+
+  if (file.file) {
+    console.log("saving existing config file");
+    savedFile = await invoke("save_existing_config_file", { file: file.file!, configFile: configFile });
+    if (savedFile) {
+      console.log("successfully saved config file");
+    } else {
+      console.log("failed to save config file");
+    }
+    return;
+  }
+
+  console.log("saving new config file");
+  savedFile = await invoke("save_new_config_file", {
+    configFile: configFile,
+  });
+  if (!savedFile) {
+    console.log("failed to save config file");
+    return;
+  }
+
+  file.file = savedFile;
+  $editorState.set({ ...state });
+  await addSavedFile(savedFile!);
+  console.log("successfully saved config file");
 };
 
 export const closeFile = (index: number) => {

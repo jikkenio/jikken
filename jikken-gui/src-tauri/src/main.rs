@@ -264,15 +264,15 @@ pub struct HttpRequestResponse {
     pub body: Option<String>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ConfigToml {
     pub settings: Option<ConfigTomlSettings>,
     pub globals: Option<Table>,
 }
 
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigTomlSettings {
     pub api_key: Option<String>,
     pub bypass_cert_verification: Option<bool>,
@@ -281,17 +281,18 @@ pub struct ConfigTomlSettings {
     pub environment: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ConfigFile {
     pub api_key: Option<String>,
     pub bypass_cert_verification: bool,
     pub continue_on_failure: bool,
+    pub dev_mode: Option<bool>,
     pub environment: Option<String>,
     pub globals: Vec<GlobalVariable>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GlobalVariable {
     pub key: String,
     pub value: String,
@@ -436,13 +437,14 @@ async fn open_config_file(file: FileMetadata) -> Option<ConfigFile> {
             .map(|s| s.continue_on_failure)
             .flatten()
             .unwrap_or(false),
+        dev_mode: config.settings.clone().map(|s| s.dev_mode).flatten(),
         environment: config.settings.map(|s| s.environment).flatten(),
         globals,
     })
 }
 
 #[tauri::command]
-async fn save_new_file(app: tauri::AppHandle, test_file: TestFile) -> Option<FileMetadata> {
+async fn save_new_test_file(app: tauri::AppHandle, test_file: TestFile) -> Option<FileMetadata> {
     use tauri_plugin_dialog::DialogExt;
 
     let Some(file_path) = app
@@ -482,7 +484,7 @@ async fn save_new_file(app: tauri::AppHandle, test_file: TestFile) -> Option<Fil
 }
 
 #[tauri::command]
-async fn save_existing_file(file: FileMetadata, test_file: TestFile) -> Option<FileMetadata> {
+async fn save_existing_test_file(file: FileMetadata, test_file: TestFile) -> Option<FileMetadata> {
     let path = Path::new(&file.path);
 
     let Ok(file_data) = serde_yaml::to_string(&test_file) else {
@@ -503,6 +505,99 @@ async fn save_existing_file(file: FileMetadata, test_file: TestFile) -> Option<F
             None
         }
     }
+}
+
+#[tauri::command]
+async fn save_new_config_file(
+    app: tauri::AppHandle,
+    config_file: ConfigFile,
+) -> Option<FileMetadata> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let Some(file_path) = app
+        .dialog()
+        .file()
+        .add_filter("Jikken Configuration File", &["jikken"])
+        .blocking_save_file()
+    else {
+        println!("failed to select path to save file");
+        return None;
+    };
+    println!("selected file path: {:?}", file_path);
+
+    let Some(path) = file_path.as_path() else {
+        println!("failed to convert file path to path");
+        return None;
+    };
+
+    let toml = convert_config_to_toml(config_file);
+    let Ok(file_data) = toml::to_string(&toml) else {
+        println!("failed to serialize config file to TOML");
+        return None;
+    };
+
+    match fs::write(file_path.as_path().unwrap(), file_data.as_bytes()) {
+        Ok(_) => {
+            println!("successfully saved file at path {}", file_path);
+            Some(FileMetadata {
+                name: path.file_name().unwrap().to_str().unwrap().to_string(),
+                path: path.to_str().unwrap().to_string(),
+            })
+        }
+        Err(error) => {
+            println!("failed to write file {}", error);
+            None
+        }
+    }
+}
+
+#[tauri::command]
+async fn save_existing_config_file(
+    file: FileMetadata,
+    config_file: ConfigFile,
+) -> Option<FileMetadata> {
+    let path = Path::new(&file.path);
+
+    let toml = convert_config_to_toml(config_file);
+    let Ok(file_data) = toml::to_string(&toml) else {
+        println!("failed to serialize config file to TOML");
+        return None;
+    };
+
+    match fs::write(path, file_data.as_bytes()) {
+        Ok(_) => {
+            println!("successfully saved file at path {}", file.path);
+            Some(FileMetadata {
+                name: path.file_name().unwrap().to_str().unwrap().to_string(),
+                path: path.to_str().unwrap().to_string(),
+            })
+        }
+        Err(error) => {
+            println!("failed to write file {}", error);
+            None
+        }
+    }
+}
+
+fn convert_config_to_toml(file: ConfigFile) -> ConfigToml {
+    let settings = Some(ConfigTomlSettings {
+        api_key: file.api_key,
+        bypass_cert_verification: file.bypass_cert_verification.then_some(true),
+        continue_on_failure: file.continue_on_failure.then_some(true),
+        dev_mode: file.dev_mode,
+        environment: file.environment,
+    });
+
+    let mut globals: Option<Table> = None;
+    if file.globals.len() > 0 {
+        let mut table = Table::new();
+        file.globals.iter().for_each(|g| {
+            table.insert(g.key.clone(), toml::Value::String(g.value.clone()));
+        });
+        globals = Some(table);
+    }
+
+    ConfigToml { settings, globals }
 }
 
 #[tauri::command]
@@ -646,8 +741,10 @@ fn main() {
             open_folder_dialog,
             open_test_file,
             open_config_file,
-            save_new_file,
-            save_existing_file,
+            save_new_test_file,
+            save_existing_test_file,
+            save_new_config_file,
+            save_existing_config_file,
             make_request,
             save_response_body,
         ])
