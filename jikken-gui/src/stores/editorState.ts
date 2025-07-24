@@ -143,19 +143,23 @@ enum VariableModifierUnit {
   MONTHS = "months",
 };
 
+export type RawConfigFile = {
+  settings?: ConfigSettings;
+  globals?: Object,
+}
+
 export type ConfigFile = {
-  apiKey?: string,
-  bypassCertVerification: boolean,
-  continueOnFailure: boolean,
-  devMode?: boolean,
-  environment?: string,
-  globals: GlobalVariable[],
+  settings?: ConfigSettings;
+  globals?: Map<string, string>,
 };
 
-export type GlobalVariable = {
-  key?: string,
-  value?: string,
-};
+export type ConfigSettings = {
+  apiKey?: string,
+  bypassCertVerification?: boolean,
+  continueOnFailure?: boolean,
+  devMode?: boolean,
+  environment?: string,
+}
 
 export type File = {
   name: string;
@@ -345,8 +349,13 @@ const openTestFile = async (file: File) => {
 };
 
 const openConfigFile = async (file: File) => {
-  let configFile: ConfigFile = await invoke("open_config_file", { file: file });
-  console.log("config file contents: ", configFile);
+  let rawFile: RawConfigFile = await invoke("open_config_file", { file: file });
+  console.log("config file contents: ", rawFile);
+
+  let configFile: ConfigFile = { settings: rawFile.settings };
+  if (rawFile.globals) {
+    configFile.globals = new Map(Object.entries(rawFile.globals!));
+  }
 
   let currentState = $editorState.get();
   let newIndex = currentState.configFiles.length;

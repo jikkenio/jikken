@@ -1,5 +1,5 @@
 import { createSignal, For } from 'solid-js';
-import { $editorState, updateConfigFile, type GlobalVariable } from '../../../stores/editorState';
+import { $editorState, updateConfigFile } from '../../../stores/editorState';
 import { EntityType } from '../../../stores/enum';
 
 export const ConfigView = () => {
@@ -8,19 +8,31 @@ export const ConfigView = () => {
     let currentFile = editorState.files[editorState.currentFile];
     let currentConfigFile = currentFile.type === EntityType.Config ? editorState.configFiles[currentFile.index] : undefined;
 
+    const listFromGlobals = (globals: Map<string, string> | undefined) => {
+        let list: [string, string][] = [];
+        if (globals) {
+            list = list.concat(Array.from(globals!.entries()));
+        }
+
+        list.push(["", ""]);
+        return list;
+    };
+
     let [config, setConfig] = createSignal(currentConfigFile);
-    let [globals, setGlobals] = createSignal([...currentConfigFile?.globals ?? [], { key: "", value: "" }])
+    let [globals, setGlobals] = createSignal(listFromGlobals(currentConfigFile?.globals));
 
     $editorState.subscribe((state) => {
         let currentFile = state.files[state.currentFile];
         let currentConfigFile = currentFile.type === EntityType.Config ? state.configFiles[currentFile.index] : undefined;
         setConfig(currentConfigFile);
-        setGlobals([...currentConfigFile?.globals ?? [], { key: "", value: "" }])
+        setGlobals(listFromGlobals(currentConfigFile?.globals));
     });
 
     const toggleBypassCertVerification = (value: boolean) => {
         let current = config();
-        current!.bypassCertVerification = value;
+        if (!current!.settings) current!.settings = {};
+
+        current!.settings!.bypassCertVerification = value;
         console.log("set config: ", current);
         setConfig(current);
         updateConfig();
@@ -28,7 +40,9 @@ export const ConfigView = () => {
 
     const toggleContinueOnFailure = (value: boolean) => {
         let current = config();
-        current!.continueOnFailure = value;
+        if (!current!.settings) current!.settings = {};
+
+        current!.settings!.continueOnFailure = value;
         console.log("set config: ", current);
         setConfig(current);
         updateConfig();
@@ -36,7 +50,9 @@ export const ConfigView = () => {
 
     const updateApiKey = (value: string) => {
         let current = config();
-        current!.apiKey = value;
+        if (!current!.settings) current!.settings = {};
+
+        current!.settings!.apiKey = value;
         console.log("set config: ", current);
         setConfig(current);
         updateConfig();
@@ -44,7 +60,9 @@ export const ConfigView = () => {
 
     const updateEnvironment = (value: string) => {
         let current = config();
-        current!.environment = value;
+        if (!current!.settings) current!.settings = {};
+
+        current!.settings!.environment = value;
         console.log("set config: ", current);
         setConfig(current);
         updateConfig();
@@ -55,17 +73,17 @@ export const ConfigView = () => {
 
         // if the last row is not empty, add another row
         if (index === currentGlobals.length - 1) {
-            setGlobals([...currentGlobals, { key: "", value: "" }]);
+            setGlobals([...currentGlobals, ["", ""]]);
         }
     };
 
-    const onGlobalChange = (index: number, global: GlobalVariable) => {
+    const onGlobalChange = (index: number, global: [string, string]) => {
         console.log(`saving global variable at index ${index}`);
         let currentGlobals = globals();
         currentGlobals[index] = global;
 
         // if we emptied a row and it's not the last, delete it
-        if (global.key === "" && global.value === "" && index < currentGlobals.length - 1) {
+        if (global[0] === "" && global[1] === "" && index < currentGlobals.length - 1) {
             deleteGlobal(index);
             return;
         }
@@ -87,8 +105,9 @@ export const ConfigView = () => {
         let file = config();
         if (!config) return;
 
-        file!.globals = globals();
-        file!.globals.splice(-1, 1);
+        let envs = globals();
+        envs.splice(-1, 1);
+        file!.globals = new Map(envs);
         updateConfigFile({ ...file! });
     }
 
@@ -105,7 +124,7 @@ export const ConfigView = () => {
                             <input placeholder="API Key"
                                 spellcheck={false}
                                 autocorrect="off"
-                                value={config()?.apiKey || ""}
+                                value={config()?.settings?.apiKey || ""}
                                 onChange={(e) => updateApiKey(e.currentTarget.value)}
                                 class="w-full text-sm bg-transparent pl-2 p-1 border-1 border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
                             />
@@ -117,13 +136,13 @@ export const ConfigView = () => {
                         </div>
                         <div class="col-span-3 flex space-x-4 text-sm bg-transparent my-auto">
                             <div class="group/true flex items-center space-x-1">
-                                <input type="radio" name="bypass-cert-verification" id="bypass-true" value="true" checked={config()?.bypassCertVerification}
+                                <input type="radio" name="bypass-cert-verification" id="bypass-true" value="true" checked={config()?.settings?.bypassCertVerification}
                                     class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer group-hover/true:border-indigo-600 checked:bg-indigo-700"
                                     onClick={(_) => toggleBypassCertVerification(true)} />
                                 <label for="bypass-true" class="cursor-pointer group-hover/true:text-white peer-checked:text-neutral-300">true</label>
                             </div>
                             <div class="group/false flex flex-row items-center space-x-1">
-                                <input type="radio" name="bypass-cert-verification" id="bypass-false" value="false" checked={!config()?.bypassCertVerification}
+                                <input type="radio" name="bypass-cert-verification" id="bypass-false" value="false" checked={!config()?.settings?.bypassCertVerification}
                                     class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer group-hover/false:border-indigo-600 checked:bg-indigo-700"
                                     onClick={(_) => toggleBypassCertVerification(false)} />
                                 <label for="bypass-false" class="cursor-pointer group-hover/false:text-white peer-checked:text-neutral-300">false</label>
@@ -136,13 +155,13 @@ export const ConfigView = () => {
                         </div>
                         <div class="col-span-3 flex space-x-4 text-sm bg-transparent my-auto">
                             <div class="group/true flex items-center space-x-1">
-                                <input type="radio" name="continue-on-faikure" id="continue-true" value="true" checked={config()?.continueOnFailure}
+                                <input type="radio" name="continue-on-faikure" id="continue-true" value="true" checked={config()?.settings?.continueOnFailure}
                                     class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer group-hover/true:border-indigo-600 checked:bg-indigo-700"
                                     onClick={(_) => toggleContinueOnFailure(true)} />
                                 <label for="continue-true" class="cursor-pointer group-hover/true:text-white peer-checked:text-neutral-300">true</label>
                             </div>
                             <div class="group/false flex flex-row items-center space-x-1">
-                                <input type="radio" name="continue-on-failure" id="continue-false" value="false" checked={!config()?.continueOnFailure}
+                                <input type="radio" name="continue-on-failure" id="continue-false" value="false" checked={!config()?.settings?.continueOnFailure}
                                     class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer group-hover/false:border-indigo-600 checked:bg-indigo-700"
                                     onClick={(_) => toggleContinueOnFailure(false)} />
                                 <label for="continue-false" class="cursor-pointer group-hover/false:text-white peer-checked:text-neutral-300">false</label>
@@ -157,7 +176,7 @@ export const ConfigView = () => {
                             <input placeholder="Environment"
                                 spellcheck={false}
                                 autocorrect="off"
-                                value={config()?.environment || ""}
+                                value={config()?.settings?.environment || ""}
                                 onChange={(e) => updateEnvironment(e.currentTarget.value)}
                                 class="w-full text-sm bg-transparent pl-2 p-1 border-1 border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
                             />
@@ -174,17 +193,17 @@ export const ConfigView = () => {
                                 <input placeholder="Key"
                                     spellcheck={false}
                                     autocorrect="off"
-                                    value={global.key}
+                                    value={global[0]}
                                     onInput={(_) => onGlobalInput(index())}
-                                    onChange={(e) => onGlobalChange(index(), { key: e.currentTarget.value, value: global.value })}
+                                    onChange={(e) => onGlobalChange(index(), [e.currentTarget.value, global[1]])}
                                     class="flex-1 text-sm bg-transparent pl-2 p-1 border-1 border-b-0 group-last:border-b border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
                                 />
                                 <input placeholder="Value"
                                     spellcheck={false}
                                     autocorrect="off"
-                                    value={global.value}
+                                    value={global[1]}
                                     onInput={(_) => onGlobalInput(index())}
-                                    onChange={(e) => onGlobalChange(index(), { key: global.key, value: e.currentTarget.value })}
+                                    onChange={(e) => onGlobalChange(index(), [global[0], e.currentTarget.value])}
                                     class="flex-1 text-sm bg-transparent pl-2 p-1 border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
                                 />
                                 <div

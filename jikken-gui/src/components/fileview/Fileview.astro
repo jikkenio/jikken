@@ -8,6 +8,7 @@ import { YamlView } from "./api/YamlView";
 import { EntityType, ViewMode } from "../../stores/enum";
 import { $editorState } from "../../stores/editorState";
 import { ConfigView } from "./config/ConfigView";
+import { TomlView } from "./api/TomlView";
 
 let editorState = $editorState.value;
 let currentFile = editorState?.files[editorState.currentFile];
@@ -21,7 +22,7 @@ let currentFile = editorState?.files[editorState.currentFile];
     class:list={[{ hidden: currentFile?.type !== EntityType.Test }]}
   >
     <div
-      id="api-view"
+      id="test-api-view"
       class="flex flex-col flex-auto"
       class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
     >
@@ -48,7 +49,20 @@ let currentFile = editorState?.files[editorState.currentFile];
     class="flex flex-auto"
     class:list={[{ hidden: currentFile?.type !== EntityType.Config }]}
   >
-    <ConfigView client:only />
+    <div
+      id="config-api-view"
+      class="flex flex-auto"
+      class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
+    >
+      <ConfigView client:only />
+    </div>
+    <div
+      id="toml-view"
+      class="flex flex-auto"
+      class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.RAW }]}
+    >
+      <TomlView client:only />
+    </div>
   </div>
 </div>
 
@@ -222,20 +236,28 @@ let currentFile = editorState?.files[editorState.currentFile];
   };
 
   listenKeys($layoutState, ["viewMode"], (layout) => {
-    const apiView = document.getElementById("api-view");
+    const testApiView = document.getElementById("test-api-view");
+    const configApiView = document.getElementById("config-api-view");
     const yamlView = document.getElementById("yaml-view");
+    const tomlView = document.getElementById("toml-view");
     switch (layout.viewMode) {
       case ViewMode.API:
-        apiView?.classList.remove("hidden");
+        testApiView?.classList.remove("hidden");
+        configApiView?.classList.remove("hidden");
         yamlView?.classList.add("hidden");
+        tomlView?.classList.add("hidden");
         break;
       case ViewMode.RAW:
         yamlView?.classList.remove("hidden");
-        apiView?.classList.add("hidden");
+        tomlView?.classList.remove("hidden");
+        testApiView?.classList.add("hidden");
+        configApiView?.classList.add("hidden");
         break;
       case ViewMode.TEST:
-        apiView?.classList.add("hidden");
+        testApiView?.classList.add("hidden");
+        configApiView?.classList.add("hidden");
         yamlView?.classList.add("hidden");
+        tomlView?.classList.add("hidden");
         break;
       default:
     }

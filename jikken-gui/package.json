@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@astrojs/solid-js": "^5.1.0",
+    "@iarna/toml": "^2.2.5",
     "@nanostores/solid": "^1.0.0",
     "@tailwindcss/postcss": "^4.1.11",
     "@tauri-apps/api": "^2.6.0",

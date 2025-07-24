@@ -266,36 +266,19 @@ pub struct HttpRequestResponse {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ConfigToml {
-    pub settings: Option<ConfigTomlSettings>,
+pub struct ConfigFile {
+    pub settings: Option<ConfigFileSettings>,
     pub globals: Option<Table>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigTomlSettings {
+pub struct ConfigFileSettings {
     pub api_key: Option<String>,
     pub bypass_cert_verification: Option<bool>,
     pub continue_on_failure: Option<bool>,
     pub dev_mode: Option<bool>,
     pub environment: Option<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ConfigFile {
-    pub api_key: Option<String>,
-    pub bypass_cert_verification: bool,
-    pub continue_on_failure: bool,
-    pub dev_mode: Option<bool>,
-    pub environment: Option<String>,
-    pub globals: Vec<GlobalVariable>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct GlobalVariable {
-    pub key: String,
-    pub value: String,
 }
 
 #[tauri::command]
@@ -407,38 +390,12 @@ async fn open_config_file(file: FileMetadata) -> Option<ConfigFile> {
         return None;
     };
 
-    let Ok(config) = toml::from_str::<ConfigToml>(&file_data) else {
+    let Ok(config) = toml::from_str::<ConfigFile>(&file_data) else {
         println!("failed to parse toml");
         return None;
     };
 
-    let mut globals: Vec<GlobalVariable> = Vec::new();
-    if let Some(global_map) = config.globals {
-        globals = global_map
-            .iter()
-            .map(|e| GlobalVariable {
-                key: e.0.to_string(),
-                value: e.1.as_str().unwrap_or_default().to_string(),
-            })
-            .collect();
-    }
-
-    Some(ConfigFile {
-        api_key: config.settings.clone().and_then(|s| s.api_key),
-        bypass_cert_verification: config
-            .settings
-            .clone()
-            .and_then(|s| s.bypass_cert_verification)
-            .unwrap_or(false),
-        continue_on_failure: config
-            .settings
-            .clone()
-            .and_then(|s| s.continue_on_failure)
-            .unwrap_or(false),
-        dev_mode: config.settings.clone().and_then(|s| s.dev_mode),
-        environment: config.settings.and_then(|s| s.environment),
-        globals,
-    })
+    Some(config)
 }
 
 #[tauri::command]
@@ -528,8 +485,8 @@ async fn save_new_config_file(
         return None;
     };
 
-    let toml = convert_config_to_toml(config_file);
-    let Ok(file_data) = toml::to_string(&toml) else {
+    let config_file = simplify_config_file(config_file);
+    let Ok(file_data) = toml::to_string(&config_file) else {
         println!("failed to serialize config file to TOML");
         return None;
     };
@@ -555,9 +512,8 @@ async fn save_existing_config_file(
     config_file: ConfigFile,
 ) -> Option<FileMetadata> {
     let path = Path::new(&file.path);
-
-    let toml = convert_config_to_toml(config_file);
-    let Ok(file_data) = toml::to_string(&toml) else {
+    let config_file = simplify_config_file(config_file);
+    let Ok(file_data) = toml::to_string(&config_file) else {
         println!("failed to serialize config file to TOML");
         return None;
     };
@@ -577,25 +533,22 @@ async fn save_existing_config_file(
     }
 }
 
-fn convert_config_to_toml(file: ConfigFile) -> ConfigToml {
-    let settings = Some(ConfigTomlSettings {
-        api_key: file.api_key,
-        bypass_cert_verification: file.bypass_cert_verification.then_some(true),
-        continue_on_failure: file.continue_on_failure.then_some(true),
-        dev_mode: file.dev_mode,
-        environment: file.environment,
-    });
-
-    let mut globals: Option<Table> = None;
-    if !file.globals.is_empty() {
-        let mut table = Table::new();
-        file.globals.iter().for_each(|g| {
-            table.insert(g.key.clone(), toml::Value::String(g.value.clone()));
-        });
-        globals = Some(table);
+fn simplify_config_file(file: ConfigFile) -> ConfigFile {
+    let mut file = file.clone();
+    if file.settings.is_none() {
+        return file;
     }
 
-    ConfigToml { settings, globals }
+    let mut settings = file.settings.clone().unwrap();
+    if Some(false) == settings.bypass_cert_verification {
+        settings.bypass_cert_verification = None;
+    }
+    if Some(false) == settings.continue_on_failure {
+        settings.continue_on_failure = None;
+    }
+
+    file.settings = Some(settings);
+    file
 }
 
 #[tauri::command]

@@ -48,6 +48,7 @@ import { $layoutState } from "../stores/layoutState";
 </style>
 
 <script>
+  window.global ||= window;
   import { listenKeys } from "nanostores";
   import { $layoutState, setFolderPanel } from "../stores/layoutState";
 
