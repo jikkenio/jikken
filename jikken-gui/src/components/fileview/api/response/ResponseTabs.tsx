@@ -40,14 +40,14 @@ export const ResponseTabs = () => {
         }
 
         if (size < 1e6) {
-            return `${(size / 1000).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} KB`;
+            return `${(size / 1000).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })} KB`;
         }
 
         if (size < 1e9) {
-            return `${(size / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} MB`;
+            return `${(size / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })} MB`;
         }
 
-        return `${(size / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} GB`;
+        return `${(size / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })} GB`;
     };
 
     const formatStatus = () => {
@@ -91,14 +91,15 @@ export const ResponseTabs = () => {
         if (time < 1000) return `${time} ms`;
 
         if (time < 60000) {
-            let s = time / 1000;
             let ms = time % 1000;
-            return `${s} s ${ms} ms`;
+            let s = (time - ms) / 1000;
+            return `${s}s ${ms}ms`;
         }
 
-        let m = time / 60000;
-        let s = (time - (m * 60000)) / 1000;
-        return `${m} m ${s} s`;
+        let remainder = time % 60000;
+        let m = (time - remainder) / 60000;
+        let s = ((time - (m * 60000)) / 1000).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+        return `${m}m ${s}s`;
     }
 
     return (
