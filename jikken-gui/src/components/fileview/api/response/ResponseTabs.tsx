@@ -40,14 +40,14 @@ export const ResponseTabs = () => {
         }
 
         if (size < 1e6) {
-            return `${size / 1000} KB`;
+            return `${(size / 1000).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} KB`;
         }
 
         if (size < 1e9) {
-            return `${size / 1e6} MB`;
+            return `${(size / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} MB`;
         }
 
-        return `${size / 1e9} GB`;
+        return `${(size / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} GB`;
     };
 
     const formatStatus = () => {
