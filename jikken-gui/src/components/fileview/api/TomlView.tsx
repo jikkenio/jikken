@@ -2,7 +2,7 @@ import { createSignal } from 'solid-js';
 import { $editorState, type ConfigFile, type ConfigSettings, updateConfigFile } from '../../../stores/editorState';
 import MonacoEditorSolid from './MonacoEditorSolid';
 import { $layoutState } from '../../../stores/layoutState';
-import { EntityType, ViewMode } from '../../../stores/enum';
+import { EntityType } from '../../../stores/enum';
 import { useStore } from '@nanostores/solid';
 import toml from '@iarna/toml';
 

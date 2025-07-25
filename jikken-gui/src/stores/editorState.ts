@@ -481,30 +481,34 @@ export const makeRequest = async () => {
   let state = $editorState.get();
   let file = state.files[state.currentFile];
   let testFile = state.testFiles[file.index];
-  testFile.response = undefined;
-  testFile.executing = true;
-  $editorState.set({ ...state });
 
   console.log("making http request: ", testFile.testFile.request);
   if (!testFile.testFile.request?.url) {
     console.log("no request url");
     return;
   }
-  let response: HttpResponse;
 
+  testFile.response = undefined;
+  testFile.executing = true;
+  $editorState.set({ ...state });
   clearNotification();
+  let response: HttpResponse;
 
   try {
     response = await invoke("make_request", { testFile: testFile.testFile });
   } catch (ex) {
     triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
     console.log("Failed to make network request: ", ex);
+    testFile.executing = false;
+    $editorState.set({ ...state });
     return;
   }
 
   if (!response) {
     triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
     console.log("Failed to make network request, null response");
+    testFile.executing = false;
+    $editorState.set({ ...state });
     return;
   }
 
