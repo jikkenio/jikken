@@ -44,14 +44,14 @@ export const FileTabs = () => {
                 <For each={editorState().files}>
                     {(file, index) => (
                         <div
-                            class="group flex flex-[2_1_auto] justify-between min-w-8 max-w-72 w-8 overflow-hidden pl-2 pr-2 text-center text-sm font-medium focus:z-10"
+                            class="group flex flex-[2_1_auto] justify-between min-w-8 max-w-72 w-8 pl-2 pr-2 text-center text-sm font-medium focus:z-10"
                             classList={{
                                 "border-b border-neutral-700 cursor-pointer bg-neutral-900 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300": index() !== editorState().currentFile,
                                 "cursor-default bg-neutral-850 text-neutral-300": index() === editorState().currentFile
                             }}
                             onClick={[trySelectFile, index()]}
                         >
-                            <span class="flex flex-row">
+                            <span class="flex flex-row truncate">
                                 <span class="my-auto mr-2">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         width="16"
@@ -70,7 +70,7 @@ export const FileTabs = () => {
                                 </span>
                                 <span class="my-auto select-none truncate">{getTabName(file)}</span>
                             </span>
-                            <span class="p-1 my-auto text-neutral-400 invisible cursor-pointer group-hover:visible hover:text-white"
+                            <span class="p-1 my-auto cursor-pointer invisible group-hover:visible text-neutral-400 hover:text-white"
                                 onClick={(e) => tryCloseFile(e, index())}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-x" viewBox="0 0 16 16">
                                     <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708" />
