@@ -260,7 +260,7 @@ pub struct SimpleValueVariable {
 pub struct HttpRequestResponse {
     pub status: u16,
     pub time: u128,
-    pub size: u64,
+    pub size: usize,
     pub headers: Vec<Header>,
     pub body: Option<String>,
 }
@@ -596,6 +596,7 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
     match client_request.send().await {
         Ok(response) => {
             let end = timer.elapsed().unwrap();
+            let status = response.status().as_u16();
             let headers = response
                 .headers()
                 .iter()
@@ -604,13 +605,14 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
                     value: h.1.to_str().unwrap().to_string(),
                 })
                 .collect();
+            let body = response.text().await.unwrap();
 
             Some(HttpRequestResponse {
-                status: response.status().as_u16(),
+                status,
                 time: end.as_millis(),
-                size: response.content_length().unwrap_or(0u64),
+                size: body.len(),
                 headers,
-                body: Some(response.text().await.unwrap()),
+                body: Some(body),
             })
         }
         Err(_) => None,
