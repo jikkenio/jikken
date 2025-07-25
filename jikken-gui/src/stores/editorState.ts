@@ -168,8 +168,8 @@ export type File = {
 
 export type HttpResponse = {
   status: number;
-  time?: number;
-  size?: number;
+  time: number;
+  size: number;
   headers: HttpHeader[];
   body?: string;
 };
@@ -515,11 +515,6 @@ export const makeRequest = async () => {
   }
 
   console.log("http response: ", response);
-  let size = response.headers.find(
-    (h) => h.header.toLowerCase() === "content-length"
-  )?.value;
-  response.size = size ? +size : undefined;
-
   testFile.response = response;
   testFile.executing = false;
   $editorState.set({ ...state });
