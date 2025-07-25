@@ -451,6 +451,7 @@ export const closeFile = (index: number) => {
   let fileIndex = state.files[index].index;
   state.files.splice(index, 1);
   state.files.filter((f) => f.type === fileType && f.index > fileIndex).forEach((f) => f.index--);
+  state.files = JSON.parse(JSON.stringify(state.files));
 
   if (fileType === EntityType.Test) {
     state.testFiles.splice(fileIndex, 1);
