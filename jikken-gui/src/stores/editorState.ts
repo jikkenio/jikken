@@ -450,6 +450,7 @@ export const closeFile = (index: number) => {
   let fileType = state.files[index].type;
   let fileIndex = state.files[index].index;
   state.files.splice(index, 1);
+  state.files.filter((f) => f.type === fileType && f.index > fileIndex).forEach((f) => f.index--);
 
   if (fileType === EntityType.Test) {
     state.testFiles.splice(fileIndex, 1);
