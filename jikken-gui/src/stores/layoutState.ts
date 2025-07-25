@@ -91,8 +91,6 @@ export const setViewMode = (mode: ViewMode) => {
 }
 
 export const setRequestTabActive = (index: number, allowToggle: boolean = true) => {
-    console.log("setRequestTabActive: ", index);
-
     if (allowToggle && !$layoutState.value?.requestTabPanelVisible) {
         $layoutState.setKey("requestTabPanelVisible", true);
         $layoutState.setKey("requestTabIndex", index);
@@ -109,12 +107,10 @@ export const setRequestTabActive = (index: number, allowToggle: boolean = true) 
 };
 
 export const setRequestTabVisible = (visible: boolean) => {
-    $layoutState.setKey("requestTabPanelVisible", visible);
     return true;
 };
 
 export const setRequestTabCount = (id: string, count: number) => {
-    console.log(`setRequestTabCount ${id} ${count}`);
     if (!requestTabIndexByName.has(id)) return;
 
     let tabIndex: number = requestTabIndexByName.get(id)!;
@@ -126,8 +122,6 @@ export const setRequestTabCount = (id: string, count: number) => {
 };
 
 export const setResponseTabActive = (index: number, allowToggle: boolean = true) => {
-    console.log("setResponseTabActive: ", index);
-
     if (allowToggle && !$layoutState.value?.responseTabPanelVisible) {
         $layoutState.setKey("responseTabPanelVisible", true);
         $layoutState.setKey("responseTabIndex", index);
@@ -144,12 +138,10 @@ export const setResponseTabActive = (index: number, allowToggle: boolean = true)
 };
 
 export const setResponseTabVisible = (visible: boolean) => {
-    $layoutState.setKey("responseTabPanelVisible", visible);
     return true;
 };
 
 export const setResponseTabCount = (id: string, count: number) => {
-    console.log(`setResponseTabCount ${id} ${count}`);
     if (!responseTabIndexByName.has(id)) return;
 
     let tabIndex: number = responseTabIndexByName.get(id)!;
