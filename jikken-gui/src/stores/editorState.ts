@@ -520,6 +520,14 @@ export const makeRequest = async () => {
   $editorState.set({ ...state });
   setResponseTabCount("tab-body", response.body ? 1 : 0);
   setResponseTabCount("tab-headers", response.headers.length);
+  
+  // Initialize Split.js now that response is available and panels should be visible
+  setTimeout(() => {
+    if (typeof window !== 'undefined' && (window as any).initializeRequestResponseSplit) {
+      console.log("Calling Split.js initialization after response received");
+      (window as any).initializeRequestResponseSplit();
+    }
+  }, 100);
 };
 
 // Pretty printing functions for save functionality

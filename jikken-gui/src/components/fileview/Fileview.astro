@@ -18,20 +18,20 @@ let currentFile = editorState?.files[editorState.currentFile];
   <FileTabs client:only />
   <div
     id="test-view"
-    class="flex flex-auto"
+    class="flex flex-auto min-w-0"
     class:list={[{ hidden: currentFile?.type !== EntityType.Test }]}
   >
     <div
       id="test-api-view"
-      class="flex flex-col flex-auto"
+      class="flex flex-col flex-auto min-w-0"
       class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
     >
       <RequestBar client:only />
-      <div class="flex flex-col flex-auto">
-        <div class="flex-none">
+      <div id="api-view" class="flex flex-col flex-auto min-w-0">
+        <div id="request-panel" class="min-w-0">
           <RequestTabs client:only />
         </div>
-        <div class="flex-auto">
+        <div id="response-panel" class="min-w-0">
           <ResponseTabs client:only />
         </div>
       </div>
@@ -69,23 +69,90 @@ let currentFile = editorState?.files[editorState.currentFile];
 <script>
   import { listenKeys } from "nanostores";
   import { $editorState, saveFile } from "../../stores/editorState";
-  import { $layoutState, setRequestTabVisible } from "../../stores/layoutState";
+  import { $layoutState } from "../../stores/layoutState";
   import { EntityType, ViewMode } from "../../stores/enum";
+  import Split from "split.js";
+
+  let requestResponseSplit: any = null;
+
+  // Make Split.js initialization globally available
+  const initializeRequestResponseSplit = () => {
+    const requestPanel = document.getElementById("request-panel");
+    const responsePanel = document.getElementById("response-panel");
+    
+    console.log("Split.js Debug:", {
+      requestPanel: !!requestPanel,
+      responsePanel: !!responsePanel,
+      requestResponseSplit: !!requestResponseSplit,
+      requestPanelSize: requestPanel ? `${requestPanel.offsetWidth}x${requestPanel.offsetHeight}` : 'N/A',
+      responsePanelSize: responsePanel ? `${responsePanel.offsetWidth}x${responsePanel.offsetHeight}` : 'N/A'
+    });
+    
+    if (requestPanel && responsePanel && !requestResponseSplit) {
+      console.log("Initializing Split.js for request/response panels");
+      
+      try {
+        requestResponseSplit = Split(['#request-panel', '#response-panel'], {
+          direction: 'vertical',
+          sizes: [40, 60], // Start with 40% request, 60% response
+          minSize: [200, 250], // Minimum sizes in pixels
+          gutterSize: 2, // Very small gutter for desktop use
+          cursor: 'row-resize',
+          onDrag: () => {
+            console.log("Split.js: Dragging vertical splitter");
+            // Trigger Monaco resize when Split.js resizes panels
+            window.dispatchEvent(new Event('resize'));
+          },
+          onDragEnd: () => {
+            console.log("Split.js: Drag ended");
+            // Final resize trigger
+            setTimeout(() => {
+              window.dispatchEvent(new Event('resize'));
+            }, 100);
+          }
+        });
+        
+        console.log("Request/Response Split.js initialized successfully:", requestResponseSplit);
+        
+        // Debug gutter element after Split.js creates it
+        setTimeout(() => {
+          const gutters = document.querySelectorAll('.gutter');
+          console.log("Found gutters:", gutters);
+          gutters.forEach((gutter, index) => {
+            const rect = gutter.getBoundingClientRect();
+            const styles = window.getComputedStyle(gutter);
+            console.log(`Gutter ${index}:`, {
+              element: gutter,
+              rect: rect,
+              display: styles.display,
+              position: styles.position,
+              zIndex: styles.zIndex,
+              backgroundColor: styles.backgroundColor,
+              width: styles.width,
+              height: styles.height,
+              cursor: styles.cursor,
+              visibility: styles.visibility,
+              pointerEvents: styles.pointerEvents
+            });
+          });
+        }, 200);
+      } catch (error) {
+        console.error("Failed to initialize Split.js:", error);
+      }
+    } else {
+      console.log("Split.js: Not initializing because:", {
+        missingRequestPanel: !requestPanel,
+        missingResponsePanel: !responsePanel,
+        alreadyInitialized: !!requestResponseSplit
+      });
+    }
+  };
+
+  // Make the function globally available
+  window.initializeRequestResponseSplit = initializeRequestResponseSplit;
 
   const initializePage = () => {
-    const elem = document.getElementById("tab-content");
-    const resizer = document.getElementById("file-resizer");
-    const main = document.getElementById("main-panel");
-
-    // Set initial height for request panel
-    const requestPanel = document.getElementById("request-panel");
-    if (requestPanel) {
-      requestPanel.style.height = "300px"; // Default height
-    }
-
-    let y = 0;
-    let h = 0;
-
+    // Add keyboard shortcut for save
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
@@ -93,146 +160,24 @@ let currentFile = editorState?.files[editorState.currentFile];
       }
     });
 
-    const mouseDownHandler = function (e: MouseEvent) {
-      if (!elem) return;
+    // Try to initialize with multiple attempts
+    setTimeout(initializeRequestResponseSplit, 100);
+    setTimeout(initializeRequestResponseSplit, 500);
+    setTimeout(initializeRequestResponseSplit, 1000);
+    setTimeout(initializeRequestResponseSplit, 2000);
 
-      y = e.clientY;
-      const styles = window.getComputedStyle(elem);
-      h = parseInt(styles.height, 10);
-
-      document.addEventListener("mousemove", mouseMoveHandler);
-      document.addEventListener("mouseup", mouseUpHandler);
-
-      resizer?.classList.add("border-indigo-400", "border-t-4");
-      main?.classList.add("cursor-row-resize");
-    };
-
-    const mouseMoveHandler = function (e: MouseEvent) {
-      if (!elem) return;
-
-      let dy = e.clientY - y;
-      let computedHeight = h + dy;
-      elem.style.height = `${computedHeight}px`;
-
-      if ($layoutState.value?.requestTabPanelVisible && computedHeight < 100) {
-        setRequestTabVisible(false);
-      } else if (
-        !$layoutState.value?.requestTabPanelVisible &&
-        computedHeight >= 100
-      ) {
-        setRequestTabVisible(true);
-      }
-    };
-
-    const mouseUpHandler = function () {
-      resizer?.classList.remove("border-indigo-400", "border-t-4");
-      main?.classList.remove("cursor-row-resize");
-      document.removeEventListener("mousemove", mouseMoveHandler);
-      document.removeEventListener("mouseup", mouseUpHandler);
-    };
-
-    resizer?.addEventListener("mousedown", mouseDownHandler);
-
-    // Response panel resizer - resizes the request panel above it
-    let responseY = 0;
-    let requestH = 0;
-    let initialAvailableHeight = 0;
-    let responseResizerAttached = false;
-
-    const responseMouseDownHandler = function (e: MouseEvent) {
-      const requestPanel = document.getElementById("request-panel");
-      if (!requestPanel) return;
-
-      responseY = e.clientY;
-      const styles = window.getComputedStyle(requestPanel);
-      requestH = parseInt(styles.height, 10);
-
-      // Capture the available height at the start of the drag
-      const apiView = document.getElementById("api-view");
-      if (apiView) {
-        const requestBarHeight = 80; // Approximate RequestBar height
-        initialAvailableHeight =
-          apiView.getBoundingClientRect().height - requestBarHeight;
-      }
-
-      document.addEventListener("mousemove", responseMouseMoveHandler);
-      document.addEventListener("mouseup", responseMouseUpHandler);
-
-      const responseResizer = document.getElementById("response-resizer");
-      responseResizer?.classList.add("border-indigo-400", "border-t-4");
-      main?.classList.add("cursor-row-resize");
-    };
-
-    const responseMouseMoveHandler = function (e: MouseEvent) {
-      const requestPanel = document.getElementById("request-panel");
-      if (!requestPanel) return;
-
-      let dy = e.clientY - responseY; // Positive dy means dragging down (expanding request panel)
-      let computedHeight = requestH + dy;
-
-      // Use the captured available height from mousedown
-      const minRequestHeight = 200; // Minimum height for request panel
-      const minResponseHeight = 250; // Minimum height for response panel
-      const maxRequestHeight = initialAvailableHeight - minResponseHeight;
-
-      console.log(
-        "Initial available height:",
-        initialAvailableHeight,
-        "Max request height:",
-        maxRequestHeight,
-        "Computed height:",
-        computedHeight,
-      );
-
-      // Enforce minimum and maximum constraints
-      if (computedHeight < minRequestHeight) {
-        computedHeight = minRequestHeight;
-      } else if (
-        computedHeight > maxRequestHeight &&
-        maxRequestHeight > minRequestHeight
-      ) {
-        computedHeight = maxRequestHeight;
-        console.log("Clamped to max height:", computedHeight);
-      }
-
-      requestPanel.style.height = `${computedHeight}px`;
-    };
-
-    const responseMouseUpHandler = function () {
-      const responseResizer = document.getElementById("response-resizer");
-      responseResizer?.classList.remove("border-indigo-400", "border-t-4");
-      main?.classList.remove("cursor-row-resize");
-      document.removeEventListener("mousemove", responseMouseMoveHandler);
-      document.removeEventListener("mouseup", responseMouseUpHandler);
-    };
-
-    // Check periodically for the response resizer and attach event listener when it appears
-    const attachResponseResizer = () => {
-      if (!responseResizerAttached) {
-        const responseResizer = document.getElementById("response-resizer");
-        if (responseResizer) {
-          responseResizer.addEventListener(
-            "mousedown",
-            responseMouseDownHandler,
-          );
-          responseResizerAttached = true;
-        }
-      }
-    };
-
-    // Use MutationObserver to detect when response panel appears
+    // Use MutationObserver to catch when panels are added to DOM
     const observer = new MutationObserver(() => {
-      attachResponseResizer();
+      if (!requestResponseSplit) {
+        console.log("MutationObserver: Trying to initialize Split.js");
+        initializeRequestResponseSplit();
+      }
     });
 
-    // Start observing the document body for changes
     observer.observe(document.body, {
       childList: true,
       subtree: true,
     });
-
-    // Also try to attach immediately in case it's already there
-    attachResponseResizer();
   };
 
   listenKeys($layoutState, ["viewMode"], (layout) => {
@@ -290,4 +235,6 @@ let currentFile = editorState?.files[editorState.currentFile];
     --jse-font-size: 10px;
     --jse-font-size-mono: 12px;
   }
+
+  /* Split.js CSS moved to global Layout.astro */
 </style>

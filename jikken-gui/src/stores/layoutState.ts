@@ -106,7 +106,7 @@ export const setRequestTabActive = (index: number, allowToggle: boolean = true) 
     return true;
 };
 
-export const setRequestTabVisible = (visible: boolean) => {
+export const setRequestTabVisible = (_visible: boolean) => {
     return true;
 };
 
@@ -137,7 +137,7 @@ export const setResponseTabActive = (index: number, allowToggle: boolean = true)
     return true;
 };
 
-export const setResponseTabVisible = (visible: boolean) => {
+export const setResponseTabVisible = (_visible: boolean) => {
     return true;
 };
 

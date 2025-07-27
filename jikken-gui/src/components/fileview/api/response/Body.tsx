@@ -50,7 +50,6 @@ export const Body = () => {
 
     const formatElement = (element: Element, depth: number): string => {
         const indent = '  '.repeat(depth);
-        const childIndent = '  '.repeat(depth + 1);
         
         let result = `${indent}<${element.tagName.toLowerCase()}`;
         
@@ -196,8 +195,8 @@ export const Body = () => {
     };
 
     return (
-        <div class="p-3 pt-0 flex flex-auto overflow-hidden">
-            <div class="group flex flex-col flex-auto overflow-hidden">
+        <div class="p-3 pt-0 flex flex-auto h-full overflow-hidden min-w-0">
+            <div class="group flex flex-col flex-auto h-full min-w-0">
                 <Show when={body().content}>
                     <div class="flex w-full justify-end pointer-events-none">
                         <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-neutral-800 invisible group-hover:visible">
@@ -226,7 +225,7 @@ export const Body = () => {
                             </span>
                         </div>
                     </div>
-                    <div class="flex flex-auto w-full overflow-hidden">
+                    <div class="w-full flex-auto h-full min-w-0">
                         <MonacoEditorSolid value={body().content} language={body().language || 'text'} readonly />
                     </div>
                 </Show>

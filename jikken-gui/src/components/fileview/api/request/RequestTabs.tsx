@@ -27,7 +27,7 @@ export const RequestTabs = () => {
     });
 
     return (
-        <div class="h-full flex flex-col">
+        <div class="h-full flex flex-col min-w-0">
             <div class="flex-none">
                 <div class="flex items-center justify-between border-b border-neutral-800 m-3 mt-1">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
@@ -90,7 +90,7 @@ export const RequestTabs = () => {
             </div>
             <div
                 id="tab-content"
-                class="select-none flex-1 overflow-y-auto"
+                class="select-none flex-1 overflow-y-auto min-w-0"
                 classList={{ hidden: !layoutState().requestTabPanelVisible }}
             >
                 <Show when={layoutState().requestTabIndex === 1}>

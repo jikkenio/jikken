@@ -61,16 +61,18 @@ monaco.editor.defineTheme("vs-dark-custom", theme);
 
 export default function MonacoEditorSolid(props: MonacoEditorProps) {
     const containerRef = document.createElement("div");
-    containerRef.classList.add("w-full", "h-full", "flex", "flex-auto");
+    containerRef.classList.add("w-full", "h-full");
     let editorInstance: monaco.editor.IStandaloneCodeEditor | undefined;
     const [localValue, setLocalValue] = createSignal(props.value);
 
     onMount(() => {
+        console.log('Monaco Editor: onMount started - using ResizeObserver for container changes');
+
         editorInstance = monaco.editor.create(containerRef, {
             model: monaco.editor.createModel(props.value || "", props.language),
             language: props.language,
             theme: "vs-dark-custom",
-            automaticLayout: true,
+            automaticLayout: false, // Disable automatic layout, we'll handle it manually
             formatOnType: true,
             formatOnPaste: true,
             readOnly: props.readonly || false,
@@ -87,21 +89,81 @@ export default function MonacoEditorSolid(props: MonacoEditorProps) {
             scrollBeyondLastLine: false,
         });
 
+        console.log('Monaco Editor: editor instance created with automaticLayout=false');
+
         editorInstance.onDidChangeModelContent((_) => {
             if (props.onChange) {
                 props.onChange(editorInstance?.getValue() || "");
             }
         });
+
+        // Use ResizeObserver to watch the container directly
+        const resizeObserver = new ResizeObserver(() => {
+            console.log('Monaco Editor: ResizeObserver detected container size change');
+            if (editorInstance) {
+                // Force Monaco to recalculate its layout
+                editorInstance.layout();
+            }
+        });
+
+        // Start observing the container
+        resizeObserver.observe(containerRef);
+
+        // Also listen for window resize as backup
+        const handleWindowResize = () => {
+            console.log('Monaco Editor: handling window resize event');
+            if (editorInstance) {
+                editorInstance.layout();
+            }
+        };
+
+        window.addEventListener('resize', handleWindowResize);
+
+        // Store both listeners for cleanup
+        (editorInstance as any)._resizeObserver = resizeObserver;
+        (editorInstance as any)._windowResizeListener = handleWindowResize;
+
+        // Initial layout call to ensure proper sizing
+        setTimeout(() => {
+            if (editorInstance) {
+                console.log('Monaco Editor: performing initial layout');
+                editorInstance.layout();
+            }
+        }, 100);
     });
 
     onCleanup(() => {
+        console.log('Monaco Editor: cleanup started');
         if (editorInstance) {
+            // Remove the ResizeObserver
+            const resizeObserver = (editorInstance as any)._resizeObserver;
+            if (resizeObserver) {
+                console.log('Monaco Editor: disconnecting ResizeObserver');
+                resizeObserver.disconnect();
+            }
+            
+            // Remove the window resize listener
+            const windowResizeListener = (editorInstance as any)._windowResizeListener;
+            if (windowResizeListener) {
+                console.log('Monaco Editor: removing window resize listener');
+                window.removeEventListener('resize', windowResizeListener);
+            }
+            
+            console.log('Monaco Editor: disposing editor instance');
             editorInstance.dispose();
         }
     });
 
     createEffect(() => {
+        console.log('Monaco Editor: createEffect triggered', { 
+            hasEditorInstance: !!editorInstance, 
+            propsValue: props.value, 
+            localValue: localValue(),
+            valueChanged: props.value !== localValue()
+        });
+        
         if (editorInstance && props.value !== localValue()) {
+            console.log('Monaco Editor: setting new value');
             editorInstance.setValue(props.value ?? "");
             setLocalValue(props.value);
         }

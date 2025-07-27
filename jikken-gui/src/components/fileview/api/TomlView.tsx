@@ -19,7 +19,7 @@ export const TomlView = () => {
             configToml.globals = Object.fromEntries(config.globals!.entries());
         }
 
-        return toml.stringify(configToml);
+        return toml.stringify(configToml as any);
     };
 
     const editorState = useStore($editorState);

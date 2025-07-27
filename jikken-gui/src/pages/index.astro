@@ -31,7 +31,7 @@ import { $layoutState } from "../stores/layoutState";
   </div>
   <div
     id="content-panel"
-    class="relative h-full ml-8 select-none overflow-y-scroll bg-neutral-850 border-t border-neutral-700"
+    class="relative h-full ml-8 select-none overflow-hidden bg-neutral-850 border-t border-neutral-700"
     class:list={[
       { "border-l": !($layoutState.value?.folderPanelVisible ?? false) },
     ]}

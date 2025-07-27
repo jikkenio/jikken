@@ -104,93 +104,86 @@ export const ResponseTabs = () => {
 
     return (
         <div
-            class="mb-4"
+            class="flex flex-auto flex-col h-full min-w-0"
             classList={{
                 hidden: !response()
             }}>
-            <div
-                id="file-resizer"
-                class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4"
+            <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between flex-shrink-0">
+                <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                    <For each={layout().responseTabs}>
+                        {(tab) => (
+                            <div
+                                class="group flex min-w-12 justify-center whitespace-nowrap border-b-2 py-2 text-sm cursor-pointer font-medium"
+                                classList={{
+                                    "border-indigo-500 text-neutral-300": tab.index === layout().responseTabIndex,
+                                    "border-transparent text-neutral-400 hover:text-neutral-200": tab.index !== layout().responseTabIndex
+                                }}
+                                onClick={() => setResponseTabActive(tab.index)}
+                            >
+                                {tab.label}
+
+                                <Show when={tab.showCount && tab.items > 0}>
+                                    <span
+                                        class="ml-1.5 my-auto rounded-[4px] px-[5px] py-px text-xs font-medium inline-block"
+                                        classList={{
+                                            "bg-indigo-500 text-white": tab.index === layout().responseTabIndex,
+                                            "bg-neutral-850 ring-1 ring-inset ring-neutral-600 text-neutral-300 group-hover:text-black group-hover:bg-neutral-300 group-hover:ring-0": tab.index !== layout().responseTabIndex,
+                                        }}
+                                    >
+                                        {tab.items}
+                                    </span>
+                                </Show>
+
+                                <Show when={!tab.showCount && tab.items > 0}>
+                                    <span
+                                        class="ml-0.5 my-auto inline-block"
+                                        classList={{
+                                            "text-indigo-500": tab.index === layout().responseTabIndex,
+                                            "text-neutral-300 group-hover:text-neutral-300": tab.index !== layout().responseTabIndex,
+                                        }}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
+                                            <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z" />
+                                        </svg>
+                                    </span>
+                                </Show>
+                            </div>
+                        )}
+                    </For>
+                </nav>
+
+                <Show when={response()}>
+                    <div class="flex space-x-2 items-center text-xs text-neutral-400 mr-2">
+                        <span classList={{
+                            "text-emerald-500/80": formatStatus()[1] === StatusType.SUCCESS,
+                            "text-rose-500/70": formatStatus()[1] === StatusType.FAIL,
+                            "text-amber-400/70": formatStatus()[1] === StatusType.WARN,
+                        }}>
+                            {formatStatus()[0]}
+                        </span>
+                        <span class="text-neutral-600">|</span>
+                        <span>{formatTime()}</span>
+                        <span class="text-neutral-600">|</span>
+                        <span>{formatSize()}</span>
+                    </div>
+                </Show>
+            </div>
+
+            <div id="tab-content"
+                class="select-none flex flex-auto h-full overflow-hidden min-w-0"
+                classList={{ hidden: !layout().responseTabPanelVisible }}
             >
+                <Show when={layout().responseTabIndex === 1}>
+                    <div id="tab-body-panel" class="flex flex-auto h-full min-w-0">
+                        <Body />
+                    </div>
+                </Show>
+                <Show when={layout().responseTabIndex === 2}>
+                    <div id="tab-headers-panel" class="w-full">
+                        <Headers />
+                    </div>
+                </Show>
             </div>
-            <div class="flex flex-auto flex-col overflow-hidden">
-                <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between">
-                    <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                        <For each={layout().responseTabs}>
-                            {(tab) => (
-                                <div
-                                    class="group flex min-w-12 justify-center whitespace-nowrap border-b-2 py-2 text-sm cursor-pointer font-medium"
-                                    classList={{
-                                        "border-indigo-500 text-neutral-300": tab.index === layout().responseTabIndex,
-                                        "border-transparent text-neutral-400 hover:text-neutral-200": tab.index !== layout().responseTabIndex
-                                    }}
-                                    onClick={() => setResponseTabActive(tab.index)}
-                                >
-                                    {tab.label}
-
-                                    <Show when={tab.showCount && tab.items > 0}>
-                                        <span
-                                            class="ml-1.5 my-auto rounded-[4px] px-[5px] py-px text-xs font-medium inline-block"
-                                            classList={{
-                                                "bg-indigo-500 text-white": tab.index === layout().responseTabIndex,
-                                                "bg-neutral-850 ring-1 ring-inset ring-neutral-600 text-neutral-300 group-hover:text-black group-hover:bg-neutral-300 group-hover:ring-0": tab.index !== layout().responseTabIndex,
-                                            }}
-                                        >
-                                            {tab.items}
-                                        </span>
-                                    </Show>
-
-                                    <Show when={!tab.showCount && tab.items > 0}>
-                                        <span
-                                            class="ml-0.5 my-auto inline-block"
-                                            classList={{
-                                                "text-indigo-500": tab.index === layout().responseTabIndex,
-                                                "text-neutral-300 group-hover:text-neutral-300": tab.index !== layout().responseTabIndex,
-                                            }}
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
-                                                <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z" />
-                                            </svg>
-                                        </span>
-                                    </Show>
-                                </div>
-                            )}
-                        </For>
-                    </nav>
-
-                    <Show when={response()}>
-                        <div class="flex space-x-2 items-center text-xs text-neutral-400 mr-2">
-                            <span classList={{
-                                "text-emerald-500/80": formatStatus()[1] === StatusType.SUCCESS,
-                                "text-rose-500/70": formatStatus()[1] === StatusType.FAIL,
-                                "text-amber-400/70": formatStatus()[1] === StatusType.WARN,
-                            }}>
-                                {formatStatus()[0]}
-                            </span>
-                            <span class="text-neutral-600">|</span>
-                            <span>{formatTime()}</span>
-                            <span class="text-neutral-600">|</span>
-                            <span>{formatSize()}</span>
-                        </div>
-                    </Show>
-                </div>
-
-                <div id="tab-content"
-                    class="select-none min-h-32 flex flex-auto overflow-hidden"
-                    classList={{ hidden: !layout().responseTabPanelVisible }}
-                >
-                    <Show when={layout().responseTabIndex === 1}>
-                        <div id="tab-body-panel" class="flex flex-auto overflow-hidden">
-                            <Body />
-                        </div>
-                    </Show>
-                    <Show when={layout().responseTabIndex === 2}>
-                        <div id="tab-headers-panel" class="w-full">
-                            <Headers />
-                        </div>
-                    </Show>
-                </div>
-            </div>
-        </div >
+        </div>
     );
-}
+};
