@@ -1,4 +1,5 @@
 mod new;
+mod observer;
 mod updater;
 
 use clap::{Parser, Subcommand};
@@ -530,13 +531,22 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
-    let report = executor::execute_tests(
+    // Create CLI observer for text output with policy name
+    let policy_name = if execution_mode == ExecutionMode::Dryrun {
+        "Dry Run".to_string()
+    } else {
+        "Running".to_string()
+    };
+    let cli_observer = Box::new(observer::CliObserver::with_policy_name(policy_name)) as Box<dyn jikken_core::observer::ExecutionObserver>;
+    
+    let report = executor::execute_tests_with_observer(
         config,
         tests_to_run,
         execution_mode == ExecutionMode::Dryrun,
         tests_to_ignore,
         junit_file,
         cli_args,
+        Some(cli_observer),
     )
     .await;
 

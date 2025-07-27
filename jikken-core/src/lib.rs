@@ -4,6 +4,10 @@ pub mod executor;
 pub mod json;
 pub mod logger;
 pub mod machine;
+pub mod observable_executor;
+pub mod observer;
+#[cfg(test)]
+mod observer_test;
 pub mod telemetry;
 pub mod test;
 pub mod validated;
