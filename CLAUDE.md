@@ -60,6 +60,23 @@ cargo run --bin jk -- run example_tests/
 cargo run -p jikken -- run -t tag_name example_tests/
 ```
 
+### GUI Development Commands
+```bash
+# Install frontend dependencies (uses Bun)
+cd jikken-gui && bun install
+
+# Run GUI in development mode
+cd jikken-gui && npm run tauri dev
+# or use the convenience script
+cd jikken-gui && ./run.sh
+
+# Build GUI application
+cd jikken-gui && npm run tauri build
+
+# Run frontend dev server only
+cd jikken-gui && npm run dev
+```
+
 ### Platform-Specific Builds
 ```bash
 # Linux musl (static linking)
@@ -94,10 +111,11 @@ cargo build -p jikken --target=aarch64-apple-darwin --release
    - CLI-specific features: command parsing, test file creation, self-update
    - Published to crates.io as `jikken`
 
-3. **jikken-gui** (`/jikken-gui/src-tauri/`)
-   - Tauri-based GUI application
+3. **jikken-gui** (`/jikken-gui/`)
+   - Tauri-based desktop application with Astro + SolidJS frontend
    - Independent implementation (doesn't use jikken-core)
    - Provides visual interface for test editing and execution
+   - Binary name: `jikken-gui` (CLI: `jk-gui`)
 
 ### Core Architecture (jikken-core)
 
@@ -127,6 +145,23 @@ cargo build -p jikken --target=aarch64-apple-darwin --release
 - `new`: Create new test file from template
 - `update`: Self-update the CLI
 
+### GUI Architecture (jikken-gui)
+
+**Technology Stack:**
+- Frontend: Astro + SolidJS + TypeScript
+- Styling: Tailwind CSS v4
+- Editor: Monaco Editor with YAML syntax highlighting
+- State Management: Nanostores
+- Backend: Tauri v2 (Rust)
+
+**Key Frontend Directories:**
+- `src/components/`: SolidJS components
+- `src/pages/`: Astro pages (main entry)
+- `src/stores/`: Nanostores for state management
+- `src-tauri/`: Tauri Rust backend
+
+**Development Server:** Port 1420
+
 ### Test Definition Format (.jkt)
 
 YAML files with these key fields:
@@ -152,6 +187,7 @@ Variables use `${variable}` syntax and support:
 5. **Variable syntax**: `${variable_name}` (case-sensitive)
 6. **Environment variables**: `JIKKEN_` prefix
 7. **Config files**: `.jikken` in TOML format
+8. **GUI package manager**: Bun (for frontend dependencies)
 
 ## Development Workflow
 
@@ -172,6 +208,12 @@ Variables use `${variable}` syntax and support:
 **CLI Application:**
 - `jikken-cli/src/main.rs`: CLI entry point and commands
 - `jikken-cli/src/new.rs`: Test file generation
+
+**GUI Application:**
+- `jikken-gui/src-tauri/src/main.rs`: Tauri backend entry point
+- `jikken-gui/src/pages/index.astro`: Frontend entry point
+- `jikken-gui/src/stores/`: State management with nanostores
+- `jikken-gui/tauri.conf.json`: Tauri configuration
 
 **Examples:**
 - `example_tests/`: Various `.jkt` files demonstrating features
