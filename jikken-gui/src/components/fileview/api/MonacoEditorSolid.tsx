@@ -2,9 +2,12 @@ import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import 'monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution';
 import "monaco-editor/esm/vs/language/json/monaco.contribution";
+import 'monaco-editor/esm/vs/basic-languages/html/html.contribution';
+import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
 import { configureMonacoYaml } from 'monaco-yaml';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import YamlWorker from './yaml.worker.js?worker';
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 
 interface MonacoEditorProps {
     value?: string,
@@ -34,6 +37,9 @@ self.MonacoEnvironment = {
                 return getWorkerModule('/monaco-editor/esm/vs/language/json/json.worker?worker', label);
             case 'yaml':
                 return new YamlWorker();
+            case 'html':
+            case 'xml':
+                return new HtmlWorker();
             default:
                 return new EditorWorker();
         }
@@ -55,7 +61,7 @@ monaco.editor.defineTheme("vs-dark-custom", theme);
 
 export default function MonacoEditorSolid(props: MonacoEditorProps) {
     const containerRef = document.createElement("div");
-    containerRef.classList.add("w-full", "min-h-36", "flex", "flex-auto");
+    containerRef.classList.add("w-full", "h-full", "flex", "flex-auto");
     let editorInstance: monaco.editor.IStandaloneCodeEditor | undefined;
     const [localValue, setLocalValue] = createSignal(props.value);
 

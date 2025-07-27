@@ -522,19 +522,111 @@ export const makeRequest = async () => {
   setResponseTabCount("tab-headers", response.headers.length);
 };
 
+// Pretty printing functions for save functionality
+const prettyPrintHtml = (html: string): string => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const errorNode = doc.querySelector('parsererror');
+    if (errorNode) {
+      return html;
+    }
+
+    return formatElement(doc.documentElement, 0);
+  } catch {
+    return html;
+  }
+};
+
+const prettyPrintXml = (xml: string): string => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'application/xml');
+    
+    const errorNode = doc.querySelector('parsererror');
+    if (errorNode) {
+      return xml;
+    }
+
+    return formatElement(doc.documentElement, 0);
+  } catch {
+    return xml;
+  }
+};
+
+const formatElement = (element: Element, depth: number): string => {
+  const indent = '  '.repeat(depth);
+  
+  let result = `${indent}<${element.tagName.toLowerCase()}`;
+  
+  // Add attributes
+  for (let i = 0; i < element.attributes.length; i++) {
+    const attr = element.attributes[i];
+    result += ` ${attr.name}="${attr.value}"`;
+  }
+  
+  if (element.children.length === 0 && !element.textContent?.trim()) {
+    result += ' />';
+    return result;
+  }
+  
+  result += '>';
+  
+  const textContent = element.textContent?.trim();
+  const hasElementChildren = element.children.length > 0;
+  
+  if (hasElementChildren) {
+    result += '\n';
+    for (let i = 0; i < element.children.length; i++) {
+      result += formatElement(element.children[i], depth + 1);
+      if (i < element.children.length - 1) {
+        result += '\n';
+      }
+    }
+    result += `\n${indent}`;
+  } else if (textContent) {
+    result += textContent;
+  }
+  
+  result += `</${element.tagName.toLowerCase()}>`;
+  return result;
+};
+
 export const saveResponseBody = async () => {
   let state = $editorState.get();
   console.log("saving response body from file at index ", state.currentFile);
   let index = state.files[state.currentFile].index;
-  let body = state.testFiles[index].response?.body;
-  if (!body) {
+  let response = state.testFiles[index].response;
+  if (!response?.body) {
     console.log("no response body found");
     return;
   }
 
-  let prettifiedBody = JSON.stringify(JSON.parse(body), undefined, 2);
+  // Check content type to determine formatting
+  let contentType: string | undefined;
+  if (response.headers) {
+    const contentTypeHeader = response.headers.find(h => h.header.toLowerCase() === 'content-type');
+    contentType = contentTypeHeader?.value?.toLowerCase();
+  }
+
+  let bodyToSave = response.body;
+  
+  // Format based on content type
+  if (contentType?.includes('json') || (!contentType && response.body.trim().startsWith('{'))) {
+    try {
+      bodyToSave = JSON.stringify(JSON.parse(response.body), undefined, 2);
+    } catch {
+      console.log("failed to parse as JSON, saving raw body");
+    }
+  } else if (contentType?.includes('html')) {
+    bodyToSave = prettyPrintHtml(response.body);
+  } else if (contentType?.includes('xml')) {
+    bodyToSave = prettyPrintXml(response.body);
+  }
+
   let savedFile: File | undefined;
-  savedFile = await invoke("save_response_body", { body: prettifiedBody });
+  savedFile = await invoke("save_response_body", { body: bodyToSave });
   if (!savedFile) {
     console.log("failed to save response body");
     return;

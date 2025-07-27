@@ -113,7 +113,7 @@ export const ResponseTabs = () => {
                 class="full-w h-2.5 mt-2 select-none cursor-row-resize border-t border-neutral-600 hover:border-indigo-400 hover:border-t-4"
             >
             </div>
-            <div class="flex flex-auto flex-col">
+            <div class="flex flex-auto flex-col overflow-hidden">
                 <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                         <For each={layout().responseTabs}>
@@ -176,11 +176,11 @@ export const ResponseTabs = () => {
                 </div>
 
                 <div id="tab-content"
-                    class="select-none min-h-32 size-full overflow-y-scroll flex flex-auto"
+                    class="select-none min-h-32 flex flex-auto overflow-hidden"
                     classList={{ hidden: !layout().responseTabPanelVisible }}
                 >
                     <Show when={layout().responseTabIndex === 1}>
-                        <div id="tab-body-panel" class="flex flex-auto">
+                        <div id="tab-body-panel" class="flex flex-auto overflow-hidden">
                             <Body />
                         </div>
                     </Show>

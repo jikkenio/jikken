@@ -9,29 +9,172 @@ export const Body = () => {
     enum BodyType {
         None,
         Json,
+        Html,
+        Xml,
+        Text,
+    };
+
+    const prettyPrintHtml = (html: string): string => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Check for parsing errors
+            const errorNode = doc.querySelector('parsererror');
+            if (errorNode) {
+                return html; // Return original if parsing failed
+            }
+
+            return formatElement(doc.documentElement, 0);
+        } catch {
+            return html; // Return original if any error occurs
+        }
+    };
+
+    const prettyPrintXml = (xml: string): string => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xml, 'application/xml');
+            
+            // Check for parsing errors
+            const errorNode = doc.querySelector('parsererror');
+            if (errorNode) {
+                return xml; // Return original if parsing failed
+            }
+
+            return formatElement(doc.documentElement, 0);
+        } catch {
+            return xml; // Return original if any error occurs
+        }
+    };
+
+    const formatElement = (element: Element, depth: number): string => {
+        const indent = '  '.repeat(depth);
+        const childIndent = '  '.repeat(depth + 1);
+        
+        let result = `${indent}<${element.tagName.toLowerCase()}`;
+        
+        // Add attributes
+        for (let i = 0; i < element.attributes.length; i++) {
+            const attr = element.attributes[i];
+            result += ` ${attr.name}="${attr.value}"`;
+        }
+        
+        if (element.children.length === 0 && !element.textContent?.trim()) {
+            // Self-closing tag
+            result += ' />';
+            return result;
+        }
+        
+        result += '>';
+        
+        // Handle text content
+        const textContent = element.textContent?.trim();
+        const hasElementChildren = element.children.length > 0;
+        
+        if (hasElementChildren) {
+            result += '\n';
+            // Add child elements
+            for (let i = 0; i < element.children.length; i++) {
+                result += formatElement(element.children[i], depth + 1);
+                if (i < element.children.length - 1) {
+                    result += '\n';
+                }
+            }
+            result += `\n${indent}`;
+        } else if (textContent) {
+            // Pure text content
+            result += textContent;
+        }
+        
+        result += `</${element.tagName.toLowerCase()}>`;
+        return result;
     };
 
     type Body = {
         type: BodyType,
         content?: string,
+        language?: string,
     };
 
-    const pretty = (body: string | undefined) => {
+    const pretty = (body: string | undefined, bodyType: BodyType) => {
         if (!body) return undefined;
-        return JSON.stringify(JSON.parse(body), null, 2);
+        
+        switch (bodyType) {
+            case BodyType.Json:
+                try {
+                    return JSON.stringify(JSON.parse(body), null, 2);
+                } catch {
+                    // If JSON parsing fails, return as-is
+                    return body;
+                }
+            case BodyType.Html:
+                return prettyPrintHtml(body);
+            case BodyType.Xml:
+                return prettyPrintXml(body);
+            default:
+                // For Text and other types, return as-is
+                return body;
+        }
+    }
+    
+    const getContentType = (headers: any[] | undefined): string | undefined => {
+        if (!headers) return undefined;
+        const contentTypeHeader = headers.find(h => h.header.toLowerCase() === 'content-type');
+        return contentTypeHeader?.value?.toLowerCase();
+    }
+    
+    const detectBodyType = (contentType: string | undefined, body: string | undefined): { type: BodyType, language: string } => {
+        if (!body) return { type: BodyType.None, language: 'text' };
+        
+        if (!contentType) {
+            // Try to detect based on content
+            const trimmed = body.trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                return { type: BodyType.Json, language: 'json' };
+            } else if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+                return { type: BodyType.Html, language: 'html' };
+            } else if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) {
+                return { type: BodyType.Xml, language: 'xml' };
+            }
+            return { type: BodyType.Text, language: 'text' };
+        }
+        
+        if (contentType.includes('json')) {
+            return { type: BodyType.Json, language: 'json' };
+        } else if (contentType.includes('html')) {
+            return { type: BodyType.Html, language: 'html' };
+        } else if (contentType.includes('xml')) {
+            return { type: BodyType.Xml, language: 'xml' };
+        } else {
+            return { type: BodyType.Text, language: 'text' };
+        }
     }
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
     let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
     let currentResponse = currentTestFile?.response;
+    let contentType = getContentType(currentResponse?.headers);
+    let bodyInfo = detectBodyType(contentType, currentResponse?.body);
 
-    const [body, setBody] = createSignal({ type: currentResponse ? BodyType.Json : BodyType.None, content: pretty(currentResponse?.body) } as Body)
+    const [body, setBody] = createSignal({ 
+        type: bodyInfo.type, 
+        content: pretty(currentResponse?.body, bodyInfo.type),
+        language: bodyInfo.language 
+    } as Body)
 
     $editorState.subscribe((state) => {
         currentFile = state.files[state.currentFile];
         currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
-        setBody({ type: currentTestFile?.response ? BodyType.Json : BodyType.None, content: pretty(currentTestFile?.response?.body) } as Body);
+        const response = currentTestFile?.response;
+        const contentType = getContentType(response?.headers);
+        const bodyInfo = detectBodyType(contentType, response?.body);
+        setBody({ 
+            type: bodyInfo.type, 
+            content: pretty(response?.body, bodyInfo.type),
+            language: bodyInfo.language 
+        } as Body);
     });
 
     const copy = async () => {
@@ -42,7 +185,7 @@ export const Body = () => {
         }
 
         let currentBody = body();
-        if (currentBody.type !== BodyType.Json) {
+        if (currentBody.type === BodyType.None) {
             console.log("no body found");
             return;
         }
@@ -53,8 +196,8 @@ export const Body = () => {
     };
 
     return (
-        <div class="p-3 pt-0 flex flex-auto">
-            <div class="group flex flex-col flex-auto">
+        <div class="p-3 pt-0 flex flex-auto overflow-hidden">
+            <div class="group flex flex-col flex-auto overflow-hidden">
                 <Show when={body().content}>
                     <div class="flex w-full justify-end pointer-events-none">
                         <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-neutral-800 invisible group-hover:visible">
@@ -83,8 +226,8 @@ export const Body = () => {
                             </span>
                         </div>
                     </div>
-                    <div class="flex flex-auto w-full">
-                        <MonacoEditorSolid value={body().content} language="json" readonly />
+                    <div class="flex flex-auto w-full overflow-hidden">
+                        <MonacoEditorSolid value={body().content} language={body().language || 'text'} readonly />
                     </div>
                 </Show>
                 <Show when={currentTestFile?.response?.status && !body().content}>
