@@ -14,24 +14,24 @@ let editorState = $editorState.value;
 let currentFile = editorState?.files[editorState.currentFile];
 ---
 
-<div class="size-full flex flex-col">
+<div class="size-full flex flex-col overflow-hidden">
   <FileTabs client:only />
   <div
     id="test-view"
-    class="flex flex-auto min-w-0"
+    class="flex flex-auto min-w-0 overflow-hidden"
     class:list={[{ hidden: currentFile?.type !== EntityType.Test }]}
   >
     <div
       id="test-api-view"
-      class="flex flex-col flex-auto min-w-0"
+      class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden"
       class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
     >
       <RequestBar client:only />
-      <div id="api-view" class="flex flex-col flex-auto min-w-0">
-        <div id="request-panel" class="min-w-0">
+      <div id="api-view" class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden">
+        <div id="request-panel" class="min-w-0 min-h-0 overflow-hidden">
           <RequestTabs client:only />
         </div>
-        <div id="response-panel" class="min-w-0">
+        <div id="response-panel" class="min-w-0 min-h-0 overflow-hidden">
           <ResponseTabs client:only />
         </div>
       </div>
@@ -95,7 +95,7 @@ let currentFile = editorState?.files[editorState.currentFile];
         requestResponseSplit = Split(['#request-panel', '#response-panel'], {
           direction: 'vertical',
           sizes: [40, 60], // Start with 40% request, 60% response
-          minSize: [200, 250], // Minimum sizes in pixels
+          minSize: [100, 100], // Much smaller minimum sizes to allow more flexibility
           gutterSize: 2, // Very small gutter for desktop use
           cursor: 'row-resize',
           onDrag: () => {

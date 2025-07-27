@@ -17,22 +17,26 @@ export const Headers = () => {
     });
 
     return (
-        <div class="p-3 pt-1">
-            <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
-            <ul class="w-full">
-                <For each={headers()}>
-                    {(header) => (
-                        <li class="grid grid-cols-5 group text-neutral-300">
-                            <div class="col-span-2 text-sm bg-transparent pl-2 p-1 border border-1 border-b-0 group-last:border-b border-neutral-700">
-                                {header.header}
-                            </div>
-                            <div class="col-span-3 text-sm bg-transparent pl-2 p-1 border border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700">
-                                {header.value}
-                            </div>
-                        </li>
-                    )}
-                </For>
-            </ul>
+        <div class="p-3 pt-0 flex flex-auto h-full overflow-hidden min-w-0 max-h-full min-h-0">
+            <div class="group flex flex-col flex-auto h-full min-w-0 max-h-full min-h-0">
+                <div class="text-neutral-400 mb-2 text-sm font-medium flex-shrink-0">Headers</div>
+                <div class="flex-auto overflow-y-auto min-h-0 max-h-full">
+                    <ul class="w-full">
+                        <For each={headers()}>
+                            {(header) => (
+                                <li class="grid grid-cols-5 group text-neutral-300">
+                                    <div class="col-span-2 text-sm bg-transparent pl-2 p-1 border border-1 border-b-0 group-last:border-b border-neutral-700 min-w-0 overflow-hidden text-ellipsis">
+                                        {header.header}
+                                    </div>
+                                    <div class="col-span-3 text-sm bg-transparent pl-2 p-1 border border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700 min-w-0 overflow-hidden text-ellipsis">
+                                        {header.value}
+                                    </div>
+                                </li>
+                            )}
+                        </For>
+                    </ul>
+                </div>
+            </div>
         </div>
     );
 }

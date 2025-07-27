@@ -104,7 +104,7 @@ export const ResponseTabs = () => {
 
     return (
         <div
-            class="flex flex-auto flex-col h-full min-w-0"
+            class="flex flex-auto flex-col h-full min-w-0 min-h-0"
             classList={{
                 hidden: !response()
             }}>
@@ -169,21 +169,20 @@ export const ResponseTabs = () => {
                 </Show>
             </div>
 
-            <div id="tab-content"
-                class="select-none flex flex-auto h-full overflow-hidden min-w-0"
-                classList={{ hidden: !layout().responseTabPanelVisible }}
-            >
-                <Show when={layout().responseTabIndex === 1}>
-                    <div id="tab-body-panel" class="flex flex-auto h-full min-w-0">
-                        <Body />
-                    </div>
-                </Show>
-                <Show when={layout().responseTabIndex === 2}>
-                    <div id="tab-headers-panel" class="w-full">
-                        <Headers />
-                    </div>
-                </Show>
-            </div>
+            <Show when={layout().responseTabPanelVisible}>
+                <div id="tab-content" class="select-none flex flex-auto h-full overflow-hidden min-w-0 max-h-full min-h-0">
+                    <Show when={layout().responseTabIndex === 1}>
+                        <div id="tab-body-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
+                            <Body />
+                        </div>
+                    </Show>
+                    <Show when={layout().responseTabIndex === 2}>
+                        <div id="tab-headers-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
+                            <Headers />
+                        </div>
+                    </Show>
+                </div>
+            </Show>
         </div>
     );
 };
