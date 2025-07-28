@@ -101,25 +101,29 @@ export const Body = () => {
     };
 
     return (
-        <div id="tab-body-panel" class="p-3 pt-0 size-full">
-            <div class="flex space-x-4 items-center text-neutral-500 mb-3 text-xs font-medium">
-                <div class="group flex items-center space-x-1">
-                    <input type="radio" name="body-type" id="none" value={BodyType.None} checked={body().type === BodyType.None}
-                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
-                        onClick={(_) => onTypeChange(BodyType.None)} />
-                    <label for="none" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">none</label>
-                </div>
-                <div class="group flex flex-row items-center space-x-1">
-                    <input type="radio" name="body-type" id="json" value={BodyType.Json} checked={body().type === BodyType.Json}
-                        class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
-                        onClick={(_) => onTypeChange(BodyType.Json)} />
-                    <label for="json" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">JSON</label>
+        <div class="flex flex-col h-full overflow-hidden min-w-0 w-full">
+            <div class="flex-shrink-0 px-3 pt-0">
+                <div class="flex space-x-4 items-center text-neutral-500 text-xs font-medium py-2">
+                    <div class="group flex items-center space-x-1">
+                        <input type="radio" name="body-type" id="none" value={BodyType.None} checked={body().type === BodyType.None}
+                            class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
+                            onClick={(_) => onTypeChange(BodyType.None)} />
+                        <label for="none" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">none</label>
+                    </div>
+                    <div class="group flex flex-row items-center space-x-1">
+                        <input type="radio" name="body-type" id="json" value={BodyType.Json} checked={body().type === BodyType.Json}
+                            class="peer text-indigo-600 bg-transparent size-[12px] cursor-pointer hover:border-indigo-600 checked:bg-indigo-700"
+                            onClick={(_) => onTypeChange(BodyType.Json)} />
+                        <label for="json" class="cursor-pointer group-hover:text-white peer-checked:text-neutral-300">JSON</label>
+                    </div>
                 </div>
             </div>
 
             <Show when={body().type === BodyType.Json}>
-                <div class="flex flex-auto w-full">
-                    <MonacoEditorSolid value={body().content ? JSON.stringify(body().content!, undefined, 2) : undefined} language="json" onChange={onBodyChange} />
+                <div class="flex-auto min-h-0 px-3 pb-3">
+                    <div class="w-full h-full">
+                        <MonacoEditorSolid value={body().content ? JSON.stringify(body().content!, undefined, 2) : undefined} language="json" onChange={onBodyChange} />
+                    </div>
                 </div>
             </Show>
         </div>

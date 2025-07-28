@@ -90,26 +90,26 @@ export const RequestTabs = () => {
             </div>
             <div
                 id="tab-content"
-                class="select-none flex-1 overflow-y-auto min-w-0"
+                class="select-none flex flex-auto h-full overflow-hidden min-w-0 max-h-full min-h-0"
                 classList={{ hidden: !layoutState().requestTabPanelVisible }}
             >
                 <Show when={layoutState().requestTabIndex === 1}>
-                    <div id="tab-params-panel">
+                    <div id="tab-params-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
                         <Parameters />
                     </div>
                 </Show>
                 <Show when={layoutState().requestTabIndex === 2}>
-                    <div id="tab-headers-panel">
+                    <div id="tab-headers-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
                         <Headers />
                     </div>
                 </Show>
                 <Show when={layoutState().requestTabIndex === 3}>
-                    <div id="tab-auth-panel">
+                    <div id="tab-auth-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
                         <Auth />
                     </div>
                 </Show>
                 <Show when={layoutState().requestTabIndex === 4}>
-                    <div id="tab-body-panel">
+                    <div id="tab-body-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
                         <Body />
                     </div>
                 </Show>
