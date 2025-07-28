@@ -1,3 +1,5 @@
+#![allow(clippy::arc_with_non_send_sync)]
+
 use crate::{
     config,
     executor::{ExecutionPolicy, StageResult, State},
@@ -68,9 +70,13 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
             iteration: iteration as usize,
             total_iterations: test.iterate as usize,
         });
-        
+
         // Execute the inner policy
-        match self.inner.execute(state, telemetry, test, iteration, config).await {
+        match self
+            .inner
+            .execute(state, telemetry, test, iteration, config)
+            .await
+        {
             Ok((passed, stage_results)) => {
                 // Emit stage complete events for each stage
                 for (stage_index, stage_result) in stage_results.iter().enumerate() {
@@ -104,7 +110,7 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
 
                 // Calculate total runtime
                 let total_runtime: u32 = stage_results.iter().map(|r| r.total_runtime).sum();
-                
+
                 // Emit test complete event
                 self.emit_event(ExecutionEvent::TestComplete {
                     test: test_arc,
@@ -113,7 +119,7 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
                     iteration_count: test.iterate,
                     runtime_ms: total_runtime,
                 });
-                
+
                 Ok((passed, stage_results))
             }
             Err(e) => {
@@ -122,7 +128,7 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
                     stage: None,
                     error: e.to_string(),
                 });
-                
+
                 // Also emit test complete with failed status
                 self.emit_event(ExecutionEvent::TestComplete {
                     test: test_arc,
@@ -131,7 +137,7 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
                     iteration_count: test.iterate,
                     runtime_ms: 0,
                 });
-                
+
                 Err(e)
             }
         }
@@ -147,14 +153,17 @@ impl<P: ExecutionPolicy> ExecutionPolicy for ObservableExecutionPolicy<P> {
             test: Arc::new(test.clone()),
             reason: "Test skipped due to unmet requirements".to_string(),
         });
-        
+
         self.inner.skip(telemetry, test, config).await
     }
 }
 
 /// Extension trait to make any ExecutionPolicy observable
 pub trait ExecutionPolicyExt: ExecutionPolicy + Sized {
-    fn with_observer(self, observer: Option<Box<dyn ExecutionObserver>>) -> ObservableExecutionPolicy<Self> {
+    fn with_observer(
+        self,
+        observer: Option<Box<dyn ExecutionObserver>>,
+    ) -> ObservableExecutionPolicy<Self> {
         ObservableExecutionPolicy::new(self, observer)
     }
 }

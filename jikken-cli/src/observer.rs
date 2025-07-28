@@ -32,7 +32,7 @@ impl CliObserver {
             policy_name: String::new(),
         }
     }
-    
+
     pub fn with_policy_name(policy_name: String) -> Self {
         Self {
             current_test_index: 0,
@@ -50,14 +50,21 @@ impl ExecutionObserver for CliObserver {
                 self.total_tests = total_tests;
                 self.current_test_index = 0;
             }
-            
-            ExecutionEvent::TestStart { test, iteration, total_iterations } => {
+
+            ExecutionEvent::TestStart {
+                test,
+                iteration,
+                total_iterations,
+            } => {
                 // Only increment test index on first iteration
                 if iteration == 0 {
                     self.current_test_index += 1;
                 }
-                self.test_name = test.name.clone().unwrap_or_else(|| format!("Test{}", self.current_test_index));
-                
+                self.test_name = test
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Test{}", self.current_test_index));
+
                 // Print test start message
                 if total_iterations > 1 {
                     print!(
@@ -79,29 +86,35 @@ impl ExecutionObserver for CliObserver {
                     );
                 }
             }
-            
-            ExecutionEvent::TestComplete { passed, runtime_ms, .. } => {
+
+            ExecutionEvent::TestComplete {
+                passed, runtime_ms, ..
+            } => {
                 // Format runtime
                 let runtime_label = format_runtime(runtime_ms);
-                
+
                 if passed {
                     println!(" Runtime({}) ... \x1b[32mPASSED\x1b[0m", runtime_label);
                 } else {
                     println!(" Runtime({}) ... \x1b[31mFAILED\x1b[0m", runtime_label);
                 }
             }
-            
+
             ExecutionEvent::TestSkipped { test, reason } => {
                 self.current_test_index += 1;
-                let test_name = test.name.clone().unwrap_or_else(|| format!("Test{}", self.current_test_index));
-                
+                let test_name = test
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Test{}", self.current_test_index));
+
                 // Determine skip reason and color
-                let (color, reason_text) = if reason.contains("disabled") || reason.contains("DISABLED") {
-                    ("\x1b[33m", "DISABLED")
-                } else {
-                    ("\x1b[33m", "SKIPPED")
-                };
-                
+                let (color, reason_text) =
+                    if reason.contains("disabled") || reason.contains("DISABLED") {
+                        ("\x1b[33m", "DISABLED")
+                    } else {
+                        ("\x1b[33m", "SKIPPED")
+                    };
+
                 println!(
                     "{} Test ({}/{}) `{}` ... {}{}\x1b[0m",
                     self.policy_name,
@@ -112,15 +125,15 @@ impl ExecutionObserver for CliObserver {
                     reason_text
                 );
             }
-            
+
             ExecutionEvent::Error { error, .. } => {
                 error!("{}", error);
             }
-            
+
             ExecutionEvent::ExecutionCancelled { reason, .. } => {
                 error!("Execution cancelled: {}", reason);
             }
-            
+
             _ => {
                 // For now, ignore other events like stage start/complete, variable extraction, etc.
                 // These could be added later for more detailed logging

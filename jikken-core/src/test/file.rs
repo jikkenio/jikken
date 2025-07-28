@@ -11,9 +11,9 @@ use chrono::{
 use log::{debug, error, trace};
 use nonempty_collections::{IntoNonEmptyIterator, NonEmptyIterator};
 use num::{Num, Signed};
-use rand::{distr::uniform::SampleUniform, rngs::ThreadRng, Rng};
+use rand::{Rng, distr::uniform::SampleUniform, rngs::ThreadRng};
 use regex::Regex;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Visitor};
 use serde_json::{Map, Value};
 use std::{
     cmp::{max, min},
@@ -73,7 +73,7 @@ impl VariableName {
 
 struct VariableNameVisitor;
 
-impl<'de> Visitor<'de> for VariableNameVisitor {
+impl Visitor<'_> for VariableNameVisitor {
     type Value = VariableName;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -2520,7 +2520,7 @@ pub struct BodyOrSchemaChecker<'a> {
     pub strict: bool,
 }
 
-impl<'a> BodyOrSchemaChecker<'a> {
+impl BodyOrSchemaChecker<'_> {
     fn apply_ignored_values(
         &self,
         actual: &serde_json::Value,
@@ -2583,8 +2583,7 @@ impl<'a> BodyOrSchemaChecker<'a> {
 
         trace!(
             "After modified, {:?} \n {:?}",
-            modified_actual,
-            modified_schema
+            modified_actual, modified_schema
         );
 
         Ok(modified_schema.check(&modified_actual, strict, formatter))
@@ -2621,7 +2620,7 @@ impl<'a> BodyOrSchemaChecker<'a> {
     }
 }
 
-impl<'a> Checker for BodyOrSchemaChecker<'a> {
+impl Checker for BodyOrSchemaChecker<'_> {
     type Item = serde_json::Value;
     fn check(
         &self,
@@ -3205,8 +3204,13 @@ pub fn generate_name(spec: &NameSpecification, max_attempts: u16) -> Option<Stri
 
 pub fn generate_email(spec: &EmailSpecification, max_attempts: u16) -> Option<String> {
     let mut rng = rand::rng();
-    generate_string(&spec.specification, max_attempts)
-        .map(|s| format!("{}@{}", s, EMAIL_DOMAINS.get(rng.random_range(0..3)).unwrap()))
+    generate_string(&spec.specification, max_attempts).map(|s| {
+        format!(
+            "{}@{}",
+            s,
+            EMAIL_DOMAINS.get(rng.random_range(0..3)).unwrap()
+        )
+    })
 }
 
 pub fn generate_list(spec: &SequenceSpecification, max_attempts: u16) -> Option<Value> {
@@ -3254,7 +3258,7 @@ pub fn generate_value_from_schema(
     max_attempts: u16,
 ) -> Option<serde_json::Value> {
     trace!("generate_value_from_schema({:?})", schema);
-    return match schema {
+    match schema {
         DatumSchema::Boolean { specification } => generate_bool(
             specification
                 .as_ref()
@@ -3316,8 +3320,7 @@ pub fn generate_value_from_schema(
                 .as_ref()
                 .unwrap_or(&SequenceSpecification::default()),
             max_attempts,
-        )
-        .map(serde_json::Value::from),
+        ),
         DatumSchema::Object { schema } => {
             let f = schema
                 .as_ref()
@@ -3339,7 +3342,7 @@ pub fn generate_value_from_schema(
                 .unwrap_or_default();
             Some(serde_json::Value::Object(f))
         }
-    };
+    }
 }
 
 #[cfg(test)]
@@ -4688,11 +4691,12 @@ mod tests {
         let val = num.unwrap();
         assert!(val >= 0);
         assert!(val <= 100);
-        assert!(spec
-            .check(&num.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&num.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4709,11 +4713,12 @@ mod tests {
         let val = num.unwrap();
         assert!(val >= 1);
         assert!(val <= 9);
-        assert!(spec
-            .check(&num.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&num.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4725,11 +4730,12 @@ mod tests {
         let string = val.clone().unwrap();
         assert!(string.len() >= 5);
         assert!(string.len() <= 20);
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4748,11 +4754,12 @@ mod tests {
         let string = val.clone().unwrap();
         assert!(!string.eq("foo"));
         assert!(!string.eq("bar"));
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4766,11 +4773,12 @@ mod tests {
 
         assert!(val.is_some());
         assert!(val.clone().unwrap_or("".to_string()).len() == 10usize);
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4786,11 +4794,12 @@ mod tests {
 
         assert!(val.is_some());
         assert!(val_length >= 1usize && val_length <= 5usize);
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4798,11 +4807,13 @@ mod tests {
         let schema = construct_datum_schema_object();
         let val = generate_value_from_schema(&schema, 10);
         assert!(val.is_some());
-        assert!(schema
-            .check(&val.unwrap(), true, &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            schema
+                .check(&val.unwrap(), true, &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4824,11 +4835,12 @@ mod tests {
         let spec = DateSpecification::default();
         let val = generate_date(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4848,11 +4860,12 @@ mod tests {
         let date = spec.str_to_time(val.clone().unwrap().as_str()).unwrap();
         assert!(date > spec.str_to_time(min_date).unwrap());
         assert!(date < spec.str_to_time(max_date).unwrap());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4872,11 +4885,12 @@ mod tests {
 
         let val = generate_date(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
 
         assert_eq!("2020-09-13", val.unwrap());
     }
@@ -4886,11 +4900,12 @@ mod tests {
         let spec = BooleanSpecification::default();
         let val = generate_bool(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4898,11 +4913,12 @@ mod tests {
         let spec = DateTimeSpecification::default();
         let val = generate_datetime(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4923,11 +4939,12 @@ mod tests {
         .unwrap();
         let val = generate_datetime(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.as_ref().unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
 
         assert_eq!("2020-09-13 04:27:27.477711492", val.clone().unwrap());
     }
@@ -4949,11 +4966,12 @@ mod tests {
         let dt = spec.str_to_time(val.clone().unwrap().as_str()).unwrap();
         assert!(dt > spec.str_to_time(min_dt).unwrap());
         assert!(dt < spec.str_to_time(max_dt).unwrap());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4961,11 +4979,12 @@ mod tests {
         let spec = NameSpecification::default();
         let val = generate_name(&spec, 10);
         assert!(val.is_some());
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4975,11 +4994,12 @@ mod tests {
         assert!(val.is_some());
         let email = val.clone().unwrap();
         assert!(email.contains("@example."));
-        assert!(spec
-            .check(&val.unwrap(), &|_e, _a| "".to_string())
-            .into_iter()
-            .collect::<Validated<Vec<()>, String>>()
-            .is_good());
+        assert!(
+            spec.check(&val.unwrap(), &|_e, _a| "".to_string())
+                .into_iter()
+                .collect::<Validated<Vec<()>, String>>()
+                .is_good()
+        );
     }
 
     #[test]
@@ -4997,227 +5017,251 @@ mod tests {
 
     #[test]
     fn sequence_specification_length_more_than_actual() {
-        assert!(SequenceSpecification {
-            length: Some(5),
-            ..Default::default()
-        }
-        .check_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_fail());
+        assert!(
+            SequenceSpecification {
+                length: Some(5),
+                ..Default::default()
+            }
+            .check_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_fail()
+        );
     }
 
     #[test]
     fn sequence_specification_length_equal_to_actual() {
-        assert!(SequenceSpecification {
-            length: Some(5),
-            ..Default::default()
-        }
-        .check_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                length: Some(5),
+                ..Default::default()
+            }
+            .check_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_length_less_than_actual() {
-        assert!(SequenceSpecification {
-            length: Some(5),
-            ..Default::default()
-        }
-        .check_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5),
-                serde_json::Value::from(6)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_fail());
+        assert!(
+            SequenceSpecification {
+                length: Some(5),
+                ..Default::default()
+            }
+            .check_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5),
+                    serde_json::Value::from(6)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_fail()
+        );
     }
 
     #[test]
     fn sequence_specification_length_check_no_bounds() {
-        assert!(SequenceSpecification {
-            ..Default::default()
-        }
-        .check_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                ..Default::default()
+            }
+            .check_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_min_length_more_than_actual() {
-        assert!(SequenceSpecification {
-            min_length: Some(5),
-            ..Default::default()
-        }
-        .check_min_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_fail());
+        assert!(
+            SequenceSpecification {
+                min_length: Some(5),
+                ..Default::default()
+            }
+            .check_min_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_fail()
+        );
     }
 
     #[test]
     fn sequence_specification_min_length_equal_to_length() {
-        assert!(SequenceSpecification {
-            min_length: Some(5),
-            ..Default::default()
-        }
-        .check_min_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                min_length: Some(5),
+                ..Default::default()
+            }
+            .check_min_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_min_length_less_than_actual() {
-        assert!(SequenceSpecification {
-            min_length: Some(5),
-            ..Default::default()
-        }
-        .check_min_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5),
-                serde_json::Value::from(6)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                min_length: Some(5),
+                ..Default::default()
+            }
+            .check_min_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5),
+                    serde_json::Value::from(6)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_min_check_no_bounds() {
-        assert!(SequenceSpecification {
-            ..Default::default()
-        }
-        .check_min_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                ..Default::default()
+            }
+            .check_min_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_max_length_more_than_actual() {
-        assert!(SequenceSpecification {
-            max_length: Some(5),
-            ..Default::default()
-        }
-        .check_max_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                max_length: Some(5),
+                ..Default::default()
+            }
+            .check_max_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_max_length_equal_to_length() {
-        assert!(SequenceSpecification {
-            min_length: Some(5),
-            ..Default::default()
-        }
-        .check_max_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                min_length: Some(5),
+                ..Default::default()
+            }
+            .check_max_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
     fn sequence_specification_max_length_less_than_actual() {
-        assert!(SequenceSpecification {
-            max_length: Some(5),
-            ..Default::default()
-        }
-        .check_max_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5),
-                serde_json::Value::from(6)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_fail());
+        assert!(
+            SequenceSpecification {
+                max_length: Some(5),
+                ..Default::default()
+            }
+            .check_max_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5),
+                    serde_json::Value::from(6)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_fail()
+        );
     }
 
     #[test]
     fn sequence_specification_max_check_no_bounds() {
-        assert!(SequenceSpecification {
-            ..Default::default()
-        }
-        .check_max_length(
-            &vec![
-                serde_json::Value::from(1),
-                serde_json::Value::from(2),
-                serde_json::Value::from(3),
-                serde_json::Value::from(4),
-                serde_json::Value::from(5)
-            ],
-            &|s, _| s.to_string()
-        )
-        .is_good());
+        assert!(
+            SequenceSpecification {
+                ..Default::default()
+            }
+            .check_max_length(
+                &vec![
+                    serde_json::Value::from(1),
+                    serde_json::Value::from(2),
+                    serde_json::Value::from(3),
+                    serde_json::Value::from(4),
+                    serde_json::Value::from(5)
+                ],
+                &|s, _| s.to_string()
+            )
+            .is_good()
+        );
     }
 
     #[test]
@@ -5232,14 +5276,15 @@ mod tests {
         ]);
 
         if let Specification::<Box<DatumSchema>>::AnyOf(v) = &spec {
-            assert!(spec
-                .schema_any_one_of(
+            assert!(
+                spec.schema_any_one_of(
                     &vec![serde_json::Value::from(1), serde_json::Value::from("hello")],
                     v,
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_good());
+                .is_good()
+            );
         }
     }
 
@@ -5255,8 +5300,8 @@ mod tests {
         ]);
 
         if let Specification::<Box<DatumSchema>>::AnyOf(v) = &spec {
-            assert!(spec
-                .schema_any_one_of(
+            assert!(
+                spec.schema_any_one_of(
                     &vec![
                         serde_json::Value::from(1.25),
                         serde_json::Value::from("hello")
@@ -5265,7 +5310,8 @@ mod tests {
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_fail());
+                .is_fail()
+            );
         }
     }
 
@@ -5281,8 +5327,8 @@ mod tests {
         ]);
 
         if let Specification::<Box<DatumSchema>>::OneOf(v) = &spec {
-            assert!(spec
-                .schema_check_one_of(
+            assert!(
+                spec.schema_check_one_of(
                     &vec![
                         serde_json::Value::from(1.25),
                         serde_json::Value::from("hello")
@@ -5291,7 +5337,8 @@ mod tests {
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_fail());
+                .is_fail()
+            );
         }
     }
 
@@ -5307,8 +5354,8 @@ mod tests {
         ]);
 
         if let Specification::<Box<DatumSchema>>::OneOf(v) = &spec {
-            assert!(spec
-                .schema_check_one_of(
+            assert!(
+                spec.schema_check_one_of(
                     &vec![
                         serde_json::Value::from("world"),
                         serde_json::Value::from("hello")
@@ -5317,7 +5364,8 @@ mod tests {
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_good());
+                .is_good()
+            );
         }
     }
 
@@ -5329,8 +5377,8 @@ mod tests {
             })]);
 
         if let Specification::<Box<DatumSchema>>::NoneOf(v) = &spec {
-            assert!(spec
-                .schema_check_none_of(
+            assert!(
+                spec.schema_check_none_of(
                     &vec![
                         serde_json::Value::from(1.25),
                         serde_json::Value::from("hello")
@@ -5339,7 +5387,8 @@ mod tests {
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_fail());
+                .is_fail()
+            );
         }
     }
 
@@ -5351,8 +5400,8 @@ mod tests {
             })]);
 
         if let Specification::<Box<DatumSchema>>::NoneOf(v) = &spec {
-            assert!(spec
-                .schema_check_none_of(
+            assert!(
+                spec.schema_check_none_of(
                     &vec![
                         serde_json::Value::from("world"),
                         serde_json::Value::from("hello")
@@ -5361,7 +5410,8 @@ mod tests {
                     true,
                     &|s, _| s.to_string(),
                 )
-                .is_good());
+                .is_good()
+            );
         }
     }
 
@@ -5370,9 +5420,10 @@ mod tests {
         let spec = Specification::<Vec<Value>>::NoneOf(vec![vec![serde_json::Value::from(1)]]);
 
         if let Specification::<Vec<Value>>::NoneOf(v) = &spec {
-            assert!(spec
-                .check_none_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
-                .is_fail());
+            assert!(
+                spec.check_none_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
+                    .is_fail()
+            );
         }
     }
 
@@ -5381,13 +5432,14 @@ mod tests {
         let spec = Specification::<Vec<Value>>::NoneOf(vec![vec![serde_json::Value::from(1)]]);
 
         if let Specification::<Vec<Value>>::NoneOf(v) = &spec {
-            assert!(spec
-                .check_none_of(
+            assert!(
+                spec.check_none_of(
                     &vec![serde_json::Value::from(2), serde_json::Value::from(3)],
                     v,
                     &|s, _| s.to_string(),
                 )
-                .is_good());
+                .is_good()
+            );
         }
     }
 
@@ -5396,9 +5448,10 @@ mod tests {
         let spec = Specification::<Vec<Value>>::AnyOf(vec![vec![serde_json::Value::from(1)]]);
 
         if let Specification::<Vec<Value>>::AnyOf(v) = &spec {
-            assert!(spec
-                .check_any_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
-                .is_good());
+            assert!(
+                spec.check_any_of(&vec![serde_json::Value::from(1)], v, &|s, _| s.to_string(),)
+                    .is_good()
+            );
         }
     }
 
@@ -5407,13 +5460,14 @@ mod tests {
         let spec = Specification::<Vec<Value>>::AnyOf(vec![vec![serde_json::Value::from(1)]]);
 
         if let Specification::<Vec<Value>>::AnyOf(v) = &spec {
-            assert!(spec
-                .check_any_of(
+            assert!(
+                spec.check_any_of(
                     &vec![serde_json::Value::from(2), serde_json::Value::from(3)],
                     v,
                     &|s, _| s.to_string(),
                 )
-                .is_fail());
+                .is_fail()
+            );
         }
     }
 

@@ -240,12 +240,18 @@ pub struct ResponseExtraction {
     pub field: String,
 }
 
-impl ResponseExtraction {
-    pub fn new() -> ResponseExtraction {
-        ResponseExtraction {
+impl Default for ResponseExtraction {
+    fn default() -> Self {
+        Self {
             name: "".to_string(),
             field: "".to_string(),
         }
+    }
+}
+
+impl ResponseExtraction {
+    pub fn new() -> ResponseExtraction {
+        Self::default()
     }
 }
 

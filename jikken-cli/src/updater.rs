@@ -10,7 +10,7 @@ use std::{
     cmp::Ordering,
     env,
     error::Error,
-    io::{stdout, Cursor, Write},
+    io::{Cursor, Write, stdout},
 };
 use tokio::io::AsyncWriteExt;
 
@@ -195,7 +195,9 @@ pub async fn check_for_updates() {
                     "Jikken found new version ({}), currently running version ({})",
                     latest.version, VERSION
                 );
-                warn!("Run command: `jk update` to update jikken or update using your package manager");
+                warn!(
+                    "Run command: `jk update` to update jikken or update using your package manager"
+                );
             }
         }
         Err(error) => {

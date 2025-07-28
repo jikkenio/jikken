@@ -4,14 +4,14 @@ use crate::{
     executor,
     executor::ResultDetails,
     machine, test,
-    test::{definition::RequestDescriptor, http::Header, Definition},
+    test::{Definition, definition::RequestDescriptor, http::Header},
 };
 use bytes::{Bytes, BytesMut};
 use http_body_util::{BodyExt, Full};
-use hyper::{header::HeaderValue, Request};
+use hyper::{Request, header::HeaderValue};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
+    client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
 use log::{debug, trace};
@@ -696,13 +696,17 @@ mod tests {
         let redacted_headers = get_all_headers(redacted_td);
         let nonredacted_headers = get_all_headers(td);
 
-        assert!(nonredacted_headers
-            .iter()
-            .any(|h| h.value == "super_secret_key"));
+        assert!(
+            nonredacted_headers
+                .iter()
+                .any(|h| h.value == "super_secret_key")
+        );
 
-        assert!(!redacted_headers
-            .iter()
-            .any(|h| h.value == "super_secret_key"));
+        assert!(
+            !redacted_headers
+                .iter()
+                .any(|h| h.value == "super_secret_key")
+        );
     }
 
     #[test]
@@ -729,12 +733,14 @@ mod tests {
             compare_request: Some(rd.clone()),
         });
 
-        assert!(!redacted
-            .request
-            .headers
-            .iter()
-            .chain(redacted.compare_request.unwrap().headers.iter())
-            .any(|h| h.value == "super_secret_key"));
+        assert!(
+            !redacted
+                .request
+                .headers
+                .iter()
+                .chain(redacted.compare_request.unwrap().headers.iter())
+                .any(|h| h.value == "super_secret_key")
+        );
     }
 
     #[test]

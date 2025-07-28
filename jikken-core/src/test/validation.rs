@@ -34,7 +34,11 @@ fn validate_test_file(
         .map(|ulid| Ulid::from_string(&ulid).is_ok())
         .unwrap_or(true)
     {
-        warn!("Test file ({}) has invalid platform identifier ({}). PlatformId must be empty or a valid ULID.", file.filename, file.platform_id.clone().unwrap_or("".to_string()));
+        warn!(
+            "Test file ({}) has invalid platform identifier ({}). PlatformId must be empty or a valid ULID.",
+            file.filename,
+            file.platform_id.clone().unwrap_or("".to_string())
+        );
     }
 
     let regex = Regex::new(r"(?i)^[a-z0-9-_]+$").unwrap();

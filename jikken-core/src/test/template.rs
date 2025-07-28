@@ -5,7 +5,7 @@ use crate::{
 use std::{cell::Cell, error::Error};
 use ulid::Ulid;
 
-use super::{file::SimpleValueVariable, File};
+use super::{File, file::SimpleValueVariable};
 
 pub fn template() -> Result<test::File, Box<dyn Error + Send + Sync>> {
     Ok(test::File::default())
@@ -54,8 +54,8 @@ fn new_full_cleanup() -> Result<file::UnvalidatedCleanup, Box<dyn Error + Send +
     })
 }
 
-fn new_full_request_response(
-) -> Result<file::UnvalidatedRequestResponse, Box<dyn Error + Send + Sync>> {
+fn new_full_request_response()
+-> Result<file::UnvalidatedRequestResponse, Box<dyn Error + Send + Sync>> {
     Ok(file::UnvalidatedRequestResponse {
         request: new_full_request()?,
         response: Some(new_full_response()?),

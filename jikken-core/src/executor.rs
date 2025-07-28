@@ -1,9 +1,9 @@
 use crate::{
-    config,
+    TagMode, config,
     json::extractor::extract_json,
     telemetry, test,
     test::{
-        definition,
+        Definition, Variable, definition,
         definition::ResponseDescriptor,
         file::{
             BodyOrSchema, BodyOrSchemaChecker, Checker, NumericSpecification,
@@ -11,13 +11,12 @@ use crate::{
         },
         http,
         http::Header,
-        validation, Definition, Variable,
+        validation,
     },
-    TagMode,
 };
 use bytes::{Bytes, BytesMut};
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Incoming, header::HeaderValue, Request};
+use hyper::{Request, body::Incoming, header::HeaderValue};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use log::{debug, error, info, trace, warn};
@@ -89,11 +88,13 @@ impl From<ExecutionResult> for Report {
     }
 }
 
+type StageExecutionResult = Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>;
+
 #[derive(Debug)]
 pub struct IterationResult {
     pub iteration_number: u32,
     pub status: TestStatus,
-    pub stage_results: Option<Result<(bool, Vec<StageResult>), Box<dyn Error + Send + Sync>>>,
+    pub stage_results: Option<StageExecutionResult>,
 }
 
 impl IterationResult {
@@ -233,6 +234,7 @@ impl ExecutionResultFormatter for JunitResultFormatter {
     }
 }
 
+#[allow(async_fn_in_trait)]
 pub trait ExecutionPolicy {
     fn name(&self) -> String;
     fn new_line(&self) -> bool;
@@ -510,7 +512,7 @@ async fn run_tests<T: ExecutionPolicy>(
     }
 }
 
-struct StateCookie {
+pub struct StateCookie {
     domain: String,
     path: String,
     key: String,
@@ -567,8 +569,7 @@ pub struct State {
     pub bypass_cert_verification: bool,
 }
 
-#[derive(PartialEq, Eq, Clone)]
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum StageType {
     Setup = 1,
     Normal = 2,
@@ -643,8 +644,8 @@ pub struct ExpectedResultData {
     pub strict: bool,
 }
 
-impl ExpectedResultData {
-    pub fn new() -> Self {
+impl Default for ExpectedResultData {
+    fn default() -> Self {
         Self {
             headers: Vec::default(),
             status: Option::default(),
@@ -652,6 +653,12 @@ impl ExpectedResultData {
             body: Option::default(),
             strict: true,
         }
+    }
+}
+
+impl ExpectedResultData {
+    pub fn new() -> Self {
+        Self::default()
     }
     //Consider making get_body a static method that
     //accepts the global vars. Passing the Definition seems wrong
@@ -669,7 +676,7 @@ impl ExpectedResultData {
             body: td.get_expected_request_body(&r.body, state_variables, variables, iteration), //.unwrap_or(serde_json::Value::Null),
             strict: r.strict,
         })
-        .unwrap_or(ExpectedResultData::new())
+        .unwrap_or_default()
     }
 }
 
@@ -790,11 +797,11 @@ fn schedule_impl(
         .for_each(|(_, edges)| {
             edges.iter().for_each(|e| _ = ignore.insert(*e));
         });
-    return graph
+    graph
         .keys()
         .filter(|s| !ignore.contains(*s))
         .cloned()
-        .collect();
+        .collect()
 }
 
 fn construct_test_execution_graph_v2(
@@ -1074,7 +1081,6 @@ pub async fn execute_tests(
     Report::from(execution_result)
 }
 
-
 /// Execute tests with observer support for real-time events
 pub async fn execute_tests_with_observer(
     config: config::Config,
@@ -1086,7 +1092,7 @@ pub async fn execute_tests_with_observer(
     mut observer: Option<Box<dyn crate::observer::ExecutionObserver>>,
 ) -> Report {
     use crate::observable_executor::ExecutionPolicyExt;
-    
+
     if !tests_to_ignore.is_empty() {
         trace!("filtering out tests which don't match the tag pattern")
     }
@@ -1100,7 +1106,7 @@ pub async fn execute_tests_with_observer(
 
     // Create a shared state for tracking suite completion
     let _suite_start_time = std::time::Instant::now();
-    
+
     // Emit suite start event
     if let Some(ref mut obs) = observer {
         obs.on_event(crate::observer::ExecutionEvent::SuiteStart {
@@ -1141,7 +1147,7 @@ pub async fn execute_tests_with_observer(
 
     // For the suite complete event, we'll track it through a wrapper if we actually implement it
     // For now, let's emit the event after execution using the report data
-    
+
     let execution_result = if mode_dryrun {
         run_tests(
             tests_to_run_with_dependencies,
@@ -1169,14 +1175,12 @@ pub async fn execute_tests_with_observer(
             .ok()
     });
 
-    let report = Report::from(execution_result);
-    
     // Emit suite complete event
     // Note: Since observer was moved, we can't emit the event here
     // The test will need to be updated to not expect suite complete events
     // or we need a different architecture
-    
-    report
+
+    Report::from(execution_result)
 }
 
 async fn run(
@@ -2016,7 +2020,9 @@ fn http_request_from_test_spec(
 pub fn get_rustls_config_dangerous() -> Result<ClientConfig, Box<dyn Error + Send + Sync>> {
     let config = ClientConfig::builder()
         .dangerous() // The `Verifier` we're using is actually safe
-        .with_custom_certificate_verifier(Arc::new(Verifier::new(aws_lc_rs::default_provider().into())?))
+        .with_custom_certificate_verifier(Arc::new(Verifier::new(
+            aws_lc_rs::default_provider().into(),
+        )?))
         .with_no_client_auth();
 
     Ok(config)
@@ -2450,10 +2456,17 @@ mod tests {
             None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
-        assert_eq!(actual.validation, Validated::Fail(nev![
-            String::from("Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"),
-            String::from("Expected compare body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }")
-        ]));
+        assert_eq!(
+            actual.validation,
+            Validated::Fail(nev![
+                String::from(
+                    "Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
+                ),
+                String::from(
+                    "Expected compare body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
+                )
+            ])
+        );
     }
 
     #[test]
@@ -2536,9 +2549,12 @@ mod tests {
             None,
         );
         assert_eq!(actual.status, TestStatus::Failed);
-        assert_eq!(actual.validation, Validated::fail(
-            String::from("Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
-        )));
+        assert_eq!(
+            actual.validation,
+            Validated::fail(String::from(
+                "Expected body {\"Name\":\"Bob\"} did not match actual body null ; json atoms at path \"(root)\" are not equal:\n    lhs:\n        null\n    rhs:\n        {\n          \"Name\": \"Bob\"\n        }"
+            ))
+        );
     }
 
     #[test]

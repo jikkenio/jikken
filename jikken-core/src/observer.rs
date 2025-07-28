@@ -125,7 +125,7 @@ pub enum VariableSource {
 pub trait ExecutionObserver: Send + Sync {
     /// Called when an execution event occurs
     fn on_event(&mut self, event: ExecutionEvent);
-    
+
     /// Called to check if execution should be cancelled
     fn should_cancel(&self) -> bool {
         false
@@ -147,25 +147,24 @@ impl ExecutionObserver for NoOpObserver {
 // pub struct CollectingObserver {
 //     pub events: Vec<ExecutionEvent>,
 // }
-
+//
 // impl ExecutionObserver for CollectingObserver {
 //     fn on_event(&mut self, event: ExecutionEvent) {
 //         self.events.push(event);
 //     }
 // }
-
 /// An observer that delegates to multiple observers
+#[derive(Default)]
 pub struct CompositeObserver {
     observers: Vec<Box<dyn ExecutionObserver>>,
 }
 
+
 impl CompositeObserver {
     pub fn new() -> Self {
-        Self {
-            observers: Vec::new(),
-        }
+        Self::default()
     }
-    
+
     pub fn add(&mut self, observer: Box<dyn ExecutionObserver>) {
         self.observers.push(observer);
     }
@@ -177,7 +176,7 @@ impl ExecutionObserver for CompositeObserver {
             observer.on_event(event.clone());
         }
     }
-    
+
     fn should_cancel(&self) -> bool {
         self.observers.iter().any(|o| o.should_cancel())
     }
@@ -202,9 +201,12 @@ impl ExecutionObserver for ThreadSafeObserver {
             observer.on_event(event);
         }
     }
-    
+
     fn should_cancel(&self) -> bool {
-        self.inner.lock().map(|o| o.should_cancel()).unwrap_or(false)
+        self.inner
+            .lock()
+            .map(|o| o.should_cancel())
+            .unwrap_or(false)
     }
 }
 

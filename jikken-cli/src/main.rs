@@ -263,7 +263,7 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
             .unwrap_or(None)
     };
     let pattern = extract_pattern(glob_pattern);
-    return move |e: &walkdir::DirEntry| -> bool {
+    move |e: &walkdir::DirEntry| -> bool {
         e.file_name()
             .to_str()
             .map(|s| {
@@ -273,7 +273,7 @@ fn create_top_level_filter(glob_pattern: &Option<String>) -> impl Fn(&walkdir::D
                     || e.file_type().is_dir()
             })
             .unwrap_or(false)
-    };
+    }
 }
 
 async fn search_directory(
@@ -409,7 +409,7 @@ fn print_test_info(mut tests: Vec<jikken_core::test::Definition>) {
         });
 }
 
-async fn run_tests(
+struct TestRunConfig {
     paths: Vec<String>,
     tags: Vec<String>,
     tags_or: bool,
@@ -420,25 +420,27 @@ async fn run_tests(
     config_file: Option<String>,
     junit_file: Option<String>,
     cli_args: Box<serde_json::Value>,
-) -> Result<executor::Report, Box<dyn Error + Send + Sync>> {
-    let mut cli_paths = paths;
+}
+
+async fn run_tests(config: TestRunConfig) -> Result<executor::Report, Box<dyn Error + Send + Sync>> {
+    let mut cli_paths = config.paths;
 
     if cli_paths.is_empty() {
         cli_paths.push(".".to_string())
     }
 
-    let cli_tag_mode = if tags_or { TagMode::OR } else { TagMode::AND };
-    let config = config::get_config(config_file).await;
-    let files = get_files(cli_paths, std::path::Path::new(IGNORE_FILE), recursive).await?;
+    let cli_tag_mode = if config.tags_or { TagMode::OR } else { TagMode::AND };
+    let jikken_config = config::get_config(config.config_file).await;
+    let files = get_files(cli_paths, std::path::Path::new(IGNORE_FILE), config.recursive).await?;
     let plurality_policy = |count: usize| match count {
         1 => "",
         _ => "s",
     };
 
-    let project = project.or(config.clone().settings.project);
-    let environment = environment.or(config.clone().settings.environment);
+    let project = config.project.or(jikken_config.clone().settings.project);
+    let environment = config.environment.or(jikken_config.clone().settings.environment);
 
-    if config.settings.bypass_cert_verification {
+    if jikken_config.settings.bypass_cert_verification {
         warn!(
             "WARNING: SSL certificate verification is disabled.\nIf this is not intentional please adjust your config settings.\nFor more information please check our docs: https://www.jikken.io/docs/configuration/"
         );
@@ -455,12 +457,12 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
-    let filters_specified = !tags.is_empty();
+    let filters_specified = !config.tags.is_empty();
 
     let (tests_to_run, tests_to_ignore) =
-        executor::tests_from_files(&config, files, tags, project, environment, cli_tag_mode);
+        executor::tests_from_files(&jikken_config, files, config.tags, project, environment, cli_tag_mode);
 
-    if execution_mode == ExecutionMode::List {
+    if config.execution_mode == ExecutionMode::List {
         let number_of_tests_to_run = tests_to_run.len();
         print_test_info(tests_to_run);
         if filters_specified {
@@ -473,7 +475,7 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
-    if execution_mode == ExecutionMode::Format {
+    if config.execution_mode == ExecutionMode::Format {
         for td in &tests_to_run {
             let mut file = fs::File::create(&td.file_data.filename).await?;
             let file_data = serde_yaml::to_string(&td.file_data).unwrap();
@@ -487,8 +489,8 @@ async fn run_tests(
         return Ok(executor::Report::default());
     }
 
-    if let ExecutionMode::Validate(generate) = execution_mode {
-        if let Some(token) = &config.settings.api_key {
+    if let ExecutionMode::Validate(generate) = config.execution_mode {
+        if let Some(token) = &jikken_config.settings.api_key {
             if uuid::Uuid::parse_str(token).is_ok() {
                 let validation_results =
                     telemetry::validate_platform_ids(tests_to_run.iter().collect());
@@ -532,20 +534,21 @@ async fn run_tests(
     }
 
     // Create CLI observer for text output with policy name
-    let policy_name = if execution_mode == ExecutionMode::Dryrun {
+    let policy_name = if config.execution_mode == ExecutionMode::Dryrun {
         "Dry Run".to_string()
     } else {
         "Running".to_string()
     };
-    let cli_observer = Box::new(observer::CliObserver::with_policy_name(policy_name)) as Box<dyn jikken_core::observer::ExecutionObserver>;
-    
+    let cli_observer = Box::new(observer::CliObserver::with_policy_name(policy_name))
+        as Box<dyn jikken_core::observer::ExecutionObserver>;
+
     let report = executor::execute_tests_with_observer(
-        config,
+        jikken_config,
         tests_to_run,
-        execution_mode == ExecutionMode::Dryrun,
+        config.execution_mode == ExecutionMode::Dryrun,
         tests_to_ignore,
-        junit_file,
-        cli_args,
+        config.junit_file,
+        config.cli_args,
         Some(cli_observer),
     )
     .await;
@@ -662,18 +665,18 @@ async fn main() -> std::process::ExitCode {
             log::logger().flush();
             check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
-                run_tests(
+                run_tests(TestRunConfig {
                     paths,
                     tags,
                     tags_or,
-                    ExecutionMode::Run,
+                    execution_mode: ExecutionMode::Run,
                     recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    junit,
+                    project: cli_project,
+                    environment: cli_environment,
+                    config_file: cli.config_file,
+                    junit_file: junit,
                     cli_args,
-                )
+                })
                 .await,
             )
         }
@@ -690,18 +693,18 @@ async fn main() -> std::process::ExitCode {
             log::logger().flush();
             check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
-                run_tests(
+                run_tests(TestRunConfig {
                     paths,
                     tags,
                     tags_or,
-                    ExecutionMode::Dryrun,
+                    execution_mode: ExecutionMode::Dryrun,
                     recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    junit,
-                    Box::new(serde_json::Value::Null),
-                )
+                    project: cli_project,
+                    environment: cli_environment,
+                    config_file: cli.config_file,
+                    junit_file: junit,
+                    cli_args: Box::new(serde_json::Value::Null),
+                })
                 .await,
             )
         }
@@ -714,18 +717,18 @@ async fn main() -> std::process::ExitCode {
             updater::check_for_updates().await;
             check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
-                run_tests(
+                run_tests(TestRunConfig {
                     paths,
                     tags,
                     tags_or,
-                    ExecutionMode::List,
+                    execution_mode: ExecutionMode::List,
                     recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    None,
+                    project: cli_project,
+                    environment: cli_environment,
+                    config_file: cli.config_file,
+                    junit_file: None,
                     cli_args,
-                )
+                })
                 .await,
             )
         }
@@ -738,18 +741,18 @@ async fn main() -> std::process::ExitCode {
             updater::check_for_updates().await;
             check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
-                run_tests(
+                run_tests(TestRunConfig {
                     paths,
                     tags,
                     tags_or,
-                    ExecutionMode::Format,
+                    execution_mode: ExecutionMode::Format,
                     recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    None,
+                    project: cli_project,
+                    environment: cli_environment,
+                    config_file: cli.config_file,
+                    junit_file: None,
                     cli_args,
-                )
+                })
                 .await,
             )
         }
@@ -763,18 +766,18 @@ async fn main() -> std::process::ExitCode {
             updater::check_for_updates().await;
             check_supplied_config_file_existence(&cli.config_file);
             result_report_to_exit_code(
-                run_tests(
+                run_tests(TestRunConfig {
                     paths,
                     tags,
                     tags_or,
-                    ExecutionMode::Validate(generate_platform_ids),
+                    execution_mode: ExecutionMode::Validate(generate_platform_ids),
                     recursive,
-                    cli_project,
-                    cli_environment,
-                    cli.config_file,
-                    None,
+                    project: cli_project,
+                    environment: cli_environment,
+                    config_file: cli.config_file,
+                    junit_file: None,
                     cli_args,
-                )
+                })
                 .await,
             )
         }

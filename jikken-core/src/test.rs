@@ -6,7 +6,7 @@ pub mod validation;
 pub mod variable;
 use crate::test::file::BodyOrSchema;
 
-use self::file::{generate_value_from_schema, UnvalidatedRequest, UnvalidatedResponse};
+use self::file::{UnvalidatedRequest, UnvalidatedResponse, generate_value_from_schema};
 use crate::test::{
     definition::RequestBody,
     file::{
@@ -1060,8 +1060,7 @@ impl Definition {
             debug!("replacement is {:?}", replacement);
             trace!(
                 "Variable name=>value {:?}===>{:?}",
-                var_pattern,
-                &variable.value
+                var_pattern, &variable.value
             );
 
             //Do extra for non string stuff
