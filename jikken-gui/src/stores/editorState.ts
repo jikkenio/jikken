@@ -342,7 +342,7 @@ const openTestFile = async (file: File) => {
   let testFileState = { testFile: testFile, executing: false, auth: auth };
   currentState.files.push(fileState);
   currentState.testFiles.push(testFileState);
-  currentState.currentFile++;
+  currentState.currentFile = currentState.files.length - 1;
 
   $editorState.set({ ...currentState });
   resetTabs(testFileState);
@@ -520,7 +520,7 @@ export const makeRequest = async () => {
   $editorState.set({ ...state });
   setResponseTabCount("tab-body", response.body ? 1 : 0);
   setResponseTabCount("tab-headers", response.headers.length);
-  
+
   // Initialize Split.js now that response is available and panels should be visible
   setTimeout(() => {
     if (typeof window !== 'undefined' && (window as any).initializeRequestResponseSplit) {
@@ -535,7 +535,7 @@ const prettyPrintHtml = (html: string): string => {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    
+
     const errorNode = doc.querySelector('parsererror');
     if (errorNode) {
       return html;
@@ -551,7 +551,7 @@ const prettyPrintXml = (xml: string): string => {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(xml, 'application/xml');
-    
+
     const errorNode = doc.querySelector('parsererror');
     if (errorNode) {
       return xml;
@@ -565,25 +565,25 @@ const prettyPrintXml = (xml: string): string => {
 
 const formatElement = (element: Element, depth: number): string => {
   const indent = '  '.repeat(depth);
-  
+
   let result = `${indent}<${element.tagName.toLowerCase()}`;
-  
+
   // Add attributes
   for (let i = 0; i < element.attributes.length; i++) {
     const attr = element.attributes[i];
     result += ` ${attr.name}="${attr.value}"`;
   }
-  
+
   if (element.children.length === 0 && !element.textContent?.trim()) {
     result += ' />';
     return result;
   }
-  
+
   result += '>';
-  
+
   const textContent = element.textContent?.trim();
   const hasElementChildren = element.children.length > 0;
-  
+
   if (hasElementChildren) {
     result += '\n';
     for (let i = 0; i < element.children.length; i++) {
@@ -596,7 +596,7 @@ const formatElement = (element: Element, depth: number): string => {
   } else if (textContent) {
     result += textContent;
   }
-  
+
   result += `</${element.tagName.toLowerCase()}>`;
   return result;
 };
@@ -619,7 +619,7 @@ export const saveResponseBody = async () => {
   }
 
   let bodyToSave = response.body;
-  
+
   // Format based on content type
   if (contentType?.includes('json') || (!contentType && response.body.trim().startsWith('{'))) {
     try {
