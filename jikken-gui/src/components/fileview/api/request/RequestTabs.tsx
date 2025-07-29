@@ -27,7 +27,7 @@ export const RequestTabs = () => {
     });
 
     return (
-        <div class="h-full flex flex-col min-w-0">
+        <div class="size-full flex flex-col min-w-0">
             <div class="flex-none">
                 <div class="flex items-center justify-between border-b border-neutral-800 m-3 mt-1">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">

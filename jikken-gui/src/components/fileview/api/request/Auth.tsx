@@ -104,7 +104,7 @@ export const Auth = () => {
     };
 
     return (
-        <div id="tab-auth-panel" class="p-3 pt-0">
+        <div id="tab-auth-panel" class="p-3 pt-0 w-full">
             <div>
                 <label for="type-select" class="text-xs text-neutral-400 mr-3">Auth Type</label>
                 <div class="relative inline-block">

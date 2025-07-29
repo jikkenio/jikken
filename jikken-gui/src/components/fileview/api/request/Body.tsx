@@ -101,7 +101,7 @@ export const Body = () => {
     };
 
     return (
-        <div class="flex flex-col h-full overflow-hidden min-w-0 w-full">
+        <div class="flex flex-col size-full overflow-hidden min-w-0">
             <div class="flex-shrink-0 px-3 pt-0">
                 <div class="flex space-x-4 items-center text-neutral-500 text-xs font-medium py-2">
                     <div class="group flex items-center space-x-1">

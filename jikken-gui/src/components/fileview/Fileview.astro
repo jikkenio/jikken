@@ -27,8 +27,11 @@ let currentFile = editorState?.files[editorState.currentFile];
       class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
     >
       <RequestBar client:only />
-      <div id="api-view" class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden">
-        <div id="request-panel" class="min-w-0 min-h-0 overflow-hidden">
+      <div
+        id="api-view"
+        class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden"
+      >
+        <div id="request-panel" class="min-w-0 min-h-0 overflow-hidden w-full">
           <RequestTabs client:only />
         </div>
         <div id="response-panel" class="min-w-0 min-h-0 overflow-hidden">
@@ -79,44 +82,51 @@ let currentFile = editorState?.files[editorState.currentFile];
   const initializeRequestResponseSplit = () => {
     const requestPanel = document.getElementById("request-panel");
     const responsePanel = document.getElementById("response-panel");
-    
+
     console.log("Split.js Debug:", {
       requestPanel: !!requestPanel,
       responsePanel: !!responsePanel,
       requestResponseSplit: !!requestResponseSplit,
-      requestPanelSize: requestPanel ? `${requestPanel.offsetWidth}x${requestPanel.offsetHeight}` : 'N/A',
-      responsePanelSize: responsePanel ? `${responsePanel.offsetWidth}x${responsePanel.offsetHeight}` : 'N/A'
+      requestPanelSize: requestPanel
+        ? `${requestPanel.offsetWidth}x${requestPanel.offsetHeight}`
+        : "N/A",
+      responsePanelSize: responsePanel
+        ? `${responsePanel.offsetWidth}x${responsePanel.offsetHeight}`
+        : "N/A",
     });
-    
+
     if (requestPanel && responsePanel && !requestResponseSplit) {
       console.log("Initializing Split.js for request/response panels");
-      
+
       try {
-        requestResponseSplit = Split(['#request-panel', '#response-panel'], {
-          direction: 'vertical',
+        requestResponseSplit = Split(["#request-panel", "#response-panel"], {
+          direction: "vertical",
           sizes: [40, 60], // Start with 40% request, 60% response
           minSize: [100, 100], // Much smaller minimum sizes to allow more flexibility
           gutterSize: 2, // Very small gutter for desktop use
-          cursor: 'row-resize',
+          cursor: "row-resize",
           onDrag: () => {
             console.log("Split.js: Dragging vertical splitter");
             // Trigger Monaco resize when Split.js resizes panels
-            window.dispatchEvent(new Event('resize'));
+            window.dispatchEvent(new Event("resize"));
           },
           onDragEnd: () => {
             console.log("Split.js: Drag ended");
             // Final resize trigger
             setTimeout(() => {
-              window.dispatchEvent(new Event('resize'));
+              window.dispatchEvent(new Event("resize"));
             }, 100);
-          }
+          },
         });
-        
-        console.log("Request/Response Split.js initialized successfully:", requestResponseSplit);
-        
+
+        console.log(
+          "Request/Response Split.js initialized successfully:",
+          requestResponseSplit,
+        );
+
         // Debug gutter element after Split.js creates it
         setTimeout(() => {
-          const gutters = document.querySelectorAll('.gutter');
+          const gutters = document.querySelectorAll(".gutter");
           console.log("Found gutters:", gutters);
           gutters.forEach((gutter, index) => {
             const rect = gutter.getBoundingClientRect();
@@ -132,7 +142,7 @@ let currentFile = editorState?.files[editorState.currentFile];
               height: styles.height,
               cursor: styles.cursor,
               visibility: styles.visibility,
-              pointerEvents: styles.pointerEvents
+              pointerEvents: styles.pointerEvents,
             });
           });
         }, 200);
@@ -143,7 +153,7 @@ let currentFile = editorState?.files[editorState.currentFile];
       console.log("Split.js: Not initializing because:", {
         missingRequestPanel: !requestPanel,
         missingResponsePanel: !responsePanel,
-        alreadyInitialized: !!requestResponseSplit
+        alreadyInitialized: !!requestResponseSplit,
       });
     }
   };

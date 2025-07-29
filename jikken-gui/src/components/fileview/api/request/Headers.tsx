@@ -87,7 +87,7 @@ export const Headers = () => {
     }
 
     return (
-        <div id="tab-headers-panel" class="p-3 pt-1">
+        <div id="tab-headers-panel" class="p-3 pt-1 w-full">
             <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
 
             <ul>

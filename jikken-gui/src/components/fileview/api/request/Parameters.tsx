@@ -64,7 +64,7 @@ export const Parameters = () => {
     }
 
     return (
-        <div id="tab-params-panel" class="p-3 pt-1">
+        <div id="tab-params-panel" class="p-3 pt-1 w-full">
             <div class="text-neutral-400 mb-2 text-sm font-medium">Query Parameters</div>
 
             <ul>
