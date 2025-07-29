@@ -96,15 +96,12 @@ import { $layoutState } from "../stores/layoutState";
   // When using the Tauri API npm package:
   import { invoke } from "@tauri-apps/api/core";
 
-  console.log("starting up");
-
   const elem = document.getElementById("folder-button");
 
   elem?.addEventListener("click", () => toggleFolderPanel());
 
   const settings = document.getElementById("settings-button");
   settings?.addEventListener("click", async () => {
-    console.log("invoking");
     invoke("open_folder");
   });
 

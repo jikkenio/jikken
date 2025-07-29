@@ -524,7 +524,6 @@ export const makeRequest = async () => {
   // Initialize Split.js now that response is available and panels should be visible
   setTimeout(() => {
     if (typeof window !== 'undefined' && (window as any).initializeRequestResponseSplit) {
-      console.log("Calling Split.js initialization after response received");
       (window as any).initializeRequestResponseSplit();
     }
   }, 100);

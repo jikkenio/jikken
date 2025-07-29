@@ -78,83 +78,31 @@ let currentFile = editorState?.files[editorState.currentFile];
 
   let requestResponseSplit: any = null;
 
-  // Make Split.js initialization globally available
   const initializeRequestResponseSplit = () => {
     const requestPanel = document.getElementById("request-panel");
     const responsePanel = document.getElementById("response-panel");
 
-    console.log("Split.js Debug:", {
-      requestPanel: !!requestPanel,
-      responsePanel: !!responsePanel,
-      requestResponseSplit: !!requestResponseSplit,
-      requestPanelSize: requestPanel
-        ? `${requestPanel.offsetWidth}x${requestPanel.offsetHeight}`
-        : "N/A",
-      responsePanelSize: responsePanel
-        ? `${responsePanel.offsetWidth}x${responsePanel.offsetHeight}`
-        : "N/A",
-    });
-
     if (requestPanel && responsePanel && !requestResponseSplit) {
-      console.log("Initializing Split.js for request/response panels");
-
       try {
         requestResponseSplit = Split(["#request-panel", "#response-panel"], {
           direction: "vertical",
           sizes: [40, 60], // Start with 40% request, 60% response
-          minSize: [100, 100], // Much smaller minimum sizes to allow more flexibility
-          gutterSize: 2, // Very small gutter for desktop use
+          minSize: [100, 100],
+          gutterSize: 2,
           cursor: "row-resize",
           onDrag: () => {
-            console.log("Split.js: Dragging vertical splitter");
             // Trigger Monaco resize when Split.js resizes panels
             window.dispatchEvent(new Event("resize"));
           },
           onDragEnd: () => {
-            console.log("Split.js: Drag ended");
-            // Final resize trigger
             setTimeout(() => {
               window.dispatchEvent(new Event("resize"));
             }, 100);
           },
         });
-
-        console.log(
-          "Request/Response Split.js initialized successfully:",
-          requestResponseSplit,
-        );
-
-        // Debug gutter element after Split.js creates it
-        setTimeout(() => {
-          const gutters = document.querySelectorAll(".gutter");
-          console.log("Found gutters:", gutters);
-          gutters.forEach((gutter, index) => {
-            const rect = gutter.getBoundingClientRect();
-            const styles = window.getComputedStyle(gutter);
-            console.log(`Gutter ${index}:`, {
-              element: gutter,
-              rect: rect,
-              display: styles.display,
-              position: styles.position,
-              zIndex: styles.zIndex,
-              backgroundColor: styles.backgroundColor,
-              width: styles.width,
-              height: styles.height,
-              cursor: styles.cursor,
-              visibility: styles.visibility,
-              pointerEvents: styles.pointerEvents,
-            });
-          });
-        }, 200);
       } catch (error) {
         console.error("Failed to initialize Split.js:", error);
       }
-    } else {
-      console.log("Split.js: Not initializing because:", {
-        missingRequestPanel: !requestPanel,
-        missingResponsePanel: !responsePanel,
-        alreadyInitialized: !!requestResponseSplit,
-      });
     }
   };
 
@@ -179,7 +127,6 @@ let currentFile = editorState?.files[editorState.currentFile];
     // Use MutationObserver to catch when panels are added to DOM
     const observer = new MutationObserver(() => {
       if (!requestResponseSplit) {
-        console.log("MutationObserver: Trying to initialize Split.js");
         initializeRequestResponseSplit();
       }
     });
