@@ -174,7 +174,7 @@ export const loadFolder = async (path: string) => {
     // remove all existing entities that fall under the path, as they will be reloaded
     entities = entities.filter((e) => !e.path.includes(path));
 
-    let updatedEntities = [...entities, ...generateEntities(result, existingEntity.indentationLevel)];
+    let updatedEntities = [...entities, ...generateEntities(result, existingEntity?.indentationLevel ?? 0)];
     sortEntities(updatedEntities);
 
     // update the active index to point to the same file as before

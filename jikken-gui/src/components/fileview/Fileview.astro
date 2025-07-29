@@ -71,7 +71,7 @@ let currentFile = editorState?.files[editorState.currentFile];
 
 <script>
   import { listenKeys } from "nanostores";
-  import { $editorState, saveFile } from "../../stores/editorState";
+  import { $editorState, saveCurrentFile } from "../../stores/editorState";
   import { $layoutState } from "../../stores/layoutState";
   import { EntityType, ViewMode } from "../../stores/enum";
   import Split from "split.js";
@@ -114,7 +114,7 @@ let currentFile = editorState?.files[editorState.currentFile];
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        saveFile();
+        saveCurrentFile();
       }
     });
 

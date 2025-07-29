@@ -4,7 +4,7 @@ import { Parameters } from "./Parameters";
 import { Headers } from "./Headers";
 import { Body } from './Body';
 import { Auth } from './Auth';
-import { $editorState, saveFile } from "../../../../stores/editorState";
+import { $editorState, saveCurrentFile } from "../../../../stores/editorState";
 import { EntityType } from "../../../../stores/enum";
 
 export const RequestTabs = () => {
@@ -74,7 +74,7 @@ export const RequestTabs = () => {
                     </nav>
                     <Show when={isSaveable()}>
                         <span class="flex-none text-sm p-2 mr-1 cursor-pointer text-indigo-500 hover:text-indigo-300"
-                            onClick={() => saveFile()}>
+                            onClick={() => saveCurrentFile()}>
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"
                                 height="16"

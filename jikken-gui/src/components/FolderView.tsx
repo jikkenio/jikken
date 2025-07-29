@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { $folderState, loadFolder, openFolderDialog, removeFolder, selectEntity, toggleFolder, type FolderEntity } from "../stores/folderState";
-import { openFile } from "../stores/editorState";
+import { createNewFile, openFile } from "../stores/editorState";
 import { EntityType } from "../stores/enum";
 
 export const FolderView = () => {
@@ -9,7 +9,7 @@ export const FolderView = () => {
 
     const selectFile = (index: number, file: FolderEntity) => {
         selectEntity(index);
-        openFile(file);
+        openFile(file.type, file.name, file.path);
     };
 
     const closeFolder = (event: Event, folder: FolderEntity) => {
@@ -19,17 +19,26 @@ export const FolderView = () => {
 
     return (
         <div class="flex flex-col flex-grow h-full">
-            <div class="flex-none h-8 text-white py-1 mb-2">
-                <div class="float-right mx-1 cursor-pointer hover:text-indigo-500" onClick={() => openFolderDialog()}>
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
+            <div class="flex-none h-8 text-neutral-300 py-1 mt-1 mb-2">
+                <div class="float-right mx-1 cursor-pointer hover:text-indigo-500" title="Add folder" onClick={() => openFolderDialog()}>
+                    <svg xmlns="http://www.w3.org/2000/svg"
                         width="20"
                         height="20"
                         fill="currentColor"
-                        class="bi bi-folder-plus"
+                        class="bi bi-folder2-open"
                         viewBox="0 0 16 16">
-                        <path d="m.5 3 .04.87a2 2 0 0 0-.342 1.311l.637 7A2 2 0 0 0 2.826 14H9v-1H2.826a1 1 0 0 1-.995-.91l-.637-7A1 1 0 0 1 2.19 4h11.62a1 1 0 0 1 .996 1.09L14.54 8h1.005l.256-2.819A2 2 0 0 0 13.81 3H9.828a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 6.172 1H2.5a2 2 0 0 0-2 2m5.672-1a1 1 0 0 1 .707.293L7.586 3H2.19q-.362.002-.683.12L1.5 2.98a1 1 0 0 1 1-.98z" />
-                        <path d="M13.5 9a.5.5 0 0 1 .5.5V11h1.5a.5.5 0 1 1 0 1H14v1.5a.5.5 0 1 1-1 0V12h-1.5a.5.5 0 0 1 0-1H13V9.5a.5.5 0 0 1 .5-.5" />
+                        <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zM2 6h12v-.5a.5.5 0 0 0-.5-.5H9c-.964 0-1.71-.629-2.174-1.154C6.374 3.334 5.82 3 5.264 3H2.5a.5.5 0 0 0-.5.5zm-.367 1a.5.5 0 0 0-.496.562l.64 5.124A1.5 1.5 0 0 0 3.266 14h9.468a1.5 1.5 0 0 0 1.489-1.314l.64-5.124A.5.5 0 0 0 14.367 7z" />
+                    </svg>
+                </div>
+                <div class="float-right mx-1 cursor-pointer hover:text-indigo-500" title="Create file" onClick={() => createNewFile()}>
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        fill="currentColor"
+                        class="bi bi-file-earmark-plus"
+                        viewBox="0 0 16 16">
+                        <path d="M8 6.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V11a.5.5 0 0 1-1 0V9.5H6a.5.5 0 0 1 0-1h1.5V7a.5.5 0 0 1 .5-.5" />
+                        <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
                     </svg>
                 </div>
             </div>
@@ -37,8 +46,9 @@ export const FolderView = () => {
                 <div class="flex-auto text-neutral-400 text-center text-sm cursor-default select-none mt-8">
                     <p>No files found.</p>
                     <p>
-                        <span class="cursor-pointer text-neutral-200 hover:text-white" onClick={() => openFolderDialog()}>Add folders</span>
-                        <span> to view them here.</span>
+                        <span class="cursor-pointer text-neutral-200 hover:text-white" onClick={() => openFolderDialog()}>Add a folder</span>
+                        <span> or </span>
+                        <span class="cursor-pointer text-neutral-200 hover:text-white" onClick={() => createNewFile()}>create a new file.</span>
                     </p>
                 </div>
             </Show>
