@@ -1,5 +1,4 @@
-import { For, Show } from "solid-js";
-import { useStore } from "@nanostores/solid";
+import { createSignal, For, Show } from "solid-js";
 import { $folderState, loadFolder, openFolderDialog, removeFolder, selectEntity, toggleFolder, type FolderEntity } from "../stores/folderState";
 import { createNewFile, openFile } from "../stores/editorState";
 import { EntityType } from "../stores/enum";
@@ -9,7 +8,7 @@ export const FolderView = () => {
 
     tippy
 
-    const state = useStore($folderState);
+    const [state, setState] = createSignal($folderState.get());
 
     const selectFile = (index: number, file: FolderEntity) => {
         selectEntity(index);
@@ -20,6 +19,10 @@ export const FolderView = () => {
         removeFolder(folder);
         event.stopPropagation();
     }
+
+    $folderState.subscribe((state) => {
+        setState(state);
+    });
 
     return (
         <div class="flex flex-col flex-grow h-full">
