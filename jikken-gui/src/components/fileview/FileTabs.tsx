@@ -2,8 +2,11 @@ import { createSignal, For } from "solid-js";
 import { $editorState, addNewFile, closeFile, selectFile, type FileState } from "../../stores/editorState";
 import { $layoutState, setViewMode } from "../../stores/layoutState";
 import { EntityType, ViewMode } from "../../stores/enum";
+import { tippy } from '../TippySolid.tsx';
 
 export const FileTabs = () => {
+
+    tippy
 
     const [layoutState, setLayoutState] = createSignal($layoutState.get());
     const [editorState, setEditorState] = createSignal($editorState.get());
@@ -82,6 +85,11 @@ export const FileTabs = () => {
                 <div
                     class="group flex flex-none bg-neutral-900 px-4 border-b border-neutral-700 cursor-pointer text-center hover:bg-indigo-600 hover:text-white focus:z-10"
                     onClick={addNewFile}
+                    use:tippy={{
+                        props: {
+                            content: "Add new scratch pad",
+                        }
+                    }}
                 >
                     <span class="my-auto">
                         <svg
@@ -100,12 +108,17 @@ export const FileTabs = () => {
                 </div>
                 <div class="flex flex-1 bg-neutral-900 border-b border-neutral-700 items-center">
                     <div class="flex rounded-md ml-auto h-8 px-3">
-                        <button type="button" title="API Mode"
+                        <button type="button"
                             onClick={() => setViewMode(ViewMode.API)}
                             class="w-10 flex items-center rounded-l-md px-3 py-2 text-sm font-semibold focus:z-10"
                             classList={{
                                 "bg-indigo-600 text-white cursor-default": layoutState().viewMode === ViewMode.API,
                                 "bg-transparent text-neutral-400 border border-1 border-r-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": layoutState().viewMode !== ViewMode.API,
+                            }}
+                            use:tippy={{
+                                props: {
+                                    content: "API Mode",
+                                }
                             }}>
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"
@@ -116,12 +129,17 @@ export const FileTabs = () => {
                                 <path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471z" />
                             </svg>
                         </button>
-                        <button type="button" title="YAML Mode"
+                        <button type="button"
                             onClick={() => setViewMode(ViewMode.RAW)}
                             class="w-10 flex items-center -ml-px rounded-r-md px-3 py-2 text-sm font-semibold focus:z-10"
                             classList={{
                                 "bg-indigo-600 text-white": layoutState().viewMode === ViewMode.RAW,
                                 "bg-transparent text-neutral-400 border border-1 border-l-0 border-neutral-700 hover:bg-indigo-400 hover:text-white hover:border-indigo-400": layoutState().viewMode !== ViewMode.RAW,
+                            }}
+                            use:tippy={{
+                                props: {
+                                    content: "File Mode",
+                                }
                             }}>
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"

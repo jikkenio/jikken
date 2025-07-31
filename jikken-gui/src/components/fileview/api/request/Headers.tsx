@@ -3,8 +3,11 @@ import { createSignal, For, Show } from 'solid-js';
 import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
 import { parseBasicAuthHeader, type AuthState } from '../../../../stores/authState';
 import { AuthType, EntityType } from '../../../../stores/enum';
+import { tippy } from '../../../TippySolid.tsx';
 
 export const Headers = () => {
+
+    tippy
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
@@ -104,7 +107,12 @@ export const Headers = () => {
                                     class="grow text-sm bg-transparent pl-2 p-1 border-0 placeholder:text-neutral-500 focus-within:ring-0"
                                 />
                                 <Show when={header.generated}>
-                                    <span class="flex-none p-1 pr-1.5 text-neutral-400 hover:text-indigo-400" title="Auto-generated value">
+                                    <span class="flex-none p-1 pr-1.5 text-neutral-400 hover:text-indigo-400"
+                                        use:tippy={{
+                                            props: {
+                                                content: "Auto-generated value",
+                                            }
+                                        }}>
                                         <svg xmlns="http://www.w3.org/2000/svg"
                                             width="12"
                                             height="12"

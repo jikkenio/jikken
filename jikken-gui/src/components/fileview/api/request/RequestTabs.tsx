@@ -6,8 +6,11 @@ import { Body } from './Body';
 import { Auth } from './Auth';
 import { $editorState, saveCurrentFile } from "../../../../stores/editorState";
 import { EntityType } from "../../../../stores/enum";
+import { tippy } from '../../../TippySolid.tsx';
 
 export const RequestTabs = () => {
+
+    tippy
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
@@ -74,7 +77,14 @@ export const RequestTabs = () => {
                     </nav>
                     <Show when={isSaveable()}>
                         <span class="flex-none text-sm p-2 mr-1 cursor-pointer text-indigo-500 hover:text-indigo-300"
-                            onClick={() => saveCurrentFile()}>
+                            onClick={() => saveCurrentFile()}
+                            use:tippy={{
+                                props: {
+                                    content: "Save file",
+                                    placement: "left",
+                                }
+                            }}
+                        >
                             <svg xmlns="http://www.w3.org/2000/svg"
                                 width="16"
                                 height="16"

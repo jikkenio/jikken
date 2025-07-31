@@ -26,6 +26,7 @@
     "solid-js": "^1.9.7",
     "split.js": "^1.6.5",
     "tailwindcss": "^4.1.11",
+    "tippy.js": "^6.3.7",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

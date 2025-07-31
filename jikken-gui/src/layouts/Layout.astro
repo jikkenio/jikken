@@ -62,7 +62,7 @@ import "../styles/styles.css";
   }
 
   .gutter.gutter-horizontal {
-    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFCAYAAABmXv9yAAAABklEQVQoU2NkAANGxjT9/w8PD4+NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY0AAAD//2Tf8L8AAAAASUVORK5CYII=');
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFCAYAAABmXv9yAAAABklEQVQoU2NkAANGxjT9/w8PD4+NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY0AAAD//2Tf8L8AAAAASUVORK5CYII=");
     cursor: col-resize;
     width: 8px;
     height: 100%;
@@ -71,7 +71,7 @@ import "../styles/styles.css";
 
   /* Additional visual feedback for the gutter */
   .gutter::after {
-    content: '';
+    content: "";
     position: absolute;
     background-color: rgba(255, 255, 255, 0.1);
     pointer-events: none;
@@ -99,5 +99,9 @@ import "../styles/styles.css";
 
   .gutter:hover::after {
     opacity: 1;
+  }
+
+  .tippy-content {
+    font-size: 0.75rem;
   }
 </style>

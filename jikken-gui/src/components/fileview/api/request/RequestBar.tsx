@@ -1,8 +1,11 @@
 import { createSignal, Show } from "solid-js";
 import { $editorState, makeRequest, updateRequest, type Request } from "../../../../stores/editorState";
 import { EntityType, HttpVerb } from "../../../../stores/enum";
+import { tippy } from '../../../TippySolid.tsx';
 
 export const RequestBar = () => {
+
+    tippy;
 
     const getDisplayUrl = (request: Request | undefined) => {
         let url = request?.url ?? "";
@@ -98,8 +101,13 @@ export const RequestBar = () => {
             <Show when={executing()}>
                 <button
                     id="executing-button"
-                    disabled
-                    class="flex-none w-20 rounded-[4px] px-3 py-2 mx-2.5 text-sm font-semibold text-white shadow-sm disabled:bg-neutral-600"
+                    class="flex-none w-20 rounded-[4px] px-3 py-2 mx-2.5 text-sm font-semibold text-white shadow-sm bg-neutral-600 cursor-default"
+                    use:tippy={{
+                        props: {
+                            content: "Request in progress...",
+                            placement: "bottom",
+                        }
+                    }}
                 >
                     <svg class="mx-auto w-5 h-5 animate-spin"
                         viewBox="0 0 100 101"
