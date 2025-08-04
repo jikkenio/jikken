@@ -406,6 +406,28 @@ export const createNewTestFile = async () => {
   console.log("successfully created new test file at path ", savedFile?.path);
 };
 
+export const createNewConfigFile = async () => {
+  console.log("creating new config file");
+  let globals = new Map();
+  globals.set("example", "test");
+  let configFile: ConfigFile = {
+    settings: {
+      environment: "test"
+    },
+    globals: globals
+  };
+  let savedFile = await saveConfigFile(undefined, configFile);
+  if (!savedFile) {
+    console.log("failed to save new config file");
+    return;
+  }
+
+  let folderPath = savedFile!.path.replace(`/${savedFile.name}`, "");
+  await loadFolder(folderPath);
+  await openFile(EntityType.Config, savedFile.name, savedFile.path);
+  console.log("successfully created new config file at path ", savedFile?.path);
+};
+
 export const saveTestFile = async (file: File | undefined, testFile: TestFile) => {
   let savedFile: File | undefined;
   if (file) {

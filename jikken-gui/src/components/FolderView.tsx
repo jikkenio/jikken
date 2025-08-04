@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import { $folderState, loadFolder, openFolderDialog, removeFolder, selectEntity, toggleFolder, type FolderEntity } from "../stores/folderState";
-import { createNewTestFile, openFile } from "../stores/editorState";
+import { createNewConfigFile, createNewTestFile, openFile } from "../stores/editorState";
 import { EntityType } from "../stores/enum";
 import { tippy } from './TippySolid.tsx';
 import { type Content } from "tippy.js";
@@ -29,9 +29,9 @@ export const FolderView = () => {
         return (
             <div>
                 <ul class="divide-y-1 divide-neutral-600 text-neutral-300">
-                    <li class="cursor-pointer hover:text-white py-1.5" onClick={() => openFolderDialog()}>Add folder</li>
-                    <li class="cursor-pointer hover:text-white py-1.5" onClick={() => createNewTestFile()}>Create test file</li>
-                    <li class="text-neutral-500 py-1.5">Create config file</li>
+                    <li class="cursor-pointer hover:text-white py-1.5" onClick={openFolderDialog}>Add folder</li>
+                    <li class="cursor-pointer hover:text-white py-1.5" onClick={createNewTestFile}>Create test file</li>
+                    <li class="cursor-pointer hover:text-white py-1.5" onClick={createNewConfigFile}>Create config file</li>
                 </ul>
             </div>
         ) as Content;
@@ -51,7 +51,7 @@ export const FolderView = () => {
                             delay: 0,
                             duration: 0,
                             arrow: false,
-                            onShown(instance) {
+                            onShown(instance) { // this hides the dropdown when an item is clicked
                                 document.querySelector('[data-tippy-root]')?.addEventListener('click', _ => {
                                     instance.hide();
                                 });
