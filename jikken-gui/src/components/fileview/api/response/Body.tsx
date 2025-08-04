@@ -199,7 +199,7 @@ export const Body = () => {
             <div class="group flex flex-col flex-auto h-full min-w-0">
                 <Show when={body().content}>
                     <div class="flex w-full justify-end pointer-events-none">
-                        <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-neutral-800 invisible group-hover:visible">
+                        <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-transparent invisible group-hover:visible">
                             <span class="p-2 pr-1.5 hover:text-neutral-200"
                                 onClick={() => copy()}>
                                 <svg xmlns="http://www.w3.org/2000/svg"
