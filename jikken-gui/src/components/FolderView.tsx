@@ -39,7 +39,7 @@ export const FolderView = () => {
 
     return (
         <div class="flex flex-col flex-grow h-full">
-            <div class="flex-none h-8 text-neutral-300 py-1 mt-1 mb-2">
+            <div class="flex-none h-4 text-neutral-300 py-1 mt-1 mb-2">
                 <div class="float-right mx-1 cursor-pointer hover:text-indigo-500"
                     use:tippy={{
                         props: {
