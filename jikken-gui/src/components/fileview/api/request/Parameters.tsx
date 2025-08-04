@@ -64,10 +64,9 @@ export const Parameters = () => {
     }
 
     return (
-        <div id="tab-params-panel" class="p-3 pt-1 w-full">
+        <div id="tab-params-panel" class="p-3 pt-1 w-full flex flex-col">
             <div class="text-neutral-400 mb-2 text-sm font-medium">Query Parameters</div>
-
-            <ul>
+            <ul class="overflow-y-auto">
                 <For each={params()}>
                     {(param, index) => (
                         <li class="flex flex-row group text-neutral-300">

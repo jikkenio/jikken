@@ -90,10 +90,10 @@ export const Headers = () => {
     }
 
     return (
-        <div id="tab-headers-panel" class="p-3 pt-1 w-full">
+        <div id="tab-headers-panel" class="p-3 pt-1 w-full flex flex-col">
             <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
 
-            <ul>
+            <ul class="overflow-y-auto">
                 <For each={headers()}>
                     {(header, index) => (
                         <li class="flex flex-row group text-neutral-300">
