@@ -41,7 +41,6 @@ export const FolderView = () => {
         <div class="flex flex-col flex-grow h-full">
             <div class="flex-none h-8 text-neutral-300 py-1 mt-1 mb-2">
                 <div class="float-right mx-1 cursor-pointer hover:text-indigo-500"
-                    // onClick={() => openFolderDialog()}
                     use:tippy={{
                         props: {
                             content: dropdown(),
@@ -124,6 +123,11 @@ export const FolderView = () => {
                                             <span
                                                 class="flex-none cursor-pointer text-neutral-300"
                                                 onClick={() => loadFolder(entity.path)}
+                                                use:tippy={{
+                                                    props: {
+                                                        content: "Reload contents"
+                                                    }
+                                                }}
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg"
                                                     width="12"
@@ -139,6 +143,11 @@ export const FolderView = () => {
                                                 <span
                                                     class="flex-none cursor-pointer text-neutral-300 ml-1"
                                                     onClick={(e) => closeFolder(e, entity)}
+                                                    use:tippy={{
+                                                        props: {
+                                                            content: "Remove from view"
+                                                        }
+                                                    }}
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg"
                                                         width="12"
