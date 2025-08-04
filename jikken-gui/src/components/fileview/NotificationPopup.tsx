@@ -10,7 +10,7 @@ export const NotificationPopup = () => {
             <Show when={notification().active && notification().type === NotificationType.Success}>
                 <div aria-live="assertive" class="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6">
                     <div class="flex w-full flex-col items-center space-y-4 sm:items-end">
-                        <div class="pointer-events-auto group w-full max-w-sm overflow-hidden rounded-lg bg-emerald-600 shadow-lg ring-1 ring-white ring-opacity-5">
+                        <div class="pointer-events-auto group w-full max-w-sm overflow-hidden rounded-lg bg-emerald-600 shadow-lg">
                             <div class="p-4">
                                 <div class="flex items-start">
                                     <div class="flex-shrink-0 my-auto">
