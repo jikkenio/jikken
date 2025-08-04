@@ -3,8 +3,11 @@ import { $editorState, saveResponseBody } from '../../../../stores/editorState';
 import MonacoEditorSolid from '../MonacoEditorSolid';
 import { NotificationType, triggerNotification } from '../../../../stores/notificationState';
 import { EntityType } from '../../../../stores/enum';
+import { tippy } from '../../../TippySolid';
 
 export const Body = () => {
+
+    tippy
 
     enum BodyType {
         None,
@@ -18,7 +21,7 @@ export const Body = () => {
         try {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            
+
             // Check for parsing errors
             const errorNode = doc.querySelector('parsererror');
             if (errorNode) {
@@ -35,7 +38,7 @@ export const Body = () => {
         try {
             const parser = new DOMParser();
             const doc = parser.parseFromString(xml, 'application/xml');
-            
+
             // Check for parsing errors
             const errorNode = doc.querySelector('parsererror');
             if (errorNode) {
@@ -50,27 +53,27 @@ export const Body = () => {
 
     const formatElement = (element: Element, depth: number): string => {
         const indent = '  '.repeat(depth);
-        
+
         let result = `${indent}<${element.tagName.toLowerCase()}`;
-        
+
         // Add attributes
         for (let i = 0; i < element.attributes.length; i++) {
             const attr = element.attributes[i];
             result += ` ${attr.name}="${attr.value}"`;
         }
-        
+
         if (element.children.length === 0 && !element.textContent?.trim()) {
             // Self-closing tag
             result += ' />';
             return result;
         }
-        
+
         result += '>';
-        
+
         // Handle text content
         const textContent = element.textContent?.trim();
         const hasElementChildren = element.children.length > 0;
-        
+
         if (hasElementChildren) {
             result += '\n';
             // Add child elements
@@ -85,7 +88,7 @@ export const Body = () => {
             // Pure text content
             result += textContent;
         }
-        
+
         result += `</${element.tagName.toLowerCase()}>`;
         return result;
     };
@@ -98,7 +101,7 @@ export const Body = () => {
 
     const pretty = (body: string | undefined, bodyType: BodyType) => {
         if (!body) return undefined;
-        
+
         switch (bodyType) {
             case BodyType.Json:
                 try {
@@ -116,16 +119,16 @@ export const Body = () => {
                 return body;
         }
     }
-    
+
     const getContentType = (headers: any[] | undefined): string | undefined => {
         if (!headers) return undefined;
         const contentTypeHeader = headers.find(h => h.header.toLowerCase() === 'content-type');
         return contentTypeHeader?.value?.toLowerCase();
     }
-    
+
     const detectBodyType = (contentType: string | undefined, body: string | undefined): { type: BodyType, language: string } => {
         if (!body) return { type: BodyType.None, language: 'text' };
-        
+
         if (!contentType) {
             // Try to detect based on content
             const trimmed = body.trim();
@@ -138,7 +141,7 @@ export const Body = () => {
             }
             return { type: BodyType.Text, language: 'text' };
         }
-        
+
         if (contentType.includes('json')) {
             return { type: BodyType.Json, language: 'json' };
         } else if (contentType.includes('html')) {
@@ -157,10 +160,10 @@ export const Body = () => {
     let contentType = getContentType(currentResponse?.headers);
     let bodyInfo = detectBodyType(contentType, currentResponse?.body);
 
-    const [body, setBody] = createSignal({ 
-        type: bodyInfo.type, 
+    const [body, setBody] = createSignal({
+        type: bodyInfo.type,
         content: pretty(currentResponse?.body, bodyInfo.type),
-        language: bodyInfo.language 
+        language: bodyInfo.language
     } as Body)
 
     $editorState.subscribe((state) => {
@@ -169,10 +172,10 @@ export const Body = () => {
         const response = currentTestFile?.response;
         const contentType = getContentType(response?.headers);
         const bodyInfo = detectBodyType(contentType, response?.body);
-        setBody({ 
-            type: bodyInfo.type, 
+        setBody({
+            type: bodyInfo.type,
             content: pretty(response?.body, bodyInfo.type),
-            language: bodyInfo.language 
+            language: bodyInfo.language
         } as Body);
     });
 
@@ -201,7 +204,12 @@ export const Body = () => {
                     <div class="flex w-full justify-end pointer-events-none">
                         <div class="absolute z-10 mt-px mr-px flex flex-row pointer-events-auto cursor-pointer text-neutral-500 bg-transparent invisible group-hover:visible">
                             <span class="p-2 pr-1.5 hover:text-neutral-200"
-                                onClick={() => copy()}>
+                                onClick={copy}
+                                use:tippy={{
+                                    props: {
+                                        content: "Copy"
+                                    }
+                                }}>
                                 <svg xmlns="http://www.w3.org/2000/svg"
                                     width="16"
                                     height="16"
@@ -212,7 +220,12 @@ export const Body = () => {
                                 </svg>
                             </span>
                             <span class="p-2 pl-1.5 hover:text-neutral-200"
-                                onClick={() => saveResponseBody()}>
+                                onClick={saveResponseBody}
+                                use:tippy={{
+                                    props: {
+                                        content: "Save to file"
+                                    }
+                                }}>
                                 <svg xmlns="http://www.w3.org/2000/svg"
                                     width="16"
                                     height="16"
