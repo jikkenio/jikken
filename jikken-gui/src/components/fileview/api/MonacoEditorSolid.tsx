@@ -8,6 +8,7 @@ import { configureMonacoYaml } from 'monaco-yaml';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import YamlWorker from './yaml.worker.js?worker';
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 
 interface MonacoEditorProps {
     value?: string,
@@ -20,20 +21,9 @@ interface MonacoEditorProps {
 
 self.MonacoEnvironment = {
     getWorker: function (_, label) {
-        const getWorkerModule = (moduleUrl: string, label: string) => {
-            if (!self.MonacoEnvironment?.getWorkerUrl) {
-                return new EditorWorker();
-            }
-
-            return new Worker(self.MonacoEnvironment!.getWorkerUrl!(moduleUrl, label), {
-                name: label,
-                type: 'module'
-            });
-        };
-
         switch (label) {
             case 'json':
-                return getWorkerModule('/monaco-editor/esm/vs/language/json/json.worker?worker', label);
+                return new JsonWorker();
             case 'yaml':
                 return new YamlWorker();
             case 'html':
