@@ -390,7 +390,7 @@ export const saveCurrentFile = async () => {
   await addSavedFile(savedFile!);
 };
 
-export const createNewFile = async () => {
+export const createNewTestFile = async () => {
   console.log("creating new test file");
   let testFile: TestFile = getNewTestFile().testFile;
   testFile.request!.url = "https://api.jikken.io";

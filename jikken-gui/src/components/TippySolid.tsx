@@ -25,7 +25,7 @@ export function tippy<T extends Element>(
 ): void {
     createEffect(() => {
         const options = opts();
-        const instance = makeTippy(target, untrack(() => mergeProps(options?.props, defaultProps)));
+        const instance = makeTippy(target, untrack(() => mergeProps(defaultProps, options?.props)));
 
         createComputed(() => {
             if (options?.disabled) {
@@ -45,7 +45,7 @@ export function tippy<T extends Element>(
 
         createComputed(() => {
             instance.setProps({
-                ...(mergeProps(options?.props, defaultProps)),
+                ...(mergeProps(defaultProps, options?.props)),
             });
         });
 
