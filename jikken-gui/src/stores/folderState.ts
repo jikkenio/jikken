@@ -159,6 +159,7 @@ export const openFolderDialog = async () => {
 };
 
 export const loadFolder = async (path: string) => {
+    console.log("loading folder at path: ", path);
     let result: FolderResult = await invoke("open_folder_path", { path: path });
     console.log("open folder result: ", result);
     if (!result) return;

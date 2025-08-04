@@ -400,7 +400,7 @@ export const createNewTestFile = async () => {
     return;
   }
 
-  let folderPath = savedFile!.path.replace(savedFile.name, "");
+  let folderPath = savedFile!.path.replace(`/${savedFile.name}`, "");
   await loadFolder(folderPath);
   await openFile(EntityType.Test, savedFile.name, savedFile.path);
   console.log("successfully created new test file at path ", savedFile?.path);
