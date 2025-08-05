@@ -60,18 +60,18 @@ export const RequestTabs = () => {
 
                                     <Show when={!tab.showCount && tab.items > 0}>
                                         <span
-                                            class="ml-0.5 my-auto inline-block"
+                                            class="ml-1.5 my-auto inline-block"
                                             classList={{
                                                 "text-indigo-500": tab.index === layoutState().requestTabIndex,
                                                 "text-neutral-400 group-hover:text-neutral-300": tab.index !== layoutState().requestTabIndex,
                                             }}
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg"
-                                                width="16"
+                                                width="6"
                                                 height="16"
                                                 fill="currentColor"
                                                 class="bi bi-dot"
-                                                viewBox="0 0 16 16">
+                                                viewBox="6 0 3 16">
                                                 <path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6" />
                                             </svg>
                                         </span>
