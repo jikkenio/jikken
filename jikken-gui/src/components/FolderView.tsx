@@ -74,11 +74,11 @@ export const FolderView = () => {
                 </div>
             </div>
             <Show when={state().entities.length === 0} >
-                <div class="flex-auto text-neutral-400 text-center text-sm cursor-default select-none mt-8">
-                    <p>No files found.</p>
+                <div class="flex-auto mx-auto text-neutral-400 text-center text-sm cursor-default select-none mt-8 max-w-56">
+                    <p class="mb-2">No files found.</p>
                     <p>
                         <span class="cursor-pointer text-neutral-200 hover:text-white" onClick={() => openFolderDialog()}>Add a folder</span>
-                        <span> or </span>
+                        <span> to see its files here, or </span>
                         <span class="cursor-pointer text-neutral-200 hover:text-white" onClick={() => createNewTestFile()}>create a new file.</span>
                     </p>
                 </div>

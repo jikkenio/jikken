@@ -659,7 +659,7 @@ fn main() {
         .setup(|app| {
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Jikken")
-                .inner_size(1200.0, 800.0);
+                .inner_size(1400.0, 900.0);
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
