@@ -3,8 +3,6 @@ import { AuthType } from "./enum";
 
 const AUTH_TYPE_PREFIXES = new Set(["basic", "bearer"]);
 
-
-
 const NO_AUTH = {
     type: AuthType.None,
 };
@@ -18,9 +16,14 @@ export type BearerAuthData = {
     token?: string,
 };
 
-export type AuthState = {
+export type AuthData = {
     type: AuthType,
     data?: BasicAuthData | BearerAuthData,
+};
+
+export type AuthState = {
+    request: AuthData,
+    compare?: AuthData,
 };
 
 export const parseAuthData = (headers?: HttpHeader[]) => {
@@ -60,4 +63,4 @@ export const parseBasicAuthHeader = (header: HttpHeader) => {
     } catch {
         return [undefined, undefined];
     }
-}
+};

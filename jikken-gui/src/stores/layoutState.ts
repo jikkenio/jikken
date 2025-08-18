@@ -14,10 +14,13 @@ export type LayoutState = {
     folderPanelVisible: boolean,
     requestTabPanelVisible: boolean,
     responseTabPanelVisible: boolean,
+    responseCompareTabPanelVisible: boolean,
     requestTabs: RequestResponseTab[],
     responseTabs: RequestResponseTab[],
+    responseCompareTabs: RequestResponseTab[],
     requestTabIndex: number,
     responseTabIndex: number,
+    responseCompareTabIndex: number,
 };
 
 const initState: LayoutState = {
@@ -25,6 +28,7 @@ const initState: LayoutState = {
     folderPanelVisible: true,
     requestTabPanelVisible: true,
     responseTabPanelVisible: true,
+    responseCompareTabPanelVisible: true,
     requestTabs: [{
         label: "Params",
         id: "tab-params",
@@ -67,12 +71,35 @@ const initState: LayoutState = {
         index: 2,
         showCount: true,
     },],
+    responseCompareTabs: [{
+        label: "Diff",
+        id: "tab-diff",
+        items: 0,
+        index: 1,
+        showCount: false,
+    },
+    {
+        label: "Response 1",
+        id: "tab-response-1",
+        items: 0,
+        index: 2,
+        showCount: false,
+    },
+    {
+        label: "Response 2",
+        id: "tab-response-2",
+        items: 0,
+        index: 3,
+        showCount: false,
+    },],
     requestTabIndex: 1,
     responseTabIndex: 1,
+    responseCompareTabIndex: 1,
 };
 
 const requestTabIndexByName = new Map([["tab-params", 1], ["tab-headers", 2], ["tab-auth", 3], ["tab-body", 4]]);
 const responseTabIndexByName = new Map([["tab-body", 1], ["tab-headers", 2]]);
+const responseCompareTabIndexByName = new Map([["tab-diff", 1], ["tab-response-1", 2], ["tab-response-2", 3]]);
 
 export const $layoutState = map(initState);
 
@@ -88,7 +115,7 @@ export const setFolderPanel = (visible: boolean) => {
 
 export const setViewMode = (mode: ViewMode) => {
     $layoutState.setKey("viewMode", mode);
-}
+};
 
 export const setRequestTabActive = (index: number, allowToggle: boolean = true) => {
     if (allowToggle && !$layoutState.value?.requestTabPanelVisible) {
@@ -103,10 +130,6 @@ export const setRequestTabActive = (index: number, allowToggle: boolean = true) 
         }
     }
 
-    return true;
-};
-
-export const setRequestTabVisible = (_visible: boolean) => {
     return true;
 };
 
@@ -137,10 +160,6 @@ export const setResponseTabActive = (index: number, allowToggle: boolean = true)
     return true;
 };
 
-export const setResponseTabVisible = (_visible: boolean) => {
-    return true;
-};
-
 export const setResponseTabCount = (id: string, count: number) => {
     if (!responseTabIndexByName.has(id)) return;
 
@@ -150,4 +169,31 @@ export const setResponseTabCount = (id: string, count: number) => {
     tab.items = count;
     tabs[tabIndex - 1] = { ...tab };
     $layoutState.setKey("responseTabs", [...tabs]);
+};
+
+export const setResponseCompareTabActive = (index: number, allowToggle: boolean = true) => {
+    if (allowToggle && !$layoutState.value?.responseCompareTabPanelVisible) {
+        $layoutState.setKey("responseCompareTabPanelVisible", true);
+        $layoutState.setKey("responseCompareTabIndex", index);
+    } else {
+        if (allowToggle && $layoutState.value?.responseCompareTabIndex === index) {
+            $layoutState.setKey("responseCompareTabPanelVisible", false);
+            $layoutState.setKey("responseCompareTabIndex", 0);
+        } else {
+            $layoutState.setKey("responseCompareTabIndex", index);
+        }
+    }
+
+    return true;
+};
+
+export const setResponseCompareTabCount = (id: string, count: number) => {
+    if (!responseCompareTabIndexByName.has(id)) return;
+
+    let tabIndex: number = responseCompareTabIndexByName.get(id)!;
+    let tabs = $layoutState.get().responseCompareTabs;
+    let tab = tabs[tabIndex - 1];
+    tab.items = count;
+    tabs[tabIndex - 1] = { ...tab };
+    $layoutState.setKey("responseCompareTabs", [...tabs]);
 };

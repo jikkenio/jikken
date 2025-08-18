@@ -1,11 +1,11 @@
 import { createSignal, For, Show } from "solid-js";
 import { $layoutState, setResponseTabActive } from "../../../../stores/layoutState";
+import { Body } from "./Body";
 import { Headers } from "./Headers";
-import { Body } from './Body';
 import { $editorState } from "../../../../stores/editorState";
 import { EntityType } from "../../../../stores/enum";
 
-export const ResponseTabs = () => {
+export const ResponseTabs = (props: { compare: boolean }) => {
 
     enum StatusType {
         SUCCESS,
@@ -17,15 +17,14 @@ export const ResponseTabs = () => {
     let currentFile = editorState.files[editorState.currentFile];
     let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
-    let [response, setResponse] = createSignal(currentTestFile?.response);
+    let [response, setResponse] = createSignal(props.compare ? currentTestFile?.responses.compare : currentTestFile?.responses.request);
+    let [layout, setLayout] = createSignal($layoutState.get());
 
     $editorState.subscribe((state) => {
-        let currentFile = state.files[state.currentFile];
-        let currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
-        setResponse(currentTestFile?.response);
+        let file = state.files[state.currentFile];
+        let testFile = file.type === EntityType.Test ? state.testFiles[file.index] : undefined;
+        setResponse(props.compare ? testFile?.responses.compare : testFile?.responses.request);
     });
-
-    let [layout, setLayout] = createSignal($layoutState.get());
 
     $layoutState.subscribe((value) => {
         setLayout({ ...value });
@@ -100,15 +99,11 @@ export const ResponseTabs = () => {
         let m = (time - remainder) / 60000;
         let s = ((time - (m * 60000)) / 1000).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
         return `${m}m ${s}s`;
-    }
+    };
 
     return (
-        <div
-            class="flex flex-auto flex-col h-full min-w-0 min-h-0"
-            classList={{
-                hidden: !response()
-            }}>
-            <div class="border-b border-neutral-800 m-3 mt-0 flex justify-between flex-shrink-0">
+        <div class="flex flex-col size-full min-h-0">
+            <div class="flex border-b border-neutral-800 m-3 mt-0 justify-between flex-shrink-0">
                 <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                     <For each={layout().responseTabs}>
                         {(tab) => (
@@ -178,12 +173,12 @@ export const ResponseTabs = () => {
                 <div id="tab-content" class="select-none flex flex-auto h-full overflow-hidden min-w-0 max-h-full min-h-0">
                     <Show when={layout().responseTabIndex === 1}>
                         <div id="tab-body-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
-                            <Body />
+                            <Body compare={props.compare} />
                         </div>
                     </Show>
                     <Show when={layout().responseTabIndex === 2}>
                         <div id="tab-headers-panel" class="flex flex-auto h-full min-w-0 max-h-full min-h-0">
-                            <Headers />
+                            <Headers compare={props.compare} />
                         </div>
                     </Show>
                 </div>

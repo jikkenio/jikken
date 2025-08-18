@@ -2,18 +2,19 @@ import { createSignal, For } from 'solid-js';
 import { $editorState } from '../../../../stores/editorState';
 import { EntityType } from '../../../../stores/enum';
 
-export const Headers = () => {
+export const Headers = (props: { compare: boolean }) => {
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
     let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
+    let currentResponse = currentTestFile?.responses;
 
-    const [headers, setHeaders] = createSignal(currentTestFile?.response?.headers ?? []);
+    const [headers, setHeaders] = createSignal((props.compare ? currentResponse?.compare?.headers : currentResponse?.request?.headers) ?? []);
 
     $editorState.subscribe((state) => {
-        currentFile = state.files[state.currentFile];
-        currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
-        setHeaders(currentTestFile?.response?.headers ?? []);
+        let file = state.files[state.currentFile];
+        let testFile = file.type === EntityType.Test ? state.testFiles[file.index] : undefined;
+        setHeaders((props.compare ? testFile?.responses.compare?.headers : testFile?.responses.request?.headers) ?? []);
     });
 
     return (
@@ -39,4 +40,4 @@ export const Headers = () => {
             </div>
         </div>
     );
-}
+};

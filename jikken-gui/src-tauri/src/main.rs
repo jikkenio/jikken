@@ -620,6 +620,73 @@ async fn make_request(test_file: TestFile) -> Option<HttpRequestResponse> {
 }
 
 #[tauri::command]
+async fn make_compare_request(test_file: TestFile) -> Option<HttpRequestResponse> {
+    let compare = test_file.compare.unwrap();
+    let method = match compare.method.unwrap_or(HttpVerb::Get) {
+        HttpVerb::Get => Method::GET,
+        HttpVerb::Post => Method::POST,
+        HttpVerb::Put => Method::PUT,
+        HttpVerb::Patch => Method::PATCH,
+        HttpVerb::Delete => Method::DELETE,
+        _ => Method::GET,
+    };
+
+    let mut headers = HeaderMap::new();
+    compare
+        .headers
+        .unwrap_or_default()
+        .into_iter()
+        .for_each(|h| {
+            let head: Cow<'static, str> = h.header.into();
+            headers.insert(
+                HeaderName::from_bytes(head.as_bytes()).unwrap(),
+                HeaderValue::from_str(h.value.as_str()).unwrap(),
+            );
+        });
+
+    let mut params: Vec<(String, String)> = Vec::new();
+    compare.params.unwrap_or_default().iter().for_each(|p| {
+        params.push((p.param.clone(), p.value.clone()));
+    });
+
+    let client = Client::new();
+
+    let timer = SystemTime::now();
+    let mut client_request = client
+        .request(method, compare.url)
+        .headers(headers)
+        .query(&params);
+    if let Some(body) = compare.body {
+        client_request = client_request.body(Body::from(serde_json::to_string(&body).unwrap()));
+    }
+
+    match client_request.send().await {
+        Ok(response) => {
+            let end = timer.elapsed().unwrap();
+            let status = response.status().as_u16();
+            let headers = response
+                .headers()
+                .iter()
+                .map(|h| Header {
+                    header: h.0.to_string(),
+                    value: h.1.to_str().unwrap().to_string(),
+                })
+                .collect();
+            let body = response.text().await.unwrap();
+
+            Some(HttpRequestResponse {
+                status,
+                time: end.as_millis(),
+                size: body.len(),
+                headers,
+                body: Some(body),
+            })
+        }
+        Err(_) => None,
+    }
+}
+
+#[tauri::command]
 async fn save_response_body(app: tauri::AppHandle, body: String) -> Option<FileMetadata> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -701,6 +768,7 @@ fn main() {
             save_new_config_file,
             save_existing_config_file,
             make_request,
+            make_compare_request,
             save_response_body,
         ])
         .run(tauri::generate_context!())

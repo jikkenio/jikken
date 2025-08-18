@@ -14,3 +14,7 @@ button:not(:disabled) {
 select:not(:disabled) {
   cursor: pointer;
 }
+
+input[type="radio"]:not(:checked) {
+  border-color: #737373;
+}

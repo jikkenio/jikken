@@ -1,8 +1,7 @@
 ---
 import { FileTabs } from "./FileTabs";
-import { RequestBar } from "./api/request/RequestBar";
-import { RequestTabs } from "./api/request/RequestTabs";
-import { ResponseTabs } from "./api/response/ResponseTabs";
+import { RequestPanel } from "./api/request/RequestPanel";
+import { ResponsePanel } from "./api/response/ResponsePanel";
 import { $layoutState } from "../../stores/layoutState";
 import { YamlView } from "./api/YamlView";
 import { EntityType, ViewMode } from "../../stores/enum";
@@ -26,17 +25,11 @@ let currentFile = editorState?.files[editorState.currentFile];
       class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden"
       class:list={[{ hidden: $layoutState.value?.viewMode !== ViewMode.API }]}
     >
-      <RequestBar client:only />
-      <div
-        id="api-view"
-        class="flex flex-col flex-auto min-w-0 min-h-0 overflow-hidden"
-      >
-        <div id="request-panel" class="min-w-0 min-h-0 overflow-hidden w-full">
-          <RequestTabs client:only />
-        </div>
-        <div id="response-panel" class="min-w-0 min-h-0 overflow-hidden">
-          <ResponseTabs client:only />
-        </div>
+      <div id="request-panel" class="min-w-0 min-h-0 overflow-hidden w-full">
+        <RequestPanel client:only />
+      </div>
+      <div id="response-panel" class="min-w-0 min-h-0 overflow-hidden w-full">
+        <ResponsePanel client:only />
       </div>
     </div>
     <div
@@ -192,6 +185,4 @@ let currentFile = editorState?.files[editorState.currentFile];
     --jse-font-size: 10px;
     --jse-font-size-mono: 12px;
   }
-
-  /* Split.js CSS moved to global Layout.astro */
 </style>

@@ -5,9 +5,9 @@ import { NotificationType, triggerNotification } from '../../../../stores/notifi
 import { EntityType } from '../../../../stores/enum';
 import { tippy } from '../../../TippySolid';
 
-export const Body = () => {
+export const Body = (props: { compare: boolean }) => {
 
-    tippy
+    tippy;
 
     enum BodyType {
         None,
@@ -118,13 +118,13 @@ export const Body = () => {
                 // For Text and other types, return as-is
                 return body;
         }
-    }
+    };
 
     const getContentType = (headers: any[] | undefined): string | undefined => {
         if (!headers) return undefined;
         const contentTypeHeader = headers.find(h => h.header.toLowerCase() === 'content-type');
         return contentTypeHeader?.value?.toLowerCase();
-    }
+    };
 
     const detectBodyType = (contentType: string | undefined, body: string | undefined): { type: BodyType, language: string } => {
         if (!body) return { type: BodyType.None, language: 'text' };
@@ -151,12 +151,12 @@ export const Body = () => {
         } else {
             return { type: BodyType.Text, language: 'text' };
         }
-    }
+    };
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
     let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
-    let currentResponse = currentTestFile?.response;
+    let currentResponse = props.compare ? currentTestFile?.responses.compare : currentTestFile?.responses.request;
     let contentType = getContentType(currentResponse?.headers);
     let bodyInfo = detectBodyType(contentType, currentResponse?.body);
 
@@ -164,12 +164,14 @@ export const Body = () => {
         type: bodyInfo.type,
         content: pretty(currentResponse?.body, bodyInfo.type),
         language: bodyInfo.language
-    } as Body)
+    } as Body);
+
+    const [hasResponse, setHasResponse] = createSignal(currentResponse?.status !== undefined);
 
     $editorState.subscribe((state) => {
         currentFile = state.files[state.currentFile];
         currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
-        const response = currentTestFile?.response;
+        const response = props.compare ? currentTestFile?.responses.compare : currentTestFile?.responses.request;
         const contentType = getContentType(response?.headers);
         const bodyInfo = detectBodyType(contentType, response?.body);
         setBody({
@@ -177,6 +179,7 @@ export const Body = () => {
             content: pretty(response?.body, bodyInfo.type),
             language: bodyInfo.language
         } as Body);
+        setHasResponse(response?.status !== undefined);
     });
 
     const copy = async () => {
@@ -220,7 +223,7 @@ export const Body = () => {
                                 </svg>
                             </span>
                             <span class="p-2 pl-1.5 hover:text-neutral-200"
-                                onClick={saveResponseBody}
+                                onClick={[saveResponseBody, props.compare]}
                                 use:tippy={{
                                     props: {
                                         content: "Save to file"
@@ -238,11 +241,11 @@ export const Body = () => {
                             </span>
                         </div>
                     </div>
-                    <div class="w-full flex-auto h-full min-w-0">
+                    <div class="size-full flex-auto min-w-0">
                         <MonacoEditorSolid value={body().content} language={body().language || 'text'} readonly />
                     </div>
                 </Show>
-                <Show when={currentTestFile?.response?.status && !body().content}>
+                <Show when={hasResponse() && !body().content}>
                     <div class="flex flex-auto justify-center items-center">
                         <span class="text-sm text-neutral-600">This response has no body.</span>
                     </div>
@@ -255,4 +258,4 @@ export const Body = () => {
             </div>
         </div>
     );
-}
+};

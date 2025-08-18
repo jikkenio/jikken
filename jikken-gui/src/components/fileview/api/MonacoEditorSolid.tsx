@@ -45,12 +45,12 @@ const theme = {
         "editor.lineHighlightBackground": "#2d2d2d",
     },
     rules: [],
-}
+};
 monaco.editor.defineTheme("vs-dark-custom", theme);
 
 export default function MonacoEditorSolid(props: MonacoEditorProps) {
     const containerRef = document.createElement("div");
-    containerRef.classList.add("w-full", "h-full");
+    containerRef.classList.add("size-full");
     let editorInstance: monaco.editor.IStandaloneCodeEditor | undefined;
     const [localValue, setLocalValue] = createSignal(props.value);
 

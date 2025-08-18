@@ -159,7 +159,7 @@ export type ConfigSettings = {
   continueOnFailure?: boolean,
   devMode?: boolean,
   environment?: string,
-}
+};
 
 export type File = {
   name: string;
@@ -181,12 +181,25 @@ export type FileState = {
   index: number,
 };
 
+export type TestFileResponses = {
+  request?: HttpResponse,
+  compare?: HttpResponse,
+};
+
+export type CompareState = {
+  inheritParams?: boolean,
+  inheritHeaders?: boolean,
+  inheritAuth?: boolean,
+  inheritBody?: boolean,
+};
+
 export type TestFileState = {
   testFile: TestFile,
   executing: boolean,
-  response?: HttpResponse,
+  responses: TestFileResponses,
   auth: AuthState,
-}
+  compare?: CompareState,
+};
 
 export type EditorState = {
   currentFile: number,
@@ -202,7 +215,7 @@ const getNewFileState = (index: number) => {
     type: EntityType.Test,
     index: index,
   };
-}
+};
 
 const getNewTestFile = () => {
   return {
@@ -212,10 +225,10 @@ const getNewTestFile = () => {
       },
     },
     executing: false,
-    response: undefined,
-    auth: { type: AuthType.None },
+    responses: {},
+    auth: { request: { type: AuthType.None } },
   };
-}
+};
 
 const initState: EditorState = {
   currentFile: 0,
@@ -234,7 +247,7 @@ export const updateTestFile = (file: TestFile) => {
   currentFile.testFile = { ...file };
   $editorState.set({ ...currentState });
   resetTabCounts(currentFile);
-}
+};
 
 export const updateRequest = (request: Request) => {
   console.log("editor state - updating request: ", request);
@@ -245,6 +258,15 @@ export const updateRequest = (request: Request) => {
   $editorState.set({ ...currentState });
 };
 
+export const updateCompare = (compare: Compare) => {
+  console.log("editor state - updating compare: ", compare);
+  let currentState = $editorState.get();
+  let index = currentState.files[currentState.currentFile].index;
+  let currentFile = currentState.testFiles[index];
+  currentFile.testFile.compare = { ...compare };
+  $editorState.set({ ...currentState });
+};
+
 export const updateAuth = (auth: AuthState) => {
   console.log("editor state - updating auth: ", auth);
   let currentState = $editorState.get();
@@ -252,7 +274,16 @@ export const updateAuth = (auth: AuthState) => {
   let currentFile = currentState.testFiles[index];
   currentFile.auth = { ...auth };
   $editorState.set({ ...currentState });
-  setRequestTabCount("tab-auth", auth.type === AuthType.None ? 0 : 1);
+  setRequestTabCount("tab-auth", auth.request.type === AuthType.None ? 0 : 1);
+};
+
+export const updateCompareState = (compare: CompareState) => {
+  console.log("editor state - updating compare status: ", compare);
+  let currentState = $editorState.get();
+  let index = currentState.files[currentState.currentFile].index;
+  let currentFile = currentState.testFiles[index];
+  currentFile.compare = { ...compare };
+  $editorState.set({ ...currentState });
 };
 
 export const updateConfigFile = (file: ConfigFile) => {
@@ -318,12 +349,8 @@ const openTestFile = async (file: File) => {
   console.log("test file contents: ", testFile);
 
   // add content-type header, if applicable
-  if (
-    testFile.request?.body &&
-    !(testFile.request?.headers ?? []).some(
-      (h) => h.header.toLowerCase() === "content-type"
-    )
-  ) {
+  if (testFile.request?.body &&
+    !(testFile.request?.headers ?? []).some((h) => h.header.toLowerCase() === "content-type")) {
     if (!testFile.request) testFile.request = {};
     if (!testFile.request.headers) testFile.request.headers = [];
     testFile.request.headers.push({
@@ -334,12 +361,23 @@ const openTestFile = async (file: File) => {
   }
 
   // add auth data, if applicable
-  let auth = parseAuthData(testFile.request?.headers);
+  let requestAuth = parseAuthData(testFile.request?.headers);
+  let compareAuth = testFile.compare ? parseAuthData(testFile.compare?.headers) : undefined;
 
   let currentState = $editorState.get();
   let newIndex = currentState.testFiles.length;
   let fileState = { id: uuidv4(), file: file, type: EntityType.Test, index: newIndex };
-  let testFileState = { testFile: testFile, executing: false, auth: auth };
+  let testFileState: TestFileState = { testFile: testFile, executing: false, responses: {}, auth: { request: requestAuth, compare: compareAuth } };
+
+  if (testFile.compare) {
+    let compareState: CompareState = {};
+    compareState.inheritParams = testFile.compare?.params === undefined;
+    compareState.inheritHeaders = testFile.compare?.headers === undefined;
+    compareState.inheritAuth = (compareAuth?.type ?? AuthType.None) === AuthType.None;
+    compareState.inheritBody = testFile.compare?.body === undefined;
+    testFileState.compare = compareState;
+  }
+
   currentState.files.push(fileState);
   currentState.testFiles.push(testFileState);
   currentState.currentFile = currentState.files.length - 1;
@@ -513,7 +551,7 @@ export const closeFile = (index: number) => {
   $editorState.set({ ...state });
 };
 
-export const makeRequest = async () => {
+export const makeRequest = async (compare: boolean = false) => {
   let state = $editorState.get();
   let file = state.files[state.currentFile];
   let testFile = state.testFiles[file.index];
@@ -524,12 +562,94 @@ export const makeRequest = async () => {
     return;
   }
 
-  testFile.response = undefined;
+  if (compare) {
+    testFile.responses.compare = undefined;
+  } else {
+    testFile.responses.request = undefined;
+  }
   testFile.executing = true;
   $editorState.set({ ...state });
   clearNotification();
   let response: HttpResponse;
 
+  if (compare) {
+    try {
+      let modifiedFile: TestFile = { ...testFile.testFile };
+      if (testFile.compare?.inheritParams) {
+        modifiedFile.compare!.params = testFile.testFile.request.params;
+      }
+      if (testFile.compare?.inheritHeaders) {
+        modifiedFile.compare!.headers = testFile.testFile.request.headers;
+      }
+      if (testFile.compare?.inheritBody) {
+        modifiedFile.compare!.body = testFile.testFile.request.body;
+      }
+
+      response = await invoke("make_compare_request", { testFile: modifiedFile });
+    } catch (ex) {
+      triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+      console.log("Failed to make network request: ", ex);
+      testFile.executing = false;
+      $editorState.set({ ...state });
+      return;
+    }
+  } else {
+    try {
+      response = await invoke("make_request", { testFile: testFile.testFile });
+    } catch (ex) {
+      triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+      console.log("Failed to make network request: ", ex);
+      testFile.executing = false;
+      $editorState.set({ ...state });
+      return;
+    }
+  }
+
+  if (!response) {
+    triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+    console.log("Failed to make network request, null response");
+    testFile.executing = false;
+    $editorState.set({ ...state });
+    return;
+  }
+
+  console.log("http response: ", response);
+  if (compare) {
+    testFile.responses.compare = response;
+  } else {
+    testFile.responses.request = response;
+  }
+  testFile.executing = false;
+  $editorState.set({ ...state });
+  setResponseTabCount("tab-body", response.body ? 1 : 0);
+  setResponseTabCount("tab-headers", response.headers.length);
+
+  // Initialize Split.js now that response is available and panels should be visible
+  setTimeout(() => {
+    if (typeof window !== 'undefined' && (window as any).initializeRequestResponseSplit) {
+      (window as any).initializeRequestResponseSplit();
+    }
+  }, 100);
+};
+
+export const makeDoubleRequest = async () => {
+  let state = $editorState.get();
+  let file = state.files[state.currentFile];
+  let testFile = state.testFiles[file.index];
+
+  console.log("making http requests: ", testFile.testFile.request, testFile.testFile.compare);
+  if (!testFile.testFile.request?.url || !testFile.testFile.compare?.url) {
+    console.log("no request url");
+    return;
+  }
+
+  testFile.responses.request = undefined;
+  testFile.responses.compare = undefined;
+  testFile.executing = true;
+  $editorState.set({ ...state });
+  clearNotification();
+
+  let response: HttpResponse;
   try {
     response = await invoke("make_request", { testFile: testFile.testFile });
   } catch (ex) {
@@ -548,12 +668,44 @@ export const makeRequest = async () => {
     return;
   }
 
+  testFile.responses.request = response;
   console.log("http response: ", response);
-  testFile.response = response;
+
+  let compareResponse: HttpResponse;
+  try {
+    let modifiedFile: TestFile = { ...testFile.testFile };
+    if (testFile.compare?.inheritParams) {
+      modifiedFile.compare!.params = testFile.testFile.request.params;
+    }
+    if (testFile.compare?.inheritHeaders) {
+      modifiedFile.compare!.headers = testFile.testFile.request.headers;
+    }
+    if (testFile.compare?.inheritBody) {
+      modifiedFile.compare!.body = testFile.testFile.request.body;
+    }
+
+    compareResponse = await invoke("make_compare_request", { testFile: modifiedFile });
+  } catch (ex) {
+    triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+    console.log("Failed to make network request: ", ex);
+    testFile.executing = false;
+    $editorState.set({ ...state });
+    return;
+  }
+
+  if (!compareResponse) {
+    triggerBanner(NotificationType.Error, "Failed to execute HTTP request");
+    console.log("Failed to make network request, null response");
+    testFile.executing = false;
+    $editorState.set({ ...state });
+    return;
+  }
+
+  testFile.responses.compare = compareResponse;
   testFile.executing = false;
   $editorState.set({ ...state });
-  setResponseTabCount("tab-body", response.body ? 1 : 0);
-  setResponseTabCount("tab-headers", response.headers.length);
+  setResponseTabCount("tab-body", response.body || compareResponse.body ? 1 : 0);
+  setResponseTabCount("tab-headers", Math.max(response.headers.length, compareResponse.headers.length));
 
   // Initialize Split.js now that response is available and panels should be visible
   setTimeout(() => {
@@ -634,11 +786,12 @@ const formatElement = (element: Element, depth: number): string => {
   return result;
 };
 
-export const saveResponseBody = async () => {
+export const saveResponseBody = async (compare: boolean = false) => {
   let state = $editorState.get();
   console.log("saving response body from file at index ", state.currentFile);
   let index = state.files[state.currentFile].index;
-  let response = state.testFiles[index].response;
+  let responses = state.testFiles[index].responses;
+  let response = compare ? responses.compare : responses.request;
   if (!response?.body) {
     console.log("no response body found");
     return;
@@ -679,17 +832,17 @@ export const saveResponseBody = async () => {
 const resetTabCounts = (file: TestFileState | undefined) => {
   setRequestTabCount("tab-params", file?.testFile.request?.params?.length ?? 0);
   setRequestTabCount("tab-headers", file?.testFile.request?.headers?.length ?? 0);
-  setRequestTabCount("tab-auth", (file?.auth ?? {}).type !== AuthType.None ? 1 : 0);
+  setRequestTabCount("tab-auth", ((file?.auth?.request.type ?? AuthType.None) !== AuthType.None ? 1 : 0));
   setRequestTabCount("tab-body", file?.testFile.request?.body ? 1 : 0);
-  setResponseTabCount("tab-body", file?.response?.body ? 1 : 0);
-  setResponseTabCount("tab-headers", file?.response?.headers?.length ?? 0);
+  setResponseTabCount("tab-body", (file?.responses?.request?.body ?? file?.responses.compare?.body) ? 1 : 0);
+  setResponseTabCount("tab-headers", Math.max(file?.responses?.request?.headers?.length ?? 0, file?.responses?.compare?.headers?.length ?? 0));
 };
 
 const resetTabs = (testFile: TestFileState | undefined) => {
   resetTabCounts(testFile);
   setRequestTabActive(1, false);
   setResponseTabActive(1, false);
-}
+};
 
 const pruneGeneratedValues = (file: TestFileState) => {
   let headers = file.testFile.request?.headers;

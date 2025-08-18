@@ -1,28 +1,29 @@
 import { createSignal, For, Show } from "solid-js";
-import { $layoutState, setRequestTabActive } from "../../../../stores/layoutState";
-import { Parameters } from "./Parameters";
-import { Headers } from "./Headers";
-import { Body } from './Body';
-import { Auth } from './Auth';
-import { $editorState, saveCurrentFile } from "../../../../stores/editorState";
-import { EntityType } from "../../../../stores/enum";
+import { $layoutState, setRequestTabActive } from "../../../../stores/layoutState.ts";
+import { Parameters } from "./Parameters.tsx";
+import { Headers } from "./Headers.tsx";
+import { Body } from './Body.tsx';
+import { Auth } from './Auth.tsx';
+import { $editorState, saveCurrentFile } from "../../../../stores/editorState.ts";
+import { EntityType } from "../../../../stores/enum.ts";
 import { tippy } from '../../../TippySolid.tsx';
+import { RequestBar } from "./RequestBar.tsx";
 
-export const RequestTabs = () => {
+export const RequestPanel = () => {
 
-    tippy
+    tippy;
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
     let currentTestFile = currentFile.type === EntityType.Test ? editorState.testFiles[currentFile.index] : undefined;
 
-    const [isSaveable, setIsSaveable] = createSignal(currentTestFile?.testFile.request?.url ? true : false);
+    const [testFile, setTestFile] = createSignal(currentTestFile);
     const [layoutState, setLayoutState] = createSignal($layoutState.get());
 
     $editorState.subscribe((state) => {
         let file = state.files[state.currentFile];
         let testFile = file.type === EntityType.Test ? state.testFiles[file.index] : undefined;
-        setIsSaveable(testFile?.testFile.request?.url ? true : false);
+        setTestFile(testFile);
     });
 
     $layoutState.subscribe((state) => {
@@ -30,9 +31,12 @@ export const RequestTabs = () => {
     });
 
     return (
-        <div class="size-full flex flex-col min-w-0">
+        <div class="size-full flex flex-col flex-auto min-w-0">
+
+            <RequestBar />
+
             <div class="flex-none">
-                <div class="flex items-center justify-between border-b border-neutral-800 m-3 mt-1">
+                <div class="flex items-center justify-between border-b border-neutral-800 mx-3 mt-1">
                     <nav class="-mb-px flex space-x-4" aria-label="Tabs">
                         <For each={layoutState().requestTabs}>
                             {(tab) => (
@@ -80,7 +84,7 @@ export const RequestTabs = () => {
                             )}
                         </For>
                     </nav>
-                    <Show when={isSaveable()}>
+                    <Show when={testFile()?.testFile.request?.url}>
                         <span class="flex-none text-sm p-2 mr-1 cursor-pointer text-indigo-500 hover:text-indigo-300"
                             onClick={() => saveCurrentFile()}
                             use:tippy={{
@@ -103,6 +107,7 @@ export const RequestTabs = () => {
                     </Show>
                 </div>
             </div>
+
             <div
                 id="tab-content"
                 class="select-none flex flex-auto h-full overflow-hidden min-w-0 max-h-full min-h-0"
@@ -129,6 +134,6 @@ export const RequestTabs = () => {
                     </div>
                 </Show>
             </div>
-        </div >
+        </div>
     );
-}
+};

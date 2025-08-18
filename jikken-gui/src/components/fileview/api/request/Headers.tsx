@@ -1,13 +1,13 @@
 import { setRequestTabCount } from '../../../../stores/layoutState';
 import { createSignal, For, Show } from 'solid-js';
-import { $editorState, updateAuth, updateRequest, type HttpHeader, type Request } from '../../../../stores/editorState';
-import { parseBasicAuthHeader, type AuthState } from '../../../../stores/authState';
+import { $editorState, type Compare, updateAuth, updateCompare, updateRequest, type HttpHeader, type Request, updateCompareState } from '../../../../stores/editorState';
+import { parseBasicAuthHeader } from '../../../../stores/authState';
 import { AuthType, EntityType } from '../../../../stores/enum';
 import { tippy } from '../../../TippySolid.tsx';
 
 export const Headers = () => {
 
-    tippy
+    tippy;
 
     let editorState = $editorState.get();
     let currentFile = editorState.files[editorState.currentFile];
@@ -18,141 +18,296 @@ export const Headers = () => {
         return [...headers, { header: "", value: "", generated: false }];
     })());
 
+    const [compareHeaders, setCompareHeaders] = createSignal<HttpHeader[]>((() => {
+        const headers = currentTestFile?.testFile.compare?.headers ?? [];
+        return [...headers, { header: "", value: "", generated: false }];
+    })());
+
+    const [showCompare, setShowCompare] = createSignal(currentTestFile?.testFile.compare !== undefined);
+    const [inheritCompare, setInheritCompare] = createSignal(currentTestFile?.compare?.inheritHeaders ?? false);
+
     $editorState.subscribe((state) => {
         currentFile = state.files[state.currentFile];
         currentTestFile = currentFile.type === EntityType.Test ? state.testFiles[currentFile.index] : undefined;
         const headers = currentTestFile?.testFile.request?.headers ?? [];
+        const compareHeaders = currentTestFile?.testFile.compare?.headers ?? [];
         setHeaders([...headers, { header: "", value: "", generated: false }]);
+        setCompareHeaders([...compareHeaders, { header: "", value: "", generated: false }]);
+        setShowCompare(currentTestFile?.testFile.compare !== undefined);
+        setInheritCompare(currentTestFile?.compare?.inheritHeaders ?? false);
     });
 
-
-    const onHeaderInput = (index: number) => {
-        let currentHeaders = headers();
+    const onHeaderInput = (index: number, compare: boolean = false) => {
+        let currentHeaders = compare ? compareHeaders() : headers();
 
         // if the last row is not empty, add another row
         if (index === currentHeaders.length - 1) {
-            setHeaders([...currentHeaders, { header: "", value: "", generated: false }]);
+            if (compare) {
+                setCompareHeaders([...currentHeaders, { header: "", value: "", generated: false }]);
+            } else {
+                setHeaders([...currentHeaders, { header: "", value: "", generated: false }]);
+            }
+
             setRequestTabCount("tab-headers", currentHeaders.length);
         }
     };
 
-    const onHeaderChange = (index: number, header: HttpHeader) => {
+    const onHeaderChange = (index: number, header: HttpHeader, compare: boolean = false) => {
         console.log(`saving header at index ${index}`);
-        let currentHeaders = [...headers()];
+        let currentHeaders = [...(compare ? compareHeaders() : headers())];
         currentHeaders[index] = header;
 
         // if we emptied a row and it's not the last, delete it
         if (header.header === "" && header.value === "" && index < currentHeaders.length - 1) {
-            deleteHeader(index);
+            deleteHeader(index, compare);
             return;
         }
 
         if (header.header.toLocaleLowerCase() === "authorization") {
-            let auth: AuthState = { type: AuthType.None };
+            let auth = currentTestFile?.auth ?? { request: { type: AuthType.None } };
             if (header.value.startsWith("Bearer ")) {
-                auth.type = AuthType.Bearer;
-                auth.data = {
-                    token: header.value.split(" ")[1]
-                };
+                if (compare) {
+                    auth.compare = {
+                        type: AuthType.Bearer,
+                        data: {
+                            token: header.value.split(" ")[1]
+                        },
+                    };
+                } else {
+                    auth.request.type = AuthType.Bearer;
+                    auth.request.data = {
+                        token: header.value.split(" ")[1]
+                    };
+                }
             } else if (header.value.startsWith("Basic")) {
-                auth.type = AuthType.Basic;
                 let data = parseBasicAuthHeader(header);
-                auth.data = {
-                    username: data[0],
-                    password: data[1],
-                };
+                if (compare) {
+                    auth.compare = {
+                        type: AuthType.Basic,
+                        data: {
+                            username: data[0],
+                            password: data[1],
+                        },
+                    };
+                } else {
+                    auth.request.type = AuthType.Basic;
+                    auth.request.data = {
+                        username: data[0],
+                        password: data[1],
+                    };
+                }
             }
 
             updateAuth(auth);
         }
 
         updateHeaders(currentHeaders);
-    }
-
-    const deleteHeader = (index: number) => {
-        console.log(`deleting header at ${index}`);
-        let currentHeaders = [...headers()];
-        let deleted = currentHeaders.splice(index, 1)[0];
-        if (deleted.header.toLocaleLowerCase() === "authorization") {
-            updateAuth({ type: AuthType.None });
-        }
-
-        setHeaders(currentHeaders);
-        setRequestTabCount("tab-headers", currentHeaders.length - 1);
-        updateHeaders(currentHeaders);
     };
 
-    const updateHeaders = (headers: HttpHeader[]) => {
-        let request = { ...currentTestFile?.testFile.request ?? {} as Request };
+    const deleteHeader = (index: number, compare: boolean = false) => {
+        console.log(`deleting header at ${index}`);
+        let currentHeaders = [...(compare ? compareHeaders() : headers())];
+        let deleted = currentHeaders.splice(index, 1)[0];
+        if (deleted.header.toLocaleLowerCase() === "authorization") {
+            let auth = currentTestFile?.auth ?? { request: { type: AuthType.None } };
+            if (compare) {
+                auth.compare = { type: AuthType.None };
+            } else {
+                auth.request.type = AuthType.None;
+            }
+            updateAuth(auth);
+        }
+
+        if (compare) {
+            setCompareHeaders(currentHeaders);
+        } else {
+            setHeaders(currentHeaders);
+        }
+        setRequestTabCount("tab-headers", currentHeaders.length - 1);
+        updateHeaders(currentHeaders, compare);
+    };
+
+    const updateHeaders = (headers: HttpHeader[], compare: boolean = false) => {
         headers.splice(-1, 1);
-        request.headers = headers;
-        updateRequest(request);
-    }
+        if (compare) {
+            let compare = { ...currentTestFile?.testFile.compare ?? {} as Compare };
+            compare.headers = headers;
+            updateCompare(compare);
+        } else {
+            let request = { ...currentTestFile?.testFile.request ?? {} as Request };
+            request.headers = headers;
+            updateRequest(request);
+        }
+    };
+
+    const toggleInherit = () => {
+        let value = !inheritCompare();
+        setInheritCompare(value);
+
+        let compare = currentTestFile!.compare!;
+        compare.inheritHeaders = value;
+        updateCompareState({ ...compare });
+    };
+
+    const getCompareHeaders = () => {
+        if (!inheritCompare()) return compareHeaders();
+        let requestHeaders = [...headers()];
+        requestHeaders.splice(-1);
+        return requestHeaders;
+    };
 
     return (
-        <div id="tab-headers-panel" class="p-3 pt-1 w-full flex flex-col">
-            <div class="text-neutral-400 mb-2 text-sm font-medium">Headers</div>
-
-            <ul class="overflow-y-auto">
-                <For each={headers()}>
-                    {(header, index) => (
-                        <li class="flex flex-row group text-neutral-300">
-                            <div class="flex flex-row flex-1 items-center border border-1 border-b-0 group-last:border-b border-neutral-700 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600">
-                                <input placeholder="Key"
+        <div id="tab-headers-panel" class="size-full overflow-y-auto">
+            <div class="size-full grid grid-cols-2 divide-x-[0.5px] divide-neutral-700">
+                <ul class="p-3 pr-1"
+                    classList={{
+                        "col-span-2": !showCompare(),
+                        "col-span-1": showCompare(),
+                    }}>
+                    <div class="h-5" />
+                    <For each={headers()}>
+                        {(header, index) => (
+                            <li class="flex flex-row group text-neutral-300">
+                                <div class="flex flex-row flex-1 items-center border border-1 border-b-0 group-last:border-b border-neutral-700 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600">
+                                    <input placeholder="Key"
+                                        spellcheck={false}
+                                        autocorrect="off"
+                                        value={header.header}
+                                        onInput={(_) => onHeaderInput(index())}
+                                        onChange={(e) => onHeaderChange(index(), { header: e.currentTarget.value, value: header.value, generated: false })}
+                                        class="grow text-sm bg-transparent pl-2 p-1 border-0 placeholder:text-neutral-500 focus-within:ring-0"
+                                    />
+                                    <Show when={header.generated}>
+                                        <span class="flex-none p-1 pr-1.5 text-neutral-400 hover:text-indigo-400"
+                                            use:tippy={{
+                                                props: {
+                                                    content: "Auto-generated value",
+                                                }
+                                            }}>
+                                            <svg xmlns="http://www.w3.org/2000/svg"
+                                                width="12"
+                                                height="12"
+                                                fill="currentColor"
+                                                class="bi bi-lightning-charge"
+                                                viewBox="0 0 16 16">
+                                                <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM4.157 8.5H7a.5.5 0 0 1 .478.647L6.11 13.59l5.732-6.09H9a.5.5 0 0 1-.478-.647L9.89 2.41z" />
+                                            </svg>
+                                        </span>
+                                    </Show>
+                                </div>
+                                <input placeholder="Value"
                                     spellcheck={false}
                                     autocorrect="off"
-                                    value={header.header}
+                                    value={header.value}
                                     onInput={(_) => onHeaderInput(index())}
-                                    onChange={(e) => onHeaderChange(index(), { header: e.currentTarget.value, value: header.value, generated: false })}
-                                    class="grow text-sm bg-transparent pl-2 p-1 border-0 placeholder:text-neutral-500 focus-within:ring-0"
+                                    onChange={(e) => onHeaderChange(index(), { header: header.header, value: e.currentTarget.value, generated: false })}
+                                    class="flex-1 text-sm bg-transparent pl-2 p-1 border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
                                 />
-                                <Show when={header.generated}>
-                                    <span class="flex-none p-1 pr-1.5 text-neutral-400 hover:text-indigo-400"
-                                        use:tippy={{
-                                            props: {
-                                                content: "Auto-generated value",
-                                            }
-                                        }}>
-                                        <svg xmlns="http://www.w3.org/2000/svg"
-                                            width="12"
-                                            height="12"
-                                            fill="currentColor"
-                                            class="bi bi-lightning-charge"
-                                            viewBox="0 0 16 16">
-                                            <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM4.157 8.5H7a.5.5 0 0 1 .478.647L6.11 13.59l5.732-6.09H9a.5.5 0 0 1-.478-.647L9.89 2.41z" />
-                                        </svg>
-                                    </span>
-                                </Show>
-                            </div>
-                            <input placeholder="Value"
-                                spellcheck={false}
-                                autocorrect="off"
-                                value={header.value}
-                                onInput={(_) => onHeaderInput(index())}
-                                onChange={(e) => onHeaderChange(index(), { header: header.header, value: e.currentTarget.value, generated: false })}
-                                class="flex-1 text-sm bg-transparent pl-2 p-1 border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600"
-                            />
-                            <div
-                                class="flex-none w-8 p-2 text-neutral-500 cursor-pointer group-last:cursor-default group-last:pointer-events-none hover:text-red-500"
-                                onClick={[deleteHeader, index()]}
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="16"
-                                    height="16"
-                                    fill="currentColor"
-                                    class="bi bi-trash-fill invisible group-hover:visible group-last:group-hover:invisible"
-                                    viewBox="0 0 16 16"
+                                <div
+                                    class="flex-none w-8 p-2 text-neutral-500 cursor-pointer group-last:cursor-default group-last:pointer-events-none hover:text-red-500"
+                                    onClick={(_) => deleteHeader(index())}
                                 >
-                                    <path
-                                        d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0"
-                                    ></path>
-                                </svg>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        fill="currentColor"
+                                        class="bi bi-trash-fill invisible group-hover:visible group-last:group-hover:invisible"
+                                        viewBox="0 0 16 16"
+                                    >
+                                        <path
+                                            d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0"
+                                        ></path>
+                                    </svg>
+                                </div>
+                            </li>
+                        )}
+                    </For>
+                </ul>
+
+                <Show when={showCompare()}>
+                    <div class="col-span-1 p-3">
+                        <div class="flex justify-end h-5">
+                            <div class="group cursor-pointer mt-[-10px]"
+                                use:tippy={{
+                                    props: {
+                                        content: "Inherit from Request 1"
+                                    }
+                                }}
+                            >
+                                <input id="inherit-checkbox"
+                                    type="checkbox"
+                                    checked={inheritCompare()}
+                                    onChange={toggleInherit}
+                                    class="peer size-3 bg-transparent border-neutral-600 rounded-[2px] cursor-pointer checked:bg-indigo-600 group-hover:border-neutral-200 checked:border-transparent" />
+                                <label for="inherit-checkbox" class="text-neutral-400 h-4 text-xs cursor-pointer ml-1.5 group-hover:text-neutral-200 peer-checked:text-neutral-300">Inherit</label>
                             </div>
-                        </li>
-                    )}
-                </For>
-            </ul>
+                        </div>
+                        <ul>
+                            <For each={getCompareHeaders()}>
+                                {(header, index) => (
+                                    <li class="flex flex-row group text-neutral-300">
+                                        <div class="flex flex-row flex-1 items-center border border-1 border-b-0 group-last:border-b border-neutral-700 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600">
+                                            <input placeholder="Key"
+                                                spellcheck={false}
+                                                autocorrect="off"
+                                                disabled={inheritCompare()}
+                                                value={header.header}
+                                                onInput={(_) => onHeaderInput(index(), true)}
+                                                onChange={(e) => onHeaderChange(index(), { header: e.currentTarget.value, value: header.value, generated: false }, true)}
+                                                class="grow text-sm bg-transparent pl-2 p-1 border-0 placeholder:text-neutral-500 focus-within:ring-0 disabled:text-neutral-500"
+                                            />
+                                            <Show when={header.generated && !inheritCompare()}>
+                                                <span class="flex-none p-1 pr-1.5 text-neutral-400 hover:text-indigo-400"
+                                                    use:tippy={{
+                                                        props: {
+                                                            content: "Auto-generated value",
+                                                        }
+                                                    }}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                                        width="12"
+                                                        height="12"
+                                                        fill="currentColor"
+                                                        class="bi bi-lightning-charge"
+                                                        viewBox="0 0 16 16">
+                                                        <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM4.157 8.5H7a.5.5 0 0 1 .478.647L6.11 13.59l5.732-6.09H9a.5.5 0 0 1-.478-.647L9.89 2.41z" />
+                                                    </svg>
+                                                </span>
+                                            </Show>
+                                        </div>
+                                        <input placeholder="Value"
+                                            spellcheck={false}
+                                            autocorrect="off"
+                                            disabled={inheritCompare()}
+                                            value={header.value}
+                                            onInput={(_) => onHeaderInput(index(), true)}
+                                            onChange={(e) => onHeaderChange(index(), { header: header.header, value: e.currentTarget.value, generated: false }, true)}
+                                            class="flex-1 text-sm bg-transparent pl-2 p-1 border-1 border-l-0 border-b-0 group-last:border-b border-neutral-700 placeholder:text-neutral-500 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600 disabled:text-neutral-500"
+                                        />
+                                        <div
+                                            class="flex-none w-8 p-2 text-neutral-500 cursor-pointer group-last:cursor-default group-last:pointer-events-none hover:text-red-500"
+                                            onClick={(_) => deleteHeader(index(), true)}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                fill="currentColor"
+                                                class="bi bi-trash-fill invisible group-hover:visible group-last:group-hover:invisible"
+                                                viewBox="0 0 16 16"
+                                            >
+                                                <path
+                                                    d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0"
+                                                ></path>
+                                            </svg>
+                                        </div>
+                                    </li>
+                                )}
+                            </For>
+                        </ul>
+                    </div>
+                </Show>
+            </div>
         </div>
     );
-}
+};
