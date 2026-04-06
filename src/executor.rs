@@ -1480,7 +1480,7 @@ async fn validate_setup(
                                 serde_json::Value::Bool(b) => b.to_string(),
                                 serde_json::Value::Number(n) => n.to_string(),
                                 serde_json::Value::String(s) => s.to_string(),
-                                _ => "".to_string(),
+                                _ => serde_json::to_string(&result).unwrap_or_default(),
                             };
                             state.variables.insert(v.name.clone(), converted_result);
                         }
@@ -1840,7 +1840,7 @@ async fn validate_stage(
                             serde_json::Value::Bool(b) => b.to_string(),
                             serde_json::Value::Number(n) => n.to_string(),
                             serde_json::Value::String(s) => s.to_string(),
-                            _ => "".to_string(),
+                            _ => serde_json::to_string(&result).unwrap_or_default(),
                         };
                         debug!("extracting variable: {} = {}", v.name, converted_result);
                         state.variables.insert(v.name.clone(), converted_result);
