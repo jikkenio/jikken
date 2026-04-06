@@ -1937,9 +1937,12 @@ fn http_request_from_test_spec(
 }
 
 pub fn get_rustls_config_dangerous() -> Result<ClientConfig, Box<dyn Error + Send + Sync>> {
-    let config = ClientConfig::builder()
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = Verifier::new(Arc::clone(&provider))?;
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
         .dangerous() // The `Verifier` we're using is actually safe
-        .with_custom_certificate_verifier(Arc::new(Verifier::new()))
+        .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
 
     Ok(config)
