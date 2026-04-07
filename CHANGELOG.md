@@ -1,5 +1,18 @@
 # Next (Version determined when release is cut)
 
+# 0.8.4
+
+# New Features
+
+- Added support for numeric array indexing in variable extraction, enabling extraction from root-level JSON arrays (e.g., `0.field` to extract from `[{"field":"value"}]`)
+
+# 0.8.3
+
+# Bug Fixes
+
+- Fixed error when executing tests with tag (`-t`) filter
+- Fixed error when combining tag (`-t`) filter with `requires`, and required test not having the tag
+
 # 0.8.2
 
 # Changes

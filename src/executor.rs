@@ -829,10 +829,16 @@ fn construct_test_execution_graph_v2(
     tests_to_run: Vec<test::Definition>,
     tests_to_ignore: Vec<test::Definition>,
 ) -> Vec<Vec<Definition>> {
-    let tests_by_id: HashMap<String, test::Definition> = tests_to_run
+    let mut tests_ordered: Vec<test::Definition> = tests_to_run
         .clone()
         .into_iter()
         .chain(tests_to_ignore)
+        .collect();
+    tests_ordered.sort_by_key(|t| t.index);
+
+    let tests_by_id: HashMap<String, test::Definition> = tests_ordered
+        .clone()
+        .into_iter()
         .filter(|td| td.id.is_some())
         .map(|td| (td.id.clone().unwrap(), td))
         .collect();
@@ -895,7 +901,7 @@ fn construct_test_execution_graph_v2(
         .into_iter()
         .map(|hs| {
             hs.into_iter()
-                .map(|index| tests_to_run.get(index).unwrap().clone())
+                .map(|index| tests_ordered.get(index).unwrap().clone())
                 .collect::<Vec<Definition>>()
         })
         .collect();
@@ -1474,7 +1480,7 @@ async fn validate_setup(
                                 serde_json::Value::Bool(b) => b.to_string(),
                                 serde_json::Value::Number(n) => n.to_string(),
                                 serde_json::Value::String(s) => s.to_string(),
-                                _ => "".to_string(),
+                                _ => serde_json::to_string(&result).unwrap_or_default(),
                             };
                             state.variables.insert(v.name.clone(), converted_result);
                         }
@@ -1834,7 +1840,7 @@ async fn validate_stage(
                             serde_json::Value::Bool(b) => b.to_string(),
                             serde_json::Value::Number(n) => n.to_string(),
                             serde_json::Value::String(s) => s.to_string(),
-                            _ => "".to_string(),
+                            _ => serde_json::to_string(&result).unwrap_or_default(),
                         };
                         debug!("extracting variable: {} = {}", v.name, converted_result);
                         state.variables.insert(v.name.clone(), converted_result);
@@ -1931,9 +1937,12 @@ fn http_request_from_test_spec(
 }
 
 pub fn get_rustls_config_dangerous() -> Result<ClientConfig, Box<dyn Error + Send + Sync>> {
-    let config = ClientConfig::builder()
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = Verifier::new(Arc::clone(&provider))?;
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
         .dangerous() // The `Verifier` we're using is actually safe
-        .with_custom_certificate_verifier(Arc::new(Verifier::new()))
+        .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
 
     Ok(config)

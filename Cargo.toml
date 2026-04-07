@@ -1,6 +1,6 @@
 [package]
 name = "jikken"
-version = "0.8.2"
+version = "0.8.4"
 edition = "2021"
 authors = ["Louis Russo <louis@jikken.io>"]
 description = """
@@ -45,10 +45,10 @@ openapiv3-extended = { version = "6.0.0", features = ["v2"] }
 rand = { version = "0.8.5" }
 regex = { version = "1.10.4" }
 remove_dir_all = { version = "0.8" }
-reqwest = { version = "0.11" }
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"] }
 rustls = { version = "0.23.14" }
-rustls-platform-verifier = { version = "0.3.4" }
-self_update = { version = "0.37", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
+rustls-platform-verifier = { version = "0.6" }
+self_update = { version = "0.37", default-features = false, features = ["rustls", "archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = { version = "0.9" }
